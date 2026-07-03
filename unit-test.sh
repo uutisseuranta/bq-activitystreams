@@ -220,4 +220,10 @@ python3 -m unittest src/write_api/test_main.py
 echo "Ajetaan query_api-paketin unittest-testit..."
 python3 -m unittest src/query_api/test_main.py
 
+echo "Ajetaan og_scraper-paketin unittest-testit..."
+python3 -m unittest src/og_scraper/test_main.py
+
+echo "Ajetaan og_enrichment_job-paketin unittest-testit..."
+python3 -m unittest src/og_enrichment_job/test_main.py
+
 echo "Kaikki testit suoritettu onnistuneesti!"
