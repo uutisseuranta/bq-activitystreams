@@ -3,6 +3,10 @@
 # Malli: uutisseuranta.github.io/live-smoke-test.sh
 set -euo pipefail
 
+# Otetaan käyttöön keskitetyt alustusapulaiset
+# shellcheck source=fetch_helpers.sh
+source "$(dirname "$0")/fetch_helpers.sh"
+
 echo "Ajetaan Python-yksikkötestit..."
 
 python3 - <<'EOF'
@@ -207,7 +211,7 @@ print("\nKaikki yksikkötestit läpäisty ✓")
 EOF
 
 echo "Ajetaan shared-paketin unittest-testit..."
-export PYTHONPATH=src
+
 python3 -m unittest src/shared/test_og_parser.py
 
 echo "Ajetaan write_api-paketin unittest-testit..."
