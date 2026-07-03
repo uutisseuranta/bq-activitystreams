@@ -217,4 +217,7 @@ python3 -m unittest src/shared/test_og_parser.py
 echo "Ajetaan write_api-paketin unittest-testit..."
 python3 -m unittest src/write_api/test_main.py
 
+echo "Ajetaan query_api-paketin unittest-testit..."
+python3 -m unittest src/query_api/test_main.py
+
 echo "Kaikki testit suoritettu onnistuneesti!"
