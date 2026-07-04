@@ -528,7 +528,7 @@ Autentikaatio: ks. [Autentikaatio ja valtuutus — Gmail SSO](#gmail-sso-ja-kirj
 | `Announce` | ❌ 400 Bad Request |
 | `Undo` | ❌ 400 Bad Request — ks. alla |
 
-**Miksi `Undo` ei ole tuettu?** Tykkäys tallennetaan anonymisoituna: `likes`-taulussa ei ole käyttäjätunnistetta jolla tykkäyksen voisi yksilöidä jälkikäteen. Kun data on anonymisoitu, käyttäjä ei enää omista sitä eikä voi siksi perua toimintoa. Tämä on tietoinen arkkitehtuuripäätös, ei puuttuva toteutus.
+**Miksi `Undo` ei ole tuettu?** Tykkäys tallennetaan anonymisoituna: `likes`-taulussa ei ole käyttäjätunnistetta jolla tykkäyksen voisi yksilöidä jälkikäteen. Kun data on anonymisoitu, käyttäjä ei enää omista sitä eikä voi siksi perua toimintoa. Tämä on tietoinen arkkitehtuuripäätös, ei puuttuva toteutus (katso [DECISION_LOG.csv](file:///Users/jaakkokorhonen/uutisseuranta/bq-activitystreams/DECISION_LOG.csv) -> L-001).
 
 ### Kommenttiketjun syvyysvalidointi
 
