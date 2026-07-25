@@ -9,11 +9,23 @@
 #      sisäisen verkon (Private Google Access) kautta pelkällä IAM-
 #      autentikoinnilla – VPC-tunneli ei tuo lisäturvaa tähän yhteyteen.
 #
-#   2. Cloud SQL, Memorystore (Redis) tai muita VPC-sisäisiä resursseja
+#   2. Cloud Run service-to-service -kutsut (esim. og-enrichment-job →
+#      og-scraper) kulkevat Cloud Runin omaa julkista endpointtia pitkin
+#      mutta autentikoidaan IAM:lla (roles/run.invoker). Tämä on
+#      suunniteltu arkkitehtuuri eikä tietoturvaongelma:
+#        - Liikenne pysyy Googlen verkossa (ei avoimessa internetissä)
+#        - Identity token (OIDC) varmistaa kutsun oikeellisuuden
+#        - INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER rajoittaisi nämä
+#          kutsut, koska service-to-service ei kulje LB:n kautta
+#      VPC-konnektor muuttaisi tilannetta vain jos palvelut olisivat
+#      samassa VPC:ssä ja käyttäisivät Private Service Connect:iä.
+#      Nykyisellä topologialla konnektor ei tuo lisäarvoa.
+#
+#   3. Cloud SQL, Memorystore (Redis) tai muita VPC-sisäisiä resursseja
 #      ei ole käytössä. Jos sellaisia lisätään, Serverless VPC Access
 #      Connector on lisättävä tähän tiedostoon.
 #
-#   3. Serverless VPC Access Connector maksaa noin 5–10 €/kk vaikka
+#   4. Serverless VPC Access Connector maksaa noin 5–10 €/kk vaikka
 #      se olisi idle. Turha kustannus nykytopologialle.
 #
 # Milloin VPC lisätään:
