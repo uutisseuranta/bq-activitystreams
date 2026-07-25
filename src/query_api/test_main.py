@@ -8,8 +8,9 @@ from unittest.mock import MagicMock, patch
 os.environ["GCP_PROJECT"] = "test-project"
 os.environ["BQ_DATASET"] = "test_dataset"
 
-from fastapi.testclient import TestClient
-from query_api.main import _count_cache, app
+from fastapi.testclient import TestClient  # noqa: E402
+
+from query_api.main import _count_cache, app  # noqa: E402
 
 
 def create_mock_query_job(rows):
@@ -33,7 +34,7 @@ class TestOutboxQuery(unittest.TestCase):
             "like_count": 12,
             "object_json": (
                 '{"id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y", '
-                '"type": "Article", "name": "Testiuutinen"}'
+                '{"type": "Article", "name": "Testiuutinen"}'
             )
         }
 
@@ -110,13 +111,12 @@ class TestCacheBehavior(unittest.TestCase):
         response = self.client.get("/ap/outbox?tag=politiikka")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["totalItems"], 42)
-        self.assertEqual(mock_bq.query.call_count, 2)  # 1 count-kyselyyn ja 1 haku-kyselyyn
+        self.assertEqual(mock_bq.query.call_count, 2)
 
-        # Toinen haku käyttää välimuistia eikä tee uutta count-kyselyä
         response2 = self.client.get("/ap/outbox?tag=politiikka")
         self.assertEqual(response2.status_code, 200)
         self.assertEqual(response2.json()["totalItems"], 42)
-        self.assertEqual(mock_bq.query.call_count, 3)  # vain 1 uusi haku-kysely, ei count-kyselyä
+        self.assertEqual(mock_bq.query.call_count, 3)
 
 
 class TestReadyzAndHealthz(unittest.TestCase):
@@ -182,11 +182,8 @@ class TestReactionAggregationPrep(unittest.TestCase):
         resp_data = response.json()
         item = resp_data["orderedItems"][0]
 
-        # HUOM: Vaiheessa 1 ja 2 noudatetaan taaksepäin yhteensopivuutta.
-        # Tämä testi tarkistaa agreeCount/disagreeCount -kenttien läsnäolon jos ne on määritelty,
-        # tai valmistelee testin loppuosalla niiden validoinnin vaiheessa 3.
         if "agreeCount" in item:
             self.assertEqual(item["agreeCount"], 8)
             self.assertEqual(item["disagreeCount"], 4)
         else:
-            pass  # vaiheessa 3 tämä haara poistetaan ja mapping vaaditaan
+            pass
