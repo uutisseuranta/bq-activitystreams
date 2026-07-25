@@ -35,6 +35,20 @@ jobs:
           python-version: "3.11"
       - name: Install checkov
         run: pip install checkov==3.2.348
+      - uses: actions/setup-go@d60b41a563a30eb0a0f8c768e0d4c1fbc3b56b56 # v5.5.0
+        with:
+          go-version: "1.22"
+      - uses: terraform-linters/setup-tflint@90f302a83f2b5ef4b8e51f50a5db5ec6e1f11827 # v4.1.1
+        with:
+          tflint_version: "v0.55.0"
+      - name: tflint init (google plugin)
+        run: tflint --init
+        working-directory: terraform/
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: tflint – Terraform lint
+        run: tflint --format compact --no-color
+        working-directory: terraform/
       - name: Checkov – Terraform staattinen analyysi
         run: |
           checkov -d terraform/ \
