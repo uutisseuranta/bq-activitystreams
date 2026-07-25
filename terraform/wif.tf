@@ -31,10 +31,20 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "google.subject"       = "assertion.sub"
     "attribute.repository" = "assertion.repository"
     "attribute.ref"        = "assertion.ref"
+    "attribute.workflow"   = "assertion.workflow"
   }
 
-  # Sallitaan vain tämä repositorio
-  attribute_condition = "assertion.repository == 'uutisseuranta/bq-activitystreams'"
+  # Sallitaan vain main-haara tai smoke-test workflow_dispatch.
+  # Deploy-workflow ajaa vain main:ssa (if: github.ref == 'refs/heads/main'),
+  # mutta WIF-tason rajoitus on defence-in-depth: estää tokenin myöntämisen
+  # muille haaroille vaikka workflow-ehto unohdettaisiin.
+  attribute_condition = <<-EOT
+    assertion.repository == 'uutisseuranta/bq-activitystreams' &&
+    (
+      assertion.ref == 'refs/heads/main' ||
+      assertion.workflow == '.github/workflows/smoke-test.yml'
+    )
+  EOT
 }
 
 # Salli backend-SA:n personointi tästä reposta
