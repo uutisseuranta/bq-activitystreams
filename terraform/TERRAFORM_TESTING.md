@@ -33,7 +33,7 @@ jälkeen tai manuaalisesti.
           ├──────────────────────────────────┤
           │   Staattinen analyysi             │  ← jokainen PR
           │   fmt · validate · tflint         │
-          │   checkov · tfsec                 │
+          │   checkov                         │
           └──────────────────────────────────┘
 ```
 
@@ -61,7 +61,8 @@ pääsee plan-vaiheeseen.
 
 **`tflint`** — Terraform-linter joka havaitsee deprecated-syntaksin, virheelliset
 provider-argumentit (esim. väärä `google_cloud_run_service`-kenttä) ja käyttämättömät
-muuttujat. Pelkkä `validate` ei tunne provider-skeemoja.
+muuttujat. Pelkkä `validate` ei tunne provider-skeemoja. **Toteutettu:** `terraform-lint`-job
+`unit-tests.yml`:ssä (`setup-tflint v4.1.1`, `tflint-ruleset-google` v0.55.0).
 
 **Checkov (Checkov 3.x)** — staattinen tietoturva-analyysi Terraform-konfiguraatiolle.
 Tarkistaa esim. onko Cloud Run -palveluissa `--ingress internal-only` asetettu, onko
@@ -91,8 +92,9 @@ Skipatut tarkistukset:
 - **CKV_GCP_82** (`google_compute_ssl_policy`) — ei sovelleta tähän arkkitehtuuriin (ei
   load balanceria suoraan TF:ssä)
 - **CKV_GCP_34** (`google_project_iam_member` project-level) — kaanonpäätös G-009 poisti
-  projekti-tason `secret_accessor`; jos tarkistus yhä hälyttää, se on false positive joka
-  dokumentoidaan CODE_CONVENTIONS.md:ssä
+  projekti-tason `secret_accessor`; `bigquery.dataEditor` ja `bigquery.user` ovat pakollisia
+  projekti-tason rooleja eikä datasetti-tason IAM kata niitä. Resurssitason
+  `#checkov:skip`-annotaatiot löytyvät `terraform/iam.tf`:stä auditointikelpoisina perusteluina.
 
 ### SHA-pinnaus
 
@@ -240,7 +242,7 @@ plan-outputissa — ne näkyvät CI-logeissa ja PR-yhteenvedossa (`$GITHUB_STEP_
 PR avataan
   │
   ├── unit-test         ← Python-yksikkötestit, Ruff, STANDARDS.md -synkronointi
-  ├── terraform-lint    ← terraform fmt + validate + checkov (ei GCP-yhteyttä)
+  ├── terraform-lint    ← terraform fmt + validate + tflint + checkov (ei GCP-yhteyttä)
   └── terraform-plan    ← terraform plan WIF:llä (ei state-kirjoitusta)
 
 PR mergettään mainiin
@@ -265,14 +267,9 @@ orchestration-järjestelmää.
 
 | Kohde | Prioriteetti | Ratkaisu |
 |-------|-------------|----------|
-| `tflint` CI-jobiin | Korkea | Lisää `terraform-lint`-jobiin `setup-tflint`-action |
 | `terraform test` -testit wif.tf:lle | Keskisuuri | Kun WIF-moduuli eriytetään |
 | Drift detection | Matala | `terraform plan` ajastettu cron-jobina, poikkeamat alerttina |
 | Staging-ympäristö | Matala | Erillinen GCP-projekti integraatiotesteille (ei tuotantodata) |
-
-`tflint` on seuraava lisättävä kerros: se havaitsee provider-skeeman rikkomukset joita
-checkov ei tarkista (esim. deprecated `google_cloud_run_service` vs.
-`google_cloud_run_v2_service`).
 
 ---
 
