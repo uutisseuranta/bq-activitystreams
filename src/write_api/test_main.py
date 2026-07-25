@@ -204,7 +204,7 @@ class TestLikeActivity(unittest.TestCase):
             "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"
         }
 
-        response = self.client.post("/ap/activities", headers=payload)
+        response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "already_liked")
 
@@ -280,7 +280,7 @@ class TestValidationAndAuth(unittest.TestCase):
         self.client = TestClient(app)
 
     def test_unauthorized_token_missing(self):
-        # Pyynтö ilman Authorization Bearer otsaketta
+        # Pyyntö ilman Authorization Bearer otsaketta
         payload = {
             "type": "Like",
             "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
