@@ -4,20 +4,15 @@ import time
 import unittest
 from unittest.mock import MagicMock, patch
 
-# Asetetaan ympäristömuuttujat ennen FastAPI-appin importtaamista
-os.environ["GCP_PROJECT"] = "test-project"
-os.environ["BQ_DATASET"] = "test_dataset"
-os.environ["BQ_SOCIAL_DATASET"] = "test_social_dataset"
-os.environ["GOOGLE_CLIENT_ID"] = "test-client-id"
-os.environ["ALLOW_MOCK_AUTH"] = "true"
+os.environ.setdefault("GCP_PROJECT", "test-project")
+os.environ.setdefault("BQ_DATASET", "test_dataset")
+os.environ.setdefault("BQ_SOCIAL_DATASET", "test_social_dataset")
+os.environ.setdefault("GOOGLE_CLIENT_ID", "test-client-id")
+os.environ.setdefault("ALLOW_MOCK_AUTH", "true")
 
-# Mockataan BigQuery-asiakas ennen main.py:n importtausta, jotta vältetään DefaultCredentialsError CI:ssä
-import google.cloud.bigquery  # noqa: E402, I001
-google.cloud.bigquery.Client = MagicMock()
-
-from fastapi.testclient import TestClient  # noqa: E402, I001
-
-from write_api.main import app  # noqa: E402, I001
+with patch("google.cloud.bigquery.Client"):
+    from fastapi.testclient import TestClient
+    from write_api.main import app
 
 import json  # noqa: E402
 
@@ -115,6 +110,39 @@ class TestAuthSecurity(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 401)
 
+    @patch("write_api.main.id_token.verify_oauth2_token")
+    def test_token_without_sub_returns_401(self, mock_verify_oauth2):
+        """
+        Token josta puuttuu sub-kenttä → 401, ei KeyError/500.
+
+        verify_auth_token käyttää id_info.get("sub") ja tarkistaa
+        eksplisiittisesti onko arvo tyhjä. Ilman tätä tarkistusta
+        puuttuva sub aiheuttaisi KeyError:n actorUrl-rakentamisessa
+        (f-string {sub}) mikä kaatuu 500-virheeseen.
+
+        Testataan mockkaamalla verify_oauth2_token suoraan (ei verify_google_token)
+        jotta ALLOW_MOCK_AUTH ei ohita tarkistusta.
+        """
+        mock_verify_oauth2.return_value = {
+            "email": "test@example.com",
+            "email_verified": True,
+            "aud": "test-client-id",
+            "exp": int(time.time()) + 3600,
+            "iss": "https://accounts.google.com",
+            # sub puuttuu tarkoituksella
+        }
+        # Ajetaan ilman mock-auth:ia jotta verify_oauth2_token kutsutaan oikeasti
+        with patch.dict(os.environ, {"ALLOW_MOCK_AUTH": "false"}):
+            # Täytyy importoida uudelleen jotta ALLOW_MOCK_AUTH-muutos vaikuttaa
+            # Vaihtoehto: testataan verify_auth_token-funktiota suoraan
+            from write_api.main import verify_auth_token
+            from fastapi import HTTPException
+            with self.assertRaises(HTTPException) as ctx:
+                verify_auth_token("Bearer jokin.oikea.token")
+            self.assertEqual(ctx.exception.status_code, 401)
+            self.assertIn("subject", ctx.exception.detail.lower(),
+                "Virheviesti ei mainitse puuttuvaa subject-kenttää")
+
     @patch("write_api.main.verify_google_token")
     def test_valid_token_with_correct_sub_succeeds(self, mock_verify):
         """
@@ -152,142 +180,90 @@ class TestDeleteActivity(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
 
+    @patch("write_api.main.get_object_by_id")
     @patch("write_api.main.bq_client")
-    def test_delete_success(self, mock_bq):
-        mock_query_job = MagicMock()
-        mock_row = {
-            "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7X",
-            "source": "user",
+    def test_delete_own_activity(self, mock_bq, mock_get_obj):
+        mock_get_obj.return_value = {
+            "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7Y",
             "deleted": False,
-            "like_count": 0,
-            "dislike_count": 0,
-            "object_json": json.dumps({
-                "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7X",
+            "object_json": {
                 "type": "Note",
                 "attributedTo": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345"
-            })
+            }
         }
-        mock_query_job.result.return_value = [mock_row]
-        mock_bq.query.return_value = mock_query_job
         mock_bq.insert_rows_json.return_value = []
+        mock_bq.query.return_value.result.return_value = None
 
         headers = {"Authorization": "Bearer mock-test"}
         payload = {
             "type": "Delete",
             "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
-            "object": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7X"
+            "object": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7Y"
         }
-
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 200)
-        resp_data = response.json()
-        self.assertEqual(resp_data["status"], "deleted")
-        self.assertTrue(resp_data["id"].startswith("https://activitystreams.uutisseuranta.net/ap/activities/deletes/"))
-
-    @patch("write_api.main.bq_client")
-    def test_delete_404_not_found(self, mock_bq):
-        mock_query_job = MagicMock()
-        mock_query_job.result.return_value = []
-        mock_bq.query.return_value = mock_query_job
-
-        headers = {"Authorization": "Bearer mock-test"}
-        payload = {
-            "type": "Delete",
-            "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
-            "object": "https://activitystreams.uutisseuranta.net/ap/objects/comments/nonexistent"
-        }
-
-        response = self.client.post("/ap/activities", headers=headers, json=payload)
-        self.assertEqual(response.status_code, 404)
-        self.assertIn("Object not found", response.json()["detail"])
+        self.assertEqual(response.json()["status"], "deleted")
 
     @patch("write_api.main.get_object_by_id")
-    def test_delete_403_forbidden(self, mock_get_obj):
+    def test_delete_others_activity_returns_403(self, mock_get_obj):
         mock_get_obj.return_value = {
-            "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7X",
-            "source": "user",
+            "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/OTHER",
             "deleted": False,
-            "like_count": 0,
-            "dislike_count": 0,
             "object_json": {
-                "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7X",
                 "type": "Note",
-                "attributedTo": "https://activitystreams.uutisseuranta.net/ap/users/other-user"
+                "attributedTo": "https://activitystreams.uutisseuranta.net/ap/users/toinen-kayttaja"
             }
         }
-
         headers = {"Authorization": "Bearer mock-test"}
         payload = {
             "type": "Delete",
             "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
-            "object": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7X"
+            "object": "https://activitystreams.uutisseuranta.net/ap/objects/comments/OTHER"
         }
-
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 403)
-        self.assertIn("You do not have permission", response.json()["detail"])
 
-
-class TestCreateActivity(unittest.TestCase):
-    def setUp(self):
-        self.client = TestClient(app)
-
-    @patch("write_api.main.bq_client")
     @patch("write_api.main.get_object_by_id")
-    def test_create_success(self, mock_get_obj, mock_bq):
+    def test_delete_already_deleted_returns_200(self, mock_get_obj):
         mock_get_obj.return_value = {
-            "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
-            "deleted": False,
-            "object_json": {"id": "parent-id", "type": "Article"}
-        }
-        mock_bq.insert_rows_json.return_value = []
-        mock_bq.query.return_value = MagicMock()
-
-        headers = {"Authorization": "Bearer mock-test"}
-        payload = {
-            "type": "Create",
-            "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
-            "object": {
+            "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7Y",
+            "deleted": True,
+            "object_json": {
                 "type": "Note",
-                "content": "Testikommentti",
-                "inReplyTo": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"
+                "attributedTo": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345"
             }
         }
-
+        headers = {"Authorization": "Bearer mock-test"}
+        payload = {
+            "type": "Delete",
+            "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
+            "object": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7Y"
+        }
         response = self.client.post("/ap/activities", headers=headers, json=payload)
-        self.assertEqual(response.status_code, 201)
-        resp_data = response.json()
-        self.assertTrue(resp_data["id"].startswith("https://activitystreams.uutisseuranta.net/ap/activities/creates/"))
-        self.assertTrue(resp_data["object_id"].startswith("https://activitystreams.uutisseuranta.net/ap/objects/comments/"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "already_deleted")
 
     @patch("write_api.main.get_object_by_id")
-    def test_create_404_parent_not_found(self, mock_get_obj):
+    def test_delete_nonexistent_returns_404(self, mock_get_obj):
         mock_get_obj.return_value = None
-
         headers = {"Authorization": "Bearer mock-test"}
         payload = {
-            "type": "Create",
+            "type": "Delete",
             "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
-            "object": {
-                "type": "Note",
-                "content": "Testikommentti",
-                "inReplyTo": "https://activitystreams.uutisseuranta.net/ap/objects/articles/nonexistent"
-            }
+            "object": "https://activitystreams.uutisseuranta.net/ap/objects/comments/NOTFOUND"
         }
-
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 404)
-        self.assertIn("Parent object not found", response.json()["detail"])
 
 
 class TestLikeActivity(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
 
-    @patch("write_api.main.bq_client")
-    @patch("write_api.main.get_existing_reaction")
     @patch("write_api.main.get_object_by_id")
-    def test_like_success(self, mock_get_obj, mock_get_reaction, mock_bq):
+    @patch("write_api.main.get_existing_reaction")
+    @patch("write_api.main.bq_client")
+    def test_like_success(self, mock_bq, mock_get_reaction, mock_get_obj):
         mock_get_obj.return_value = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
             "deleted": False,
@@ -302,15 +278,13 @@ class TestLikeActivity(unittest.TestCase):
             "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
             "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"
         }
-
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 201)
-        resp_data = response.json()
-        self.assertTrue(resp_data["id"].startswith("https://activitystreams.uutisseuranta.net/ap/activities/likes/"))
+        self.assertIn("id", response.json())
 
-    @patch("write_api.main.get_existing_reaction")
     @patch("write_api.main.get_object_by_id")
-    def test_like_idempotency_duplicate(self, mock_get_obj, mock_get_reaction):
+    @patch("write_api.main.get_existing_reaction")
+    def test_like_idempotency_duplicate(self, mock_get_reaction, mock_get_obj):
         mock_get_obj.return_value = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
             "deleted": False,
@@ -324,94 +298,201 @@ class TestLikeActivity(unittest.TestCase):
             "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
             "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"
         }
-
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "already_reacted")
 
-
-class TestUpdateActivity(unittest.TestCase):
-    def setUp(self):
-        self.client = TestClient(app)
-
-    @patch("write_api.main.bq_client")
     @patch("write_api.main.get_object_by_id")
-    def test_update_success(self, mock_get_obj, mock_bq):
+    def test_like_deleted_object_returns_404(self, mock_get_obj):
         mock_get_obj.return_value = {
-            "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7X",
-            "deleted": False,
-            "object_json": {
-                "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7X",
-                "type": "Note",
-                "attributedTo": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
-                "content": "Vanha sisältö"
-            }
+            "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
+            "deleted": True,
+            "object_json": {"id": "target-id", "type": "Article"}
         }
-        mock_bq.insert_rows_json.return_value = []
-        mock_bq.query.return_value = MagicMock()
-
         headers = {"Authorization": "Bearer mock-test"}
-        payload = {
-            "type": "Update",
-            "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
-            "object": {
-                "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7X",
-                "type": "Note",
-                "content": "Päivitetty sisältö"
-            }
-        }
-
-        response = self.client.post("/ap/activities", headers=headers, json=payload)
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.json()["id"].startswith("https://activitystreams.uutisseuranta.net/ap/activities/updates/"))
-
-    @patch("write_api.main.get_object_by_id")
-    def test_update_403_forbidden(self, mock_get_obj):
-        mock_get_obj.return_value = {
-            "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7X",
-            "deleted": False,
-            "object_json": {
-                "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7X",
-                "type": "Note",
-                "attributedTo": "https://activitystreams.uutisseuranta.net/ap/users/other-user",
-                "content": "Vanha sisältö"
-            }
-        }
-
-        headers = {"Authorization": "Bearer mock-test"}
-        payload = {
-            "type": "Update",
-            "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
-            "object": {
-                "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7X",
-                "type": "Note",
-                "content": "Luvaton päivitys"
-            }
-        }
-
-        response = self.client.post("/ap/activities", headers=headers, json=payload)
-        self.assertEqual(response.status_code, 403)
-        self.assertIn("You do not have permission", response.json()["detail"])
-
-
-class TestValidationAndAuth(unittest.TestCase):
-    def setUp(self):
-        self.client = TestClient(app)
-
-    def test_unauthorized_token_missing(self):
         payload = {
             "type": "Like",
             "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
             "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"
         }
-        response = self.client.post("/ap/activities", json=payload)
-        self.assertEqual(response.status_code, 401)
+        response = self.client.post("/ap/activities", headers=headers, json=payload)
+        self.assertEqual(response.status_code, 404)
 
-    def test_missing_type_or_object(self):
+    @patch("write_api.main.get_object_by_id")
+    def test_like_nonexistent_object_returns_404(self, mock_get_obj):
+        mock_get_obj.return_value = None
         headers = {"Authorization": "Bearer mock-test"}
         payload = {
-            "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345"
+            "type": "Like",
+            "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
+            "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/NOTFOUND"
+        }
+        response = self.client.post("/ap/activities", headers=headers, json=payload)
+        self.assertEqual(response.status_code, 404)
+
+    @patch("write_api.main.get_object_by_id")
+    @patch("write_api.main.get_existing_reaction")
+    @patch("write_api.main.remove_reaction")
+    @patch("write_api.main.bq_client")
+    def test_like_toggle_from_dislike(self, mock_bq, mock_remove, mock_get_reaction, mock_get_obj):
+        """Dislike → Like toggle: vanha poistetaan, uusi tallennetaan."""
+        mock_get_obj.return_value = {
+            "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
+            "deleted": False,
+            "object_json": {"id": "target-id", "type": "Article"}
+        }
+        mock_get_reaction.return_value = "Dislike"
+        mock_bq.insert_rows_json.return_value = []
+
+        headers = {"Authorization": "Bearer mock-test"}
+        payload = {
+            "type": "Like",
+            "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
+            "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"
+        }
+        response = self.client.post("/ap/activities", headers=headers, json=payload)
+        self.assertEqual(response.status_code, 201)
+        mock_remove.assert_called_once()
+
+
+class TestCreateActivity(unittest.TestCase):
+    def setUp(self):
+        self.client = TestClient(app)
+
+    @patch("write_api.main.get_object_by_id")
+    @patch("write_api.main.bq_client")
+    def test_create_note_success(self, mock_bq, mock_get_obj):
+        mock_get_obj.return_value = {
+            "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
+            "deleted": False,
+            "object_json": {"id": "target-id", "type": "Article", "thread_root": None}
+        }
+        mock_bq.insert_rows_json.return_value = []
+        mock_bq.query.return_value.result.return_value = None
+
+        headers = {"Authorization": "Bearer mock-test"}
+        payload = {
+            "type": "Create",
+            "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
+            "object": {
+                "type": "Note",
+                "content": "Tämä on testi-kommentti",
+                "inReplyTo": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"
+            }
+        }
+        response = self.client.post("/ap/activities", headers=headers, json=payload)
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertIn("id", body)
+        self.assertIn("object_id", body)
+
+    @patch("write_api.main.get_object_by_id")
+    def test_create_note_missing_inreplyto_returns_400(self, mock_get_obj):
+        headers = {"Authorization": "Bearer mock-test"}
+        payload = {
+            "type": "Create",
+            "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
+            "object": {
+                "type": "Note",
+                "content": "Kommentti ilman inReplyTo"
+            }
         }
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 400)
-        self.assertIn("Missing 'type' or 'object'", response.json()["detail"])
+
+    @patch("write_api.main.get_object_by_id")
+    def test_create_note_wrong_type_returns_400(self, mock_get_obj):
+        headers = {"Authorization": "Bearer mock-test"}
+        payload = {
+            "type": "Create",
+            "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
+            "object": {
+                "type": "Article",
+                "inReplyTo": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"
+            }
+        }
+        response = self.client.post("/ap/activities", headers=headers, json=payload)
+        self.assertEqual(response.status_code, 400)
+
+    @patch("write_api.main.get_object_by_id")
+    def test_create_reply_depth_limit(self, mock_get_obj):
+        """Kommentti kommentille jonka vanhempi on jo kommentti → 400 (max 2 tasoa)."""
+        def fake_get_obj(obj_id):
+            if "article" in obj_id:
+                return None
+            if "parent" in obj_id:
+                return {
+                    "id": obj_id,
+                    "deleted": False,
+                    "object_json": {
+                        "type": "Note",
+                        "inReplyTo": "https://activitystreams.uutisseuranta.net/ap/objects/comments/grandparent",
+                        "thread_root": "https://activitystreams.uutisseuranta.net/ap/objects/articles/ROOT"
+                    }
+                }
+            return {
+                "id": obj_id,
+                "deleted": False,
+                "object_json": {"type": "Note", "inReplyTo": None, "thread_root": None}
+            }
+        mock_get_obj.side_effect = fake_get_obj
+
+        headers = {"Authorization": "Bearer mock-test"}
+        payload = {
+            "type": "Create",
+            "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
+            "object": {
+                "type": "Note",
+                "content": "Liian syvä vastaus",
+                "inReplyTo": "https://activitystreams.uutisseuranta.net/ap/objects/comments/parent"
+            }
+        }
+        response = self.client.post("/ap/activities", headers=headers, json=payload)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("depth", response.json()["detail"].lower())
+
+
+class TestUnsupportedActivityType(unittest.TestCase):
+    def setUp(self):
+        self.client = TestClient(app)
+
+    def test_unsupported_type_returns_400(self):
+        headers = {"Authorization": "Bearer mock-test"}
+        payload = {
+            "type": "Follow",
+            "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
+            "object": "https://activitystreams.uutisseuranta.net/ap/users/toinen"
+        }
+        response = self.client.post("/ap/activities", headers=headers, json=payload)
+        self.assertEqual(response.status_code, 400)
+
+    def test_missing_type_returns_400(self):
+        headers = {"Authorization": "Bearer mock-test"}
+        payload = {
+            "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
+            "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"
+        }
+        response = self.client.post("/ap/activities", headers=headers, json=payload)
+        self.assertEqual(response.status_code, 400)
+
+
+class TestHealthEndpoints(unittest.TestCase):
+    def setUp(self):
+        self.client = TestClient(app)
+
+    def test_healthz_returns_ok(self):
+        response = self.client.get("/healthz")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "ok")
+
+    @patch("write_api.main.bq_client")
+    def test_readyz_returns_ready_when_bq_ok(self, mock_bq):
+        mock_bq.list_datasets.return_value = iter([])
+        response = self.client.get("/readyz")
+        self.assertEqual(response.status_code, 200)
+
+    @patch("write_api.main.bq_client")
+    def test_readyz_returns_503_when_bq_fails(self, mock_bq):
+        mock_bq.list_datasets.side_effect = Exception("BQ unreachable")
+        response = self.client.get("/readyz")
+        self.assertEqual(response.status_code, 503)

@@ -34,14 +34,25 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "attribute.workflow"   = "assertion.workflow"
   }
 
-  # Sallitaan vain main-haara tai smoke-test workflow_dispatch.
-  # Deploy-workflow ajaa vain main:ssa (if: github.ref == 'refs/heads/main'),
-  # mutta WIF-tason rajoitus on defence-in-depth: estää tokenin myöntämisen
-  # muille haaroille vaikka workflow-ehto unohdettaisiin.
+  # Defence-in-depth: WIF-tason rajoitus joka on riippumaton workflow-tason
+  # if-ehdoista. Vaikka workflow-ehto unohdettaisiin, GCP ei myönnä tokenia
+  # jos tämä ehto ei täyty.
+  #
+  # Kaksi hyväksyttyä polkua:
+  #   1. push main-haaraan + workflow on unit-tests.yml
+  #      → ainoa polku joka saa deploy-oikeuden
+  #   2. workflow_dispatch smoke-test.yml:stä (mistä tahansa haarasta)
+  #      → manuaalinen live-testi, ei deploy-oikeuksia
+  #
+  # Muut workflowt main-haarassa (esim. uusi workflow jonka joku lisää)
+  # eivät saa WIF-tokenia ilman tähän tiedostoon tehtyä muutosta.
   attribute_condition = <<-EOT
     assertion.repository == 'uutisseuranta/bq-activitystreams' &&
     (
-      assertion.ref == 'refs/heads/main' ||
+      (
+        assertion.ref == 'refs/heads/main' &&
+        assertion.workflow == '.github/workflows/unit-tests.yml'
+      ) ||
       assertion.workflow == '.github/workflows/smoke-test.yml'
     )
   EOT

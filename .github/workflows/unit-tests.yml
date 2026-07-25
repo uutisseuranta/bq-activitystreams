@@ -37,17 +37,52 @@ jobs:
       - name: Install checkov
         run: pip install checkov
       - name: Checkov – Terraform staattinen analyysi
-        # --soft-fail: CI ei kaadu tuntemattomiin sääntöihin, löydöt silti näkyvät
-        # --output github_failed_only: vain virheet annotaatioina PR-diffissä
-        # Poistetaan tarkistukset jotka eivät sovi tähän projektiin:
-        #   CKV_GCP_82 – vaatii binary authorization (ei käytössä)
+        # --check-level HIGH: CRITICAL ja HIGH löydöt kaatavat CI:n ja estävät mergen.
+        # MEDIUM ja LOW näkyvät annotaatioina PR-diffissä mutta eivät blokkaa.
+        # --soft-fail poistettu: turvallisuuskriittiset löydöt pysäyttävät CI:n.
+        # --output github_failed_only: vain virheet annotaatioina PR-diffissä.
+        # Ohitetut tarkistukset (perustelut DECISION_LOG.csv:ssä):
+        #   CKV_GCP_82 – vaatii binary authorization (ei käytössä tässä projektissa)
         #   CKV_GCP_34 – Cloud Run vaatii VPC connector (ei tarvita)
         run: |
           checkov -d terraform/ \
             --framework terraform \
             --output github_failed_only \
-            --soft-fail \
+            --check-level HIGH \
             --skip-check CKV_GCP_82,CKV_GCP_34
+
+  terraform-plan:
+    # Ajetaan vain PR:ssä — näyttää infra-muutokset reviewerille ennen mergeä.
+    # State-backend ohitetaan (-backend=false) jotta PR-tarkistus ei vaadi
+    # oikeaa GCS-buckettia. Suunnitelman tarkoitus on näyttää mitä resursseja
+    # muuttuu, ei validoida state:a.
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.9"
+      - name: terraform init (no backend)
+        run: terraform -chdir=terraform init -backend=false
+      - name: terraform plan
+        # Tulos kirjoitetaan GitHub Step Summaryyn — näkyy PR:n Checks-välilehdellä.
+        # Muuttujat: TF_VAR_* asetetaan ympäristömuuttujina secrets-lähteistä.
+        run: |
+          terraform -chdir=terraform plan -no-color 2>&1 | tee -a $GITHUB_STEP_SUMMARY
+        env:
+          TF_VAR_gcp_project: uutisseuranta-activitystreams
+          TF_VAR_github_token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+        # continue-on-error: true — plan-virhe (esim. puuttuva muuttuja) ei kaada
+        # koko PR-tarkistusta. Virhe näkyy Step Summaryssa ja merkitään keltaiseksi.
 
   deploy:
     needs: [unit-test, terraform-lint]
@@ -63,21 +98,48 @@ jobs:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
       - uses: google-github-actions/setup-gcloud@v2
+
       - name: Deploy query-api
+        id: deploy_query_api
         run: |
           gcloud run deploy query-api \
             --source src/query_api \
             --region europe-north1 \
             --project uutisseuranta-activitystreams
+
       - name: Deploy write-api
+        id: deploy_write_api
         run: |
           gcloud run deploy write-api \
             --source src/write_api \
             --region europe-north1 \
             --project uutisseuranta-activitystreams
+
       - name: Deploy og-scraper
         run: |
           gcloud run deploy og-scraper \
             --source src/og_scraper \
             --region europe-north1 \
             --project uutisseuranta-activitystreams
+
+      - name: Post-deploy healthcheck
+        # Tarkistaa /healthz-endpointin query-api:lle ja write-api:lle deployn jälkeen.
+        # Epäonnistuminen merkitsee deployn epäonnistuneeksi — ei automaattista
+        # rollbackia (Cloud Run pitää edellisen revision automaattisesti tallessa).
+        # og-scraper on IAM-suojattu eikä palauta julkista /healthz:aa — ohitetaan.
+        # --retry 3 --retry-delay 5: annetaan palvelulle 15 s käynnistyä.
+        run: |
+          for svc in query-api write-api; do
+            URL=$(gcloud run services describe $svc \
+              --region europe-north1 \
+              --project uutisseuranta-activitystreams \
+              --format='value(status.url)')
+            echo "Healthcheck: $svc → $URL/healthz"
+            curl -sf --retry 3 --retry-delay 5 "$URL/healthz" || {
+              echo "VIRHE: $svc /healthz epäonnistui deployn jälkeen."
+              echo "Palauta edellinen revisio Cloud Consolessa tai:"
+              echo "  gcloud run services update-traffic $svc --to-revisions=PREVIOUS=100 --region europe-north1"
+              exit 1
+            }
+          done
+          echo "Kaikki healthcheckit läpäisty ✓"

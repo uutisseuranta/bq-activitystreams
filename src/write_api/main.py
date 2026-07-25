@@ -74,12 +74,28 @@ bq_client = bigquery.Client(project=PROJECT)
 
 
 def verify_auth_token(auth_header: Optional[str]) -> str:
-    """Validoi Google OIDC JWT-tokenin ja palauttaa käyttäjän sub-tunnisteen."""
+    """Validoi Google OIDC JWT-tokenin ja palauttaa käyttäjän sub-tunnisteen.
+
+    Turvallisuushuomiot:
+    - exp-tarkistus: google.oauth2.id_token.verify_oauth2_token hylkää
+      vanhentuneet tokenit automaattisesti (ValueError 'Token expired').
+    - aud-tarkistus: Google tarkistaa että token on tarkoitettu tälle
+      palvelulle. Estää token reuse -hyökkäykset.
+    - iss-tarkistus: Google hyväksyy vain 'accounts.google.com' ja
+      'https://accounts.google.com' — muut issuerit hylätään.
+    - sub-kenttä: palautetaan 401 jos puuttuu. Puuttuva sub aiheuttaisi
+      muuten KeyError:n actorUrl-rakentamisessa (500-virhe).
+    """
     if not auth_header or not auth_header.startswith("Bearer "):
         logger.warning("Autentikaatio hylätty: Authorization-otsake puuttuu tai virheellinen")
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header.")
 
     token = auth_header.split(" ")[1]
+
+    # Tyhjä token Bearer-otsakkeen jälkeen
+    if not token:
+        logger.warning("Autentikaatio hylätty: Bearer-token on tyhjä")
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header.")
 
     if ALLOW_MOCK_AUTH and token == "mock-test":
         logger.warning("Mock-autentikaatio käytössä — vain kehitysympäristöön")
@@ -96,8 +112,20 @@ def verify_auth_token(auth_header: Optional[str]) -> str:
             if not id_info.get("email_verified"):
                 logger.warning(f"Autentikaatio hylätty: email_verified=false, sub={id_info.get('sub')}")
                 raise HTTPException(status_code=403, detail="Email domain must be verified.")
-            logger.info(f"Autentikaatio onnistui: sub={id_info['sub']}, aud={audience}")
-            return id_info["sub"]
+
+            # sub-kentän puuttuminen aiheuttaisi KeyError:n actorUrl-rakentamisessa.
+            # Palautetaan 401 selkeällä viestillä sen sijaan että päästettäisiin
+            # läpi ja kaaduttaisiin 500:een myöhemmin.
+            sub = id_info.get("sub")
+            if not sub:
+                logger.warning(
+                    f"Autentikaatio hylätty: sub-kenttä puuttuu tokenista, "
+                    f"aud={audience}, email={id_info.get('email')}"
+                )
+                raise HTTPException(status_code=401, detail="Token missing subject claim.")
+
+            logger.info(f"Autentikaatio onnistui: sub={sub}, aud={audience}")
+            return sub
         except HTTPException:
             raise
         except Exception as e:
