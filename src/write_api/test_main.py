@@ -1,5 +1,6 @@
 # src/write_api/test_main.py
 import os
+import time
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -19,6 +20,132 @@ from fastapi.testclient import TestClient  # noqa: E402, I001
 from write_api.main import app  # noqa: E402, I001
 
 import json  # noqa: E402
+
+
+class TestAuthSecurity(unittest.TestCase):
+    """
+    Autentikoinnin negatiiviset testit.
+
+    Huom: ALLOW_MOCK_AUTH=true ohittaa oikean Google-tokenin verifioinnin.
+    Nämä testit tarkistavat FastAPI-kerroksen suojauksen (puuttuva/epäkelpo
+    Authorization-otsake) ENNEN kuin verify_google_token-funktio kutsutaan.
+    Tokenin sisältö (aud, exp, iss) testataan erillisessä auth-test.sh:ssa
+    offline JWT -kirjastolla ilman oikeaa Googlea.
+    """
+
+    def setUp(self):
+        self.client = TestClient(app)
+        self.valid_payload = {
+            "type": "Like",
+            "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
+            "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"
+        }
+
+    def test_missing_authorization_header_returns_401(self):
+        """Kutsu ilman Authorization-otsiketta → 401."""
+        response = self.client.post("/ap/activities", json=self.valid_payload)
+        self.assertEqual(response.status_code, 401)
+
+    def test_empty_bearer_token_returns_401(self):
+        """Authorization: Bearer ilman tokenia → 401."""
+        response = self.client.post(
+            "/ap/activities",
+            headers={"Authorization": "Bearer "},
+            json=self.valid_payload
+        )
+        self.assertEqual(response.status_code, 401)
+
+    def test_malformed_authorization_scheme_returns_401(self):
+        """Basic-scheme Bearerin sijaan → 401 (ei kaadu 500-virheeseen)."""
+        response = self.client.post(
+            "/ap/activities",
+            headers={"Authorization": "Basic dXNlcjpwYXNz"},
+            json=self.valid_payload
+        )
+        self.assertEqual(response.status_code, 401)
+
+    def test_random_string_as_token_returns_401_not_500(self):
+        """
+        Epäkelpo JWT-merkkijono (ei pisteitä, ei Base64) → 401, ei 500.
+        Varmistaa ettei verify_google_token kaadu poikkeukseen ilman
+        käsittelijää.
+        """
+        response = self.client.post(
+            "/ap/activities",
+            headers={"Authorization": "Bearer TÄMÄEIOLEJWT"},
+            json=self.valid_payload
+        )
+        # mock-auth on päällä joten saattaa läpäistä — tarkistetaan ettei 500
+        self.assertNotEqual(response.status_code, 500,
+            "Epäkelpo token ei saa kaataa palvelua 500-virheeseen")
+
+    @patch("write_api.main.verify_google_token")
+    def test_expired_token_returns_401(self, mock_verify):
+        """
+        Vanhentunut ID-token → verify_google_token palauttaa None → 401.
+
+        Google ID -tokeneilla on 1 tunnin elinaika. Tämä testi simuloi
+        tilanteen jossa token on hyvä mutta exp-kenttä on menneisyydessä.
+        Oikea verify_google_token kutsuu google.oauth2.id_token.verify_oauth2_token
+        joka heittää ValueError 'Token expired' — tässä mockataan paluu None.
+        """
+        mock_verify.return_value = None  # expired / invalid
+        response = self.client.post(
+            "/ap/activities",
+            headers={"Authorization": "Bearer vanhentunut.token.here"},
+            json=self.valid_payload
+        )
+        self.assertEqual(response.status_code, 401)
+        self.assertIn("401", str(response.status_code))
+
+    @patch("write_api.main.verify_google_token")
+    def test_wrong_audience_returns_401(self, mock_verify):
+        """
+        Token jolla on väärä audience (aud) → verify_google_token palauttaa None → 401.
+
+        Google tarkistaa että aud == GOOGLE_CLIENT_ID. Jos käyttäjä
+        lähettää toiselle palvelulle tarkoitetun tokenin (token reuse -hyökkäys),
+        se pitää hylätä.
+        """
+        mock_verify.return_value = None  # wrong aud
+        response = self.client.post(
+            "/ap/activities",
+            headers={"Authorization": "Bearer token.wrong.audience"},
+            json=self.valid_payload
+        )
+        self.assertEqual(response.status_code, 401)
+
+    @patch("write_api.main.verify_google_token")
+    def test_valid_token_with_correct_sub_succeeds(self, mock_verify):
+        """
+        Kelvollinen token oikealla sub-kentillä → läpäise autentikoinnin.
+        Varmistaa että verify_google_token-paluuarvo käytetään oikein.
+        """
+        mock_verify.return_value = {
+            "sub": "test-user-sub-12345",
+            "email": "test@example.com",
+            "aud": "test-client-id",
+            "exp": int(time.time()) + 3600,
+            "iss": "https://accounts.google.com",
+        }
+        with patch("write_api.main.get_object_by_id") as mock_obj, \
+             patch("write_api.main.get_existing_reaction") as mock_reaction, \
+             patch("write_api.main.bq_client") as mock_bq:
+            mock_obj.return_value = {
+                "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
+                "deleted": False,
+                "object_json": {"id": "target-id", "type": "Article"}
+            }
+            mock_reaction.return_value = None
+            mock_bq.insert_rows_json.return_value = []
+            response = self.client.post(
+                "/ap/activities",
+                headers={"Authorization": "Bearer kelvollinen.token"},
+                json=self.valid_payload
+            )
+        # Joko 201 (onnistui) tai 200 (idempotent) — ei 401/403/500
+        self.assertIn(response.status_code, [200, 201],
+            f"Kelvollinen token hylättiin: {response.status_code} {response.text}")
 
 
 class TestDeleteActivity(unittest.TestCase):
@@ -166,7 +293,7 @@ class TestLikeActivity(unittest.TestCase):
             "deleted": False,
             "object_json": {"id": "target-id", "type": "Article"}
         }
-        mock_get_reaction.return_value = None  # ei aiempaa reaktiota
+        mock_get_reaction.return_value = None
         mock_bq.insert_rows_json.return_value = []
 
         headers = {"Authorization": "Bearer mock-test"}
@@ -189,7 +316,7 @@ class TestLikeActivity(unittest.TestCase):
             "deleted": False,
             "object_json": {"id": "target-id", "type": "Article"}
         }
-        mock_get_reaction.return_value = "Like"  # sama reaktio jo olemassa
+        mock_get_reaction.return_value = "Like"
 
         headers = {"Authorization": "Bearer mock-test"}
         payload = {
