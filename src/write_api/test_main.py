@@ -184,6 +184,18 @@ class TestAuthSecurity(unittest.TestCase):
 
 
 class TestDeleteActivity(unittest.TestCase):
+    """
+    Delete-aktiviteetin bisneslogiikkatestit.
+
+    Autentikointi: nämä testit käyttävät "Bearer mock-test" -tokenia.
+    ALLOW_MOCK_AUTH=true on asetettu moduulitasolla ennen importtia, joten
+    verify_auth_token ohittaa Google-tokeniverifioinnin ja palauttaa
+    "test-user-sub-12345" suoraan. Tämä on tarkoituksellinen valinta:
+    tässä luokassa testataan Delete-käsittelijän omistajuustarkistusta,
+    idempotenttiutta ja virhetiloja — ei autentikoinnin toimintaa.
+    Autentikointilogiikka testataan erikseen TestAuthSecurity-luokassa.
+    """
+
     def setUp(self):
         self.client = TestClient(app)
 
@@ -264,6 +276,18 @@ class TestDeleteActivity(unittest.TestCase):
 
 
 class TestLikeActivity(unittest.TestCase):
+    """
+    Like/Dislike-reaktioiden bisneslogiikkatestit.
+
+    Autentikointi: nämä testit käyttävät "Bearer mock-test" -tokenia.
+    ALLOW_MOCK_AUTH=true on asetettu moduulitasolla ennen importtia, joten
+    verify_auth_token ohittaa Google-tokeniverifioinnin ja palauttaa
+    "test-user-sub-12345" suoraan. Tämä on tarkoituksellinen valinta:
+    tässä luokassa testataan Like-käsittelijän toggle-logiikkaa (#33),
+    idempotenttiutta ja virhetiloja — ei autentikoinnin toimintaa.
+    Autentikointilogiikka testataan erikseen TestAuthSecurity-luokassa.
+    """
+
     def setUp(self):
         self.client = TestClient(app)
 
@@ -367,6 +391,18 @@ class TestLikeActivity(unittest.TestCase):
 
 
 class TestCreateActivity(unittest.TestCase):
+    """
+    Create-aktiviteetin (kommentointi) bisneslogiikkatestit.
+
+    Autentikointi: nämä testit käyttävät "Bearer mock-test" -tokenia.
+    ALLOW_MOCK_AUTH=true on asetettu moduulitasolla ennen importtia, joten
+    verify_auth_token ohittaa Google-tokeniverifioinnin ja palauttaa
+    "test-user-sub-12345" suoraan. Tämä on tarkoituksellinen valinta:
+    tässä luokassa testataan Create Note -käsittelijän inReplyTo-validointia,
+    syvyysrajoitusta ja virhetiloja — ei autentikoinnin toimintaa.
+    Autentikointilogiikka testataan erikseen TestAuthSecurity-luokassa.
+    """
+
     def setUp(self):
         self.client = TestClient(app)
 
@@ -459,6 +495,16 @@ class TestCreateActivity(unittest.TestCase):
 
 
 class TestUnsupportedActivityType(unittest.TestCase):
+    """
+    Tuntemattomat aktiviteettityypit.
+
+    Autentikointi: nämä testit käyttävät "Bearer mock-test" -tokenia.
+    ALLOW_MOCK_AUTH=true on asetettu moduulitasolla ennen importtia, joten
+    verify_auth_token ohittaa Google-tokeniverifioinnin. Tässä luokassa
+    testataan että tuntematon tyyppi (Follow, puuttuva type) hylätään 400:lla
+    ennen kuin bisneslogiikka edes käynnistyy.
+    """
+
     def setUp(self):
         self.client = TestClient(app)
 
