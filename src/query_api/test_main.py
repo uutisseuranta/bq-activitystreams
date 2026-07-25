@@ -8,8 +8,11 @@ from unittest.mock import MagicMock, patch
 os.environ["GCP_PROJECT"] = "test-project"
 os.environ["BQ_DATASET"] = "test_dataset"
 
-from fastapi.testclient import TestClient  # noqa: E402
+# Mockataan BigQuery-asiakas ennen main.py:n importtausta, jotta vältetään DefaultCredentialsError CI:ssä
+import google.cloud.bigquery  # noqa: E402, I001
+google.cloud.bigquery.Client = MagicMock()
 
+from fastapi.testclient import TestClient  # noqa: E402
 from query_api.main import _count_cache, app  # noqa: E402
 
 
@@ -34,7 +37,7 @@ class TestOutboxQuery(unittest.TestCase):
             "like_count": 12,
             "object_json": (
                 '{"id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y", '
-                '{"type": "Article", "name": "Testiuutinen"}'
+                '"type": "Article", "name": "Testiuutinen"}'
             )
         }
 
@@ -111,12 +114,13 @@ class TestCacheBehavior(unittest.TestCase):
         response = self.client.get("/ap/outbox?tag=politiikka")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["totalItems"], 42)
-        self.assertEqual(mock_bq.query.call_count, 2)
+        self.assertEqual(mock_bq.query.call_count, 2)  # 1 count-kyselyyn ja 1 haku-kyselyyn
 
+        # Toinen haku käyttää välimuistia eikä tee uutta count-kyselyiä
         response2 = self.client.get("/ap/outbox?tag=politiikka")
         self.assertEqual(response2.status_code, 200)
         self.assertEqual(response2.json()["totalItems"], 42)
-        self.assertEqual(mock_bq.query.call_count, 3)
+        self.assertEqual(mock_bq.query.call_count, 3)  # vain 1 uusi haku-kysely, ei count-kyselyiä
 
 
 class TestReadyzAndHealthz(unittest.TestCase):
@@ -182,8 +186,11 @@ class TestReactionAggregationPrep(unittest.TestCase):
         resp_data = response.json()
         item = resp_data["orderedItems"][0]
 
+        # HUOM: Vaiheessa 1 ja 2 noudatetaan taaksepäin yhteensopivuutta.
+        # Tämä testi tarkistaa agreeCount/disagreeCount -kenttien läsnäolon jos ne on määritelty,
+        # tai valmistelee testin loppuosalla niiden validoinnin vaiheessa 3.
         if "agreeCount" in item:
             self.assertEqual(item["agreeCount"], 8)
             self.assertEqual(item["disagreeCount"], 4)
         else:
-            pass
+            pass  # vaiheessa 3 tämä haara poistetaan ja mapping vaaditaan
