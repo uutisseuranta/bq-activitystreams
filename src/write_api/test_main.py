@@ -18,6 +18,8 @@ from fastapi.testclient import TestClient  # noqa: E402, I001
 
 from write_api.main import app  # noqa: E402, I001
 
+import json  # noqa: E402
+
 
 class TestDeleteActivity(unittest.TestCase):
     def setUp(self):
@@ -25,23 +27,21 @@ class TestDeleteActivity(unittest.TestCase):
 
     @patch("write_api.main.bq_client")
     def test_delete_success(self, mock_bq):
-        # Setup mock for get_object_by_id
         mock_query_job = MagicMock()
         mock_row = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7X",
             "source": "user",
             "deleted": False,
             "like_count": 0,
-            "object_json": {
+            "dislike_count": 0,
+            "object_json": json.dumps({
                 "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7X",
                 "type": "Note",
                 "attributedTo": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345"
-            }
+            })
         }
         mock_query_job.result.return_value = [mock_row]
         mock_bq.query.return_value = mock_query_job
-
-        # Setup mock for insert_rows_json
         mock_bq.insert_rows_json.return_value = []
 
         headers = {"Authorization": "Bearer mock-test"}
@@ -52,7 +52,6 @@ class TestDeleteActivity(unittest.TestCase):
         }
 
         response = self.client.post("/ap/activities", headers=headers, json=payload)
-
         self.assertEqual(response.status_code, 200)
         resp_data = response.json()
         self.assertEqual(resp_data["status"], "deleted")
@@ -60,7 +59,6 @@ class TestDeleteActivity(unittest.TestCase):
 
     @patch("write_api.main.bq_client")
     def test_delete_404_not_found(self, mock_bq):
-        # Mock get_object_by_id returns None
         mock_query_job = MagicMock()
         mock_query_job.result.return_value = []
         mock_bq.query.return_value = mock_query_job
@@ -78,12 +76,12 @@ class TestDeleteActivity(unittest.TestCase):
 
     @patch("write_api.main.get_object_by_id")
     def test_delete_403_forbidden(self, mock_get_obj):
-        # Kommentti kuuluu toiselle käyttäjälle — actor ei ole attributedTo
         mock_get_obj.return_value = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7X",
             "source": "user",
             "deleted": False,
             "like_count": 0,
+            "dislike_count": 0,
             "object_json": {
                 "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7X",
                 "type": "Note",
@@ -110,7 +108,6 @@ class TestCreateActivity(unittest.TestCase):
     @patch("write_api.main.bq_client")
     @patch("write_api.main.get_object_by_id")
     def test_create_success(self, mock_get_obj, mock_bq):
-        # Mokatataan parent-objektin haku
         mock_get_obj.return_value = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
             "deleted": False,
@@ -138,7 +135,6 @@ class TestCreateActivity(unittest.TestCase):
 
     @patch("write_api.main.get_object_by_id")
     def test_create_404_parent_not_found(self, mock_get_obj):
-        # Parent-kohdetta ei löydy
         mock_get_obj.return_value = None
 
         headers = {"Authorization": "Bearer mock-test"}
@@ -162,16 +158,15 @@ class TestLikeActivity(unittest.TestCase):
         self.client = TestClient(app)
 
     @patch("write_api.main.bq_client")
-    @patch("write_api.main.check_like_exists")
+    @patch("write_api.main.get_existing_reaction")
     @patch("write_api.main.get_object_by_id")
-    def test_like_success(self, mock_get_obj, mock_check_like, mock_bq):
-        # Mockataan target olemassa olevaksi
+    def test_like_success(self, mock_get_obj, mock_get_reaction, mock_bq):
         mock_get_obj.return_value = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
             "deleted": False,
             "object_json": {"id": "target-id", "type": "Article"}
         }
-        mock_check_like.return_value = False
+        mock_get_reaction.return_value = None  # ei aiempaa reaktiota
         mock_bq.insert_rows_json.return_value = []
 
         headers = {"Authorization": "Bearer mock-test"}
@@ -186,16 +181,15 @@ class TestLikeActivity(unittest.TestCase):
         resp_data = response.json()
         self.assertTrue(resp_data["id"].startswith("https://activitystreams.uutisseuranta.net/ap/activities/likes/"))
 
-    @patch("write_api.main.check_like_exists")
+    @patch("write_api.main.get_existing_reaction")
     @patch("write_api.main.get_object_by_id")
-    def test_like_idempotency_duplicate(self, mock_get_obj, mock_check_like):
-        # Käyttäjä on jo tykkännyt kohteesta
+    def test_like_idempotency_duplicate(self, mock_get_obj, mock_get_reaction):
         mock_get_obj.return_value = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
             "deleted": False,
             "object_json": {"id": "target-id", "type": "Article"}
         }
-        mock_check_like.return_value = True
+        mock_get_reaction.return_value = "Like"  # sama reaktio jo olemassa
 
         headers = {"Authorization": "Bearer mock-test"}
         payload = {
@@ -206,7 +200,7 @@ class TestLikeActivity(unittest.TestCase):
 
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["status"], "already_liked")
+        self.assertEqual(response.json()["status"], "already_reacted")
 
 
 class TestUpdateActivity(unittest.TestCase):
@@ -216,7 +210,6 @@ class TestUpdateActivity(unittest.TestCase):
     @patch("write_api.main.bq_client")
     @patch("write_api.main.get_object_by_id")
     def test_update_success(self, mock_get_obj, mock_bq):
-        # Mockataan olemassa oleva Note, jonka omistaja on pyynnön tekijä
         mock_get_obj.return_value = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7X",
             "deleted": False,
@@ -247,7 +240,6 @@ class TestUpdateActivity(unittest.TestCase):
 
     @patch("write_api.main.get_object_by_id")
     def test_update_403_forbidden(self, mock_get_obj):
-        # Note kuuluu toiselle käyttäjälle (other-user)
         mock_get_obj.return_value = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7X",
             "deleted": False,
@@ -280,7 +272,6 @@ class TestValidationAndAuth(unittest.TestCase):
         self.client = TestClient(app)
 
     def test_unauthorized_token_missing(self):
-        # Pyyntö ilman Authorization Bearer otsaketta
         payload = {
             "type": "Like",
             "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
@@ -290,7 +281,6 @@ class TestValidationAndAuth(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
 
     def test_missing_type_or_object(self):
-        # Puuttuva type tai object kenttä
         headers = {"Authorization": "Bearer mock-test"}
         payload = {
             "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345"
