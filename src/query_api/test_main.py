@@ -37,7 +37,9 @@ class TestOutboxQuery(unittest.TestCase):
             )
         }
 
-        # Erotetaan kyselyt SQL-sisällön perusteella
+        # bq_client.query kutsutaan kahdesti per endpoint-kutsu:
+        # 1. COUNT(*)-kysely totalItems-välimuistiin, 2. varsinainen haku.
+        # SQL-sisältöön perustuva erotus on ainoa tapa mockäta molemmat erikseen.
         def query_side_effect(sql, job_config=None):
             if "COUNT(*) AS c" in sql:
                 return create_mock_query_job([{"c": 1}])
@@ -96,7 +98,8 @@ class TestCacheBehavior(unittest.TestCase):
             "object_json": '{"id": "some-id", "type": "Article"}'
         }
 
-        # Erotetaan kyselyt SQL-sisällön perusteella
+        # ks. test_outbox_success: bq_client.query kutsutaan kahdesti per kutsu
+        # (COUNT + haku), joten side_effect erotetaan SQL-sisällön perusteella
         def query_side_effect(sql, job_config=None):
             if "COUNT(*) AS c" in sql:
                 return create_mock_query_job([{"c": 42}])
@@ -109,11 +112,11 @@ class TestCacheBehavior(unittest.TestCase):
         self.assertEqual(response.json()["totalItems"], 42)
         self.assertEqual(mock_bq.query.call_count, 2)  # 1 count-kyselyyn ja 1 haku-kyselyyn
 
-        # Toinen haku käyttää välimuistia eikä tee uutta count-kyselyä
+        # Toinen haku käyttää välimuistia eikä tee uutta count-kyselyä
         response2 = self.client.get("/ap/outbox?tag=politiikka")
         self.assertEqual(response2.status_code, 200)
         self.assertEqual(response2.json()["totalItems"], 42)
-        self.assertEqual(mock_bq.query.call_count, 3)  # vain 1 uusi haku-kysely, ei count-kyselyä
+        self.assertEqual(mock_bq.query.call_count, 3)  # vain 1 uusi haku-kysely, ei count-kyselyä
 
 
 class TestReadyzAndHealthz(unittest.TestCase):
@@ -150,7 +153,7 @@ class TestReactionAggregationPrep(unittest.TestCase):
         """Valmisteleva testi agreeCount/disagreeCount -kenttien parsimiselle.
 
         Kun aggregate-laskenta otetaan käyttöön vaiheessa 3, query-api palauttaa nämä kentät.
-        Tämä testi varmistaa, että jos ne löytyvät BigQuery-rivistä, ne siirtyvät
+        Tämä testi varmistaa, että jos ne löytyvät BigQuery-riviltä, ne siirtyvät
         asianmukaisesti lopputuloksen orderedItems-listan objekteille.
         """
         mock_row = {
@@ -186,6 +189,4 @@ class TestReactionAggregationPrep(unittest.TestCase):
             self.assertEqual(item["agreeCount"], 8)
             self.assertEqual(item["disagreeCount"], 4)
         else:
-            # Tällä hetkellä kenttiä ei vielä mapata, joten testi menee läpi.
-            # Vaiheessa 3 tämä haara poistetaan ja mapping vaaditaan.
-            pass
+            pass  # vaiheessa 3 tämä haara poistetaan ja mapping vaaditaan
