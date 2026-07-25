@@ -76,6 +76,32 @@ class TestDeleteActivity(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertIn("Object not found", response.json()["detail"])
 
+    @patch("write_api.main.get_object_by_id")
+    def test_delete_403_forbidden(self, mock_get_obj):
+        # Kommentti kuuluu toiselle käyttäjälle — actor ei ole attributedTo
+        mock_get_obj.return_value = {
+            "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7X",
+            "source": "user",
+            "deleted": False,
+            "like_count": 0,
+            "object_json": {
+                "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7X",
+                "type": "Note",
+                "attributedTo": "https://activitystreams.uutisseuranta.net/ap/users/other-user"
+            }
+        }
+
+        headers = {"Authorization": "Bearer mock-test"}
+        payload = {
+            "type": "Delete",
+            "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
+            "object": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7X"
+        }
+
+        response = self.client.post("/ap/activities", headers=headers, json=payload)
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("You do not have permission", response.json()["detail"])
+
 
 class TestCreateActivity(unittest.TestCase):
     def setUp(self):
@@ -163,7 +189,7 @@ class TestLikeActivity(unittest.TestCase):
     @patch("write_api.main.check_like_exists")
     @patch("write_api.main.get_object_by_id")
     def test_like_idempotency_duplicate(self, mock_get_obj, mock_check_like):
-        # Käyttäjä on jo tykännyt kohteesta
+        # Käyttäjä on jo tykkännyt kohteesta
         mock_get_obj.return_value = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
             "deleted": False,
@@ -178,7 +204,7 @@ class TestLikeActivity(unittest.TestCase):
             "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"
         }
 
-        response = self.client.post("/ap/activities", headers=headers, json=payload)
+        response = self.client.post("/ap/activities", headers=payload)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "already_liked")
 
@@ -254,7 +280,7 @@ class TestValidationAndAuth(unittest.TestCase):
         self.client = TestClient(app)
 
     def test_unauthorized_token_missing(self):
-        # Pyyntö ilman Authorization Bearer otsaketta
+        # Pyynтö ilman Authorization Bearer otsaketta
         payload = {
             "type": "Like",
             "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
