@@ -8,12 +8,15 @@ from unittest.mock import MagicMock, patch
 os.environ["GCP_PROJECT"] = "test-project"
 os.environ["BQ_DATASET"] = "test_dataset"
 
-# Mockataan BigQuery-asiakas ennen main.py:n importtausta, jotta vältetään DefaultCredentialsError CI:ssä
-import google.cloud.bigquery  # noqa: E402
+# Mockataan BigQuery-asiakas ennen main.py:n importtausta,
+# jotta vältetään DefaultCredentialsError CI:ssä.
+# google.cloud.bigquery on third-party, joten se kuuluu samaan lohkoon
+# fastapi-importtien kanssa. Sijoituslause (=) on lohkon ulkopuolella.
+import google.cloud.bigquery
+from fastapi.testclient import TestClient
 
-google.cloud.bigquery.Client = MagicMock()
+google.cloud.bigquery.Client = MagicMock()  # noqa: E402
 
-from fastapi.testclient import TestClient  # noqa: E402
 from query_api.main import _count_cache, app  # noqa: E402
 
 
@@ -44,7 +47,6 @@ class TestOutboxQuery(unittest.TestCase):
 
         # bq_client.query kutsutaan kahdesti per endpoint-kutsu:
         # 1. COUNT(*)-kysely totalItems-välimuistiin, 2. varsinainen haku.
-        # SQL-sisältöön perustuva erotus on ainoa tapa mockäta molemmat erikseen.
         def query_side_effect(sql, job_config=None):
             if "COUNT(*) AS c" in sql:
                 return create_mock_query_job([{"c": 1}])
