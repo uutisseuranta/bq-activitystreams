@@ -34,7 +34,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install checkov
-        run: pip install checkov
+        run: pip install checkov==3.2.348
       - name: Checkov – Terraform staattinen analyysi
         run: |
           checkov -d terraform/ \
@@ -57,7 +57,7 @@ jobs:
           service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
       - uses: hashicorp/setup-terraform@e6baf59ee5b1f91d0b65f827518c8c40c5df80f6 # v3.1.2
         with:
-          terraform_version: "~1.9"
+          terraform_version: "1.9.8"
       - name: terraform init (no backend)
         run: terraform -chdir=terraform init -backend=false
       - name: terraform plan
@@ -66,7 +66,6 @@ jobs:
         env:
           TF_VAR_gcp_project: uutisseuranta-activitystreams
           TF_VAR_github_token: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
 
   deploy:
     needs: [unit-test, terraform-lint]
@@ -82,6 +81,17 @@ jobs:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
       - uses: google-github-actions/setup-gcloud@817b83d791af8a1f089ef2143eb5d630d403aa0d # v2.1.4
+
+      - name: Tallenna nykyiset revisiot rollbackia varten
+        run: |
+          for svc in query-api write-api; do
+            REV=$(gcloud run services describe $svc \
+              --region europe-north1 \
+              --project uutisseuranta-activitystreams \
+              --format='value(status.traffic[0].revisionName)' 2>/dev/null || echo "")
+            echo "PREV_${svc//-/_}=$REV" >> $GITHUB_ENV
+            echo "Edellinen revisio ($svc): $REV"
+          done
 
       - name: Deploy query-api
         id: deploy_query_api
@@ -106,19 +116,33 @@ jobs:
             --region europe-north1 \
             --project uutisseuranta-activitystreams
 
-      - name: Post-deploy healthcheck
+      - name: Post-deploy healthcheck ja automaattinen rollback
         run: |
+          FAILED=""
           for svc in query-api write-api; do
             URL=$(gcloud run services describe $svc \
               --region europe-north1 \
               --project uutisseuranta-activitystreams \
               --format='value(status.url)')
             echo "Healthcheck: $svc → $URL/healthz"
-            curl -sf --retry 3 --retry-delay 5 "$URL/healthz" || {
+            if ! curl -sf --retry 3 --retry-delay 5 "$URL/healthz"; then
               echo "VIRHE: $svc /healthz epäonnistui deployn jälkeen."
-              echo "Palauta edellinen revisio Cloud Consolessa tai:"
-              echo "  gcloud run services update-traffic $svc --to-revisions=PREVIOUS=100 --region europe-north1"
-              exit 1
-            }
+              VAR="PREV_${svc//-/_}"
+              PREV_REV="${!VAR}"
+              if [ -n "$PREV_REV" ]; then
+                echo "Palautetaan liikenne revisioon $PREV_REV"
+                gcloud run services update-traffic $svc \
+                  --to-revisions="$PREV_REV=100" \
+                  --region europe-north1 \
+                  --project uutisseuranta-activitystreams
+              else
+                echo "Edellinen revisio tuntematon — rollback ei mahdollinen"
+              fi
+              FAILED="$FAILED $svc"
+            fi
           done
+          if [ -n "$FAILED" ]; then
+            echo "Healthcheck epäonnistui palveluille:$FAILED"
+            exit 1
+          fi
           echo "Kaikki healthcheckit läpäisty ✓"

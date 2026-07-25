@@ -1,4 +1,3 @@
-# src/write_api/test_main.py
 import os
 import time
 import unittest
@@ -61,18 +60,16 @@ class TestAuthSecurity(unittest.TestCase):
 
     def test_random_string_as_token_returns_401_not_500(self):
         """
-        Epäkelpo JWT-merkkijono (ei pisteitä, ei Base64) → 401, ei 500.
-        Varmistaa ettei verify_google_token kaadu poikkeukseen ilman
-        käsittelijää.
+        Epäkelpo JWT-merkkijono (ei pisteitä, ei Base64) → 401 tai 403, ei 500.
+        Varmistaa ettei verify_auth_token kaadu poikkeukseen ilman käsittelijää.
         """
         response = self.client.post(
             "/ap/activities",
             headers={"Authorization": "Bearer TÄMÄEIOLEJWT"},
             json=self.valid_payload
         )
-        # mock-auth on päällä joten saattaa läpäistä — tarkistetaan ettei 500
-        self.assertNotEqual(response.status_code, 500,
-            "Epäkelpo token ei saa kaataa palvelua 500-virheeseen")
+        self.assertIn(response.status_code, [401, 403],
+            f"Epäkelpo token sai väärän statuksen: {response.status_code}")
 
     @patch("write_api.main.verify_google_token")
     def test_expired_token_returns_401(self, mock_verify):
@@ -121,7 +118,8 @@ class TestAuthSecurity(unittest.TestCase):
         (f-string {sub}) mikä kaatuu 500-virheeseen.
 
         Testataan mockkaamalla verify_oauth2_token suoraan (ei verify_google_token)
-        jotta ALLOW_MOCK_AUTH ei ohita tarkistusta.
+        jotta ALLOW_MOCK_AUTH ei ohita tarkistusta. os.getenv luetaan
+        dynaamisesti (ei moduulitason vakiota), joten patch.dict toimii.
         """
         mock_verify_oauth2.return_value = {
             "email": "test@example.com",
@@ -131,10 +129,7 @@ class TestAuthSecurity(unittest.TestCase):
             "iss": "https://accounts.google.com",
             # sub puuttuu tarkoituksella
         }
-        # Ajetaan ilman mock-auth:ia jotta verify_oauth2_token kutsutaan oikeasti
         with patch.dict(os.environ, {"ALLOW_MOCK_AUTH": "false"}):
-            # Täytyy importoida uudelleen jotta ALLOW_MOCK_AUTH-muutos vaikuttaa
-            # Vaihtoehto: testataan verify_auth_token-funktiota suoraan
             from write_api.main import verify_auth_token
             from fastapi import HTTPException
             with self.assertRaises(HTTPException) as ctx:
@@ -353,6 +348,10 @@ class TestLikeActivity(unittest.TestCase):
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 201)
         mock_remove.assert_called_once()
+        mock_bq.insert_rows_json.assert_called_once()
+        args = mock_bq.insert_rows_json.call_args[0]
+        rows = args[1]
+        self.assertEqual(rows[0]["type"], "Like")
 
 
 class TestCreateActivity(unittest.TestCase):
@@ -417,25 +416,20 @@ class TestCreateActivity(unittest.TestCase):
     @patch("write_api.main.get_object_by_id")
     def test_create_reply_depth_limit(self, mock_get_obj):
         """Kommentti kommentille jonka vanhempi on jo kommentti → 400 (max 2 tasoa)."""
-        def fake_get_obj(obj_id):
-            if "article" in obj_id:
-                return None
-            if "parent" in obj_id:
-                return {
-                    "id": obj_id,
-                    "deleted": False,
-                    "object_json": {
-                        "type": "Note",
-                        "inReplyTo": "https://activitystreams.uutisseuranta.net/ap/objects/comments/grandparent",
-                        "thread_root": "https://activitystreams.uutisseuranta.net/ap/objects/articles/ROOT"
-                    }
-                }
-            return {
-                "id": obj_id,
-                "deleted": False,
-                "object_json": {"type": "Note", "inReplyTo": None, "thread_root": None}
-            }
-        mock_get_obj.side_effect = fake_get_obj
+        parent_url = "https://activitystreams.uutisseuranta.net/ap/objects/comments/parent"
+        grandparent_url = "https://activitystreams.uutisseuranta.net/ap/objects/comments/grandparent"
+        root_url = "https://activitystreams.uutisseuranta.net/ap/objects/articles/ROOT"
+
+        mock_get_obj.side_effect = lambda obj_id: {
+            parent_url: {
+                "id": parent_url, "deleted": False,
+                "object_json": {"type": "Note", "inReplyTo": grandparent_url, "thread_root": root_url}
+            },
+            grandparent_url: {
+                "id": grandparent_url, "deleted": False,
+                "object_json": {"type": "Note", "inReplyTo": root_url, "thread_root": root_url}
+            },
+        }.get(obj_id, None)
 
         headers = {"Authorization": "Bearer mock-test"}
         payload = {
@@ -444,7 +438,7 @@ class TestCreateActivity(unittest.TestCase):
             "object": {
                 "type": "Note",
                 "content": "Liian syvä vastaus",
-                "inReplyTo": "https://activitystreams.uutisseuranta.net/ap/objects/comments/parent"
+                "inReplyTo": parent_url
             }
         }
         response = self.client.post("/ap/activities", headers=headers, json=payload)
@@ -490,6 +484,7 @@ class TestHealthEndpoints(unittest.TestCase):
         mock_bq.list_datasets.return_value = iter([])
         response = self.client.get("/readyz")
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "ready")
 
     @patch("write_api.main.bq_client")
     def test_readyz_returns_503_when_bq_fails(self, mock_bq):

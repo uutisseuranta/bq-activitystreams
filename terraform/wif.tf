@@ -56,11 +56,13 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   EOT
 }
 
-# Salli backend-SA:n personointi tästä reposta
+# Salli backend-SA:n personointi VAIN main-haarasta
+# attribute.ref/refs/heads/main on yhdenmukaisempi attribute_condition:in kanssa
+# kuin aiempi attribute.repository, joka olisi sallinut myös feature-haarat.
 resource "google_service_account_iam_member" "wif_backend" {
   service_account_id = google_service_account.backend.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/uutisseuranta/bq-activitystreams"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.ref/refs/heads/main"
 }
 
 # Outputs — kopioi nämä GitHub Secretseihin

@@ -4,8 +4,9 @@
 # Issue: #21
 #
 # Turvallisuushuomio:
-#   - if: github.ref == 'refs/heads/main' estää ajon feature-brancheista
-#     joissa live-smoke-test.sh saattaa olla muokattu.
+#   - branches: [main] estää workflown käynnistämisen muista haaroista jo
+#     GitHub UI -tasolla, ennen kuin yhtään jobbia ajetaan.
+#   - if: github.ref == 'refs/heads/main' on lisäsuoja runtime-tasolla.
 #   - WIF attribute_condition (terraform/wif.tf) sallii tämän workflown
 #     vain main-haarasta myös GCP-tasolla.
 #   - concurrency-ryhmä estää rinnakkaiset ajot (ei vaaraa mutta siisti).
@@ -14,6 +15,8 @@ name: Live smoke test
 
 on:
   workflow_dispatch:
+    branches:
+      - main
 
 concurrency:
   group: smoke-test
