@@ -29,15 +29,19 @@ terraform init
 
 ---
 
-## 1. IAM – Palvelutili
+## 1. IAM – Palvelutilit
 
-Jos `deploy/init-sa.sh` on jo ajettu, palvelutili on olemassa.
+`iam.tf` määrittelee yhden palvelutilin: `google_service_account.backend`
+(account_id = `var.sa_name`). Jos `deploy/init-sa.sh` on jo ajettu, se on
+olemassa GCP:ssä.
 
 ```bash
 # Muoto: projects/<project>/serviceAccounts/<sa_email>
-terraform import google_service_account.deploy \
-  "projects/uutisseuranta-activitystreams/serviceAccounts/deploy-sa@uutisseuranta-activitystreams.iam.gserviceaccount.com"
+terraform import google_service_account.backend \
+  "projects/uutisseuranta-activitystreams/serviceAccounts/<sa_name>@uutisseuranta-activitystreams.iam.gserviceaccount.com"
 ```
+
+> **Huom:** Korvaa `<sa_name>` `terraform.tfvars`:n `sa_name`-muuttujan arvolla.
 
 **IAM-bindingeille ei voi käyttää importia** – ne luodaan aina uusina (idempotent).
 Jos Terraform haluaa poistaa olemassa olevan bindingin, tarkista
@@ -63,7 +67,7 @@ terraform import google_artifact_registry_repository.docker \
 Jos palvelut on jo otettu käyttöön (Cloud Console tai `gcloud run deploy`):
 
 ```bash
-# Muoto: locations/<region>/namespaces/<project>/services/<name>
+# Muoto: projects/<project>/locations/<location>/services/<name>
 terraform import google_cloud_run_v2_service.query_api \
   "projects/uutisseuranta-activitystreams/locations/europe-north1/services/query-api"
 
@@ -79,6 +83,7 @@ terraform import google_cloud_run_v2_service.og_scraper \
 ## 4. Cloud Run – Jobit
 
 ```bash
+# Muoto: projects/<project>/locations/<location>/jobs/<name>
 terraform import google_cloud_run_v2_job.rss_fetch \
   "projects/uutisseuranta-activitystreams/locations/europe-north1/jobs/rss-fetch-job"
 
@@ -120,8 +125,8 @@ terraform import github_branch_protection.main "bq-activitystreams:main"
 
 ## 7. Workload Identity Federation (WIF)
 
-WIF-resurssit on määritelty `terraform/wif.tf`:ssä. Ne luodaan `apply`:ssä
-automatically jos eivät ole olemassa. Jos pooli tai provider on luotu jo
+WIF-resurssit on määritelty `terraform/wif.tf`:ssä. Ne luodaan automaattisesti
+`apply`:ssä jos eivät ole olemassa. Jos pooli tai provider on luotu jo
 käsin Cloud Consolessa, importoi ne ennen `apply`:tä:
 
 ```bash
@@ -147,6 +152,10 @@ terraform import google_iam_workload_identity_pool_provider.github \
 
 ## 8. GitHub Labelit – Shell-skripti
 
+Skripti importoi sekä Jira-sync-labelit että `github.tf`:n määrittelemtä
+repositorio-labelit. Labelit joita ei löydy reposta ohitetaan automaattisesti
+– ne luodaan `terraform apply`:ssä.
+
 ```bash
 #!/usr/bin/env bash
 # Tallenna: terraform/import_labels.sh
@@ -156,7 +165,8 @@ set -e
 REPO="bq-activitystreams"
 
 declare -A LABELS
-# Jira-sync
+
+# Jira-sync-labelit
 LABELS["priority_highest"]="priority:highest"
 LABELS["priority_high_jira"]="priority:high"
 LABELS["priority_medium"]="priority:medium"
@@ -171,6 +181,21 @@ LABELS["status_todo"]="status:to-do"
 LABELS["status_in_progress"]="status:in-progress"
 LABELS["status_in_review"]="status:in-review"
 LABELS["status_done"]="status:done"
+
+# github.tf -labelit (milestone, priority, area, type)
+LABELS["milestone_v05"]="milestone:v0.5"
+LABELS["milestone_v10"]="milestone:v1.0"
+LABELS["priority_critical"]="priority:critical"
+LABELS["priority_high"]="priority:high"
+LABELS["priority_normal"]="priority:normal"
+LABELS["area_security"]="area:security"
+LABELS["area_infra"]="area:infra"
+LABELS["area_data"]="area:data"
+LABELS["area_api"]="area:api"
+LABELS["type_bug"]="type:bug"
+LABELS["type_feat"]="type:feat"
+LABELS["type_chore"]="type:chore"
+LABELS["type_blocked"]="type:blocked"
 
 for resource_name in "${!LABELS[@]}"; do
   label_name="${LABELS[$resource_name]}"
@@ -194,8 +219,9 @@ cd terraform/
 terraform init
 
 # 2. GCP-resurssit (jos jo olemassa)
-terraform import google_service_account.deploy \
-  "projects/uutisseuranta-activitystreams/serviceAccounts/deploy-sa@uutisseuranta-activitystreams.iam.gserviceaccount.com"
+# Korvaa <sa_name> terraform.tfvars:n sa_name-arvolla
+terraform import google_service_account.backend \
+  "projects/uutisseuranta-activitystreams/serviceAccounts/<sa_name>@uutisseuranta-activitystreams.iam.gserviceaccount.com"
 
 terraform import google_artifact_registry_repository.docker \
   "projects/uutisseuranta-activitystreams/locations/europe-north1/repositories/uutisseuranta"
@@ -288,10 +314,10 @@ terraform output wif_service_account
 Aseta seuraavat secretit GitHubissa:
 **Settings → Secrets and variables → Actions → New repository secret**
 
-| Secret-nimi | Arvo (komennon tulos) |
-|---|---|
-| `WIF_PROVIDER` | `terraform output wif_provider` |
-| `WIF_SERVICE_ACCOUNT` | `terraform output wif_service_account` |
+| Secret-nimi | Arvo | Esimerkki |
+|---|---|---|
+| `WIF_PROVIDER` | `terraform output wif_provider` -komennon tulos | `projects/.../providers/github-provider` |
+| `WIF_SERVICE_ACCOUNT` | `terraform output wif_service_account` -komennon tulos | `backend@uutisseuranta-activitystreams.iam.gserviceaccount.com` |
 
 > **Huom:** Arvot ovat pitkiä resurssinimiä – kopioi ne täsmälleen ilman
 > rivinvaihtoja tai lainausmerkkejä.
@@ -326,7 +352,7 @@ Actions → Live smoke test → Run workflow (workflow_dispatch)
 | `bash live-smoke-test.sh` | ✅ vihreä |
 
 Jos `deploy`-vaihe epäonnistuu `PERMISSION_DENIED`-virheellä:
-1. Tarkista että Secrets on asetettu oikein (ei ylimääräisiä välejä)
+1. Tarkista että Secrets on asetettu oikein (ei ylimääräisiä välejä tai rivinvaihtoja)
 2. Tarkista että `terraform apply` on ajettu ja WIF-pooli on olemassa GCP:ssä:
    `gcloud iam workload-identity-pools list --location=global --project=uutisseuranta-activitystreams`
 3. Tarkista että backend-SA:lla on `roles/run.admin`:
@@ -346,7 +372,7 @@ terraform force-unlock <LOCK_ID>
 ```
 
 ### `Error: Service account does not exist`
-Palvelutili on poistettu tai projekti on väärä. Tarkista `var.gcp_project`.
+Palvelutili on poistettu tai projekti on väärä. Tarkista `var.gcp_project` ja `var.sa_name`.
 
 ### Cloud Run 404 importissa
 Palvelu ei ole olemassa. Terraform luo sen `apply`:ssä. Ei tarvita importia.
