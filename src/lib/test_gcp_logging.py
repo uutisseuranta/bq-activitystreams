@@ -8,9 +8,6 @@ import json
 import logging
 import os
 import sys
-from io import StringIO
-
-import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from lib.gcp_logging import StructuredFormatter, get_logger

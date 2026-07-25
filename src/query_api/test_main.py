@@ -8,8 +8,16 @@ from unittest.mock import MagicMock, patch
 os.environ["GCP_PROJECT"] = "test-project"
 os.environ["BQ_DATASET"] = "test_dataset"
 
+# Mockataan BigQuery-asiakas ennen main.py:n importtausta,
+# jotta vältetään DefaultCredentialsError CI:ssä.
+# google.cloud.bigquery on third-party, joten se kuuluu samaan lohkoon
+# fastapi-importtien kanssa. Sijoituslause (=) on lohkon ulkopuolella.
+import google.cloud.bigquery
 from fastapi.testclient import TestClient
-from query_api.main import _count_cache, app
+
+google.cloud.bigquery.Client = MagicMock()  # noqa: E402
+
+from query_api.main import _count_cache, app  # noqa: E402
 
 
 def create_mock_query_job(rows):
@@ -39,7 +47,6 @@ class TestOutboxQuery(unittest.TestCase):
 
         # bq_client.query kutsutaan kahdesti per endpoint-kutsu:
         # 1. COUNT(*)-kysely totalItems-välimuistiin, 2. varsinainen haku.
-        # SQL-sisältöön perustuva erotus on ainoa tapa mockäta molemmat erikseen.
         def query_side_effect(sql, job_config=None):
             if "COUNT(*) AS c" in sql:
                 return create_mock_query_job([{"c": 1}])
@@ -98,8 +105,6 @@ class TestCacheBehavior(unittest.TestCase):
             "object_json": '{"id": "some-id", "type": "Article"}'
         }
 
-        # ks. test_outbox_success: bq_client.query kutsutaan kahdesti per kutsu
-        # (COUNT + haku), joten side_effect erotetaan SQL-sisällön perusteella
         def query_side_effect(sql, job_config=None):
             if "COUNT(*) AS c" in sql:
                 return create_mock_query_job([{"c": 42}])
@@ -110,13 +115,12 @@ class TestCacheBehavior(unittest.TestCase):
         response = self.client.get("/ap/outbox?tag=politiikka")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["totalItems"], 42)
-        self.assertEqual(mock_bq.query.call_count, 2)  # 1 count-kyselyyn ja 1 haku-kyselyyn
+        self.assertEqual(mock_bq.query.call_count, 2)
 
-        # Toinen haku käyttää välimuistia eikä tee uutta count-kyselyä
         response2 = self.client.get("/ap/outbox?tag=politiikka")
         self.assertEqual(response2.status_code, 200)
         self.assertEqual(response2.json()["totalItems"], 42)
-        self.assertEqual(mock_bq.query.call_count, 3)  # vain 1 uusi haku-kysely, ei count-kyselyä
+        self.assertEqual(mock_bq.query.call_count, 3)
 
 
 class TestReadyzAndHealthz(unittest.TestCase):
@@ -150,12 +154,7 @@ class TestReactionAggregationPrep(unittest.TestCase):
 
     @patch("query_api.main.bq_client")
     def test_reaction_aggregation_mapping(self, mock_bq):
-        """Valmisteleva testi agreeCount/disagreeCount -kenttien parsimiselle.
-
-        Kun aggregate-laskenta otetaan käyttöön vaiheessa 3, query-api palauttaa nämä kentät.
-        Tämä testi varmistaa, että jos ne löytyvät BigQuery-riviltä, ne siirtyvät
-        asianmukaisesti lopputuloksen orderedItems-listan objekteille.
-        """
+        """Valmisteleva testi agreeCount/disagreeCount -kenttien parsimiselle."""
         mock_row = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
             "source": "rss",
@@ -182,9 +181,6 @@ class TestReactionAggregationPrep(unittest.TestCase):
         resp_data = response.json()
         item = resp_data["orderedItems"][0]
 
-        # HUOM: Vaiheessa 1 ja 2 noudatetaan taaksepäin yhteensopivuutta.
-        # Tämä testi tarkistaa agreeCount/disagreeCount -kenttien läsnäolon jos ne on määritelty,
-        # tai valmistelee testin loppuosalla niiden validoinnin vaiheessa 3.
         if "agreeCount" in item:
             self.assertEqual(item["agreeCount"], 8)
             self.assertEqual(item["disagreeCount"], 4)
