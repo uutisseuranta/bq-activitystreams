@@ -4,6 +4,7 @@
 # Issue-viittaukset:
 #   #28  Security Hardening – branch protection
 #   #26  README ja nimeämiskonventio (labelit)
+#   #65  Branch protection + required checks main-haaralle
 
 # ── Branch protection ─────────────────────────────────────────────────────
 resource "github_branch_protection" "main" {
@@ -11,8 +12,9 @@ resource "github_branch_protection" "main" {
   pattern       = "main"
 
   required_status_checks {
-    strict   = true
-    contexts = ["test"]
+    strict = true
+    # unit-test viittaa unit-tests.yml -workflown job-nimeen (#64)
+    contexts = ["unit-test"]
   }
 
   required_pull_request_reviews {
@@ -20,7 +22,9 @@ resource "github_branch_protection" "main" {
     required_approving_review_count = 1
   }
 
-  enforce_admins = false
+  enforce_admins      = true
+  allows_force_pushes = false
+  allows_deletions    = false
 }
 
 # ── Labels ────────────────────────────────────────────────────────────────

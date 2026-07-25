@@ -26,3 +26,36 @@ jobs:
           chmod +x generate-standards.sh
           ./generate-standards.sh
           git diff --exit-code STANDARDS.md
+
+  deploy:
+    needs: unit-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Deploy query-api
+        run: |
+          gcloud run deploy query-api \
+            --source src/query_api \
+            --region europe-north1 \
+            --project uutisseuranta-activitystreams
+      - name: Deploy write-api
+        run: |
+          gcloud run deploy write-api \
+            --source src/write_api \
+            --region europe-north1 \
+            --project uutisseuranta-activitystreams
+      - name: Deploy og-scraper
+        run: |
+          gcloud run deploy og-scraper \
+            --source src/og_scraper \
+            --region europe-north1 \
+            --project uutisseuranta-activitystreams

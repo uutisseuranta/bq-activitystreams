@@ -1,0 +1,24 @@
+# .github/workflows/smoke-test.yml
+# Manuaalisesti käynnistettävä live-smoke-test WIF-autentikaatiolla.
+# Vaatii GitHub Secrets: WIF_PROVIDER, WIF_SERVICE_ACCOUNT
+# Issue: #21
+
+name: Live smoke test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: bash live-smoke-test.sh
