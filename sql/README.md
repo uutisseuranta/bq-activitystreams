@@ -29,5 +29,5 @@ done
 
 ## Viitteet
 
-- [TECHNICAL_DESIGN.md](../TECHNICAL_DESIGN.md) — autoritatiivinen skeemadokumentti
+- [ARCHITECTURE.md](../ARCHITECTURE.md) — autoritatiivinen skeemadokumentti
 - [DESIGN_GUIDELINES.md](../DESIGN_GUIDELINES.md) — arkkitehtuuriperiaatteet
