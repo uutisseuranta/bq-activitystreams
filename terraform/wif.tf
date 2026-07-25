@@ -38,21 +38,19 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   # if-ehdoista. Vaikka workflow-ehto unohdettaisiin, GCP ei myönnä tokenia
   # jos tämä ehto ei täyty.
   #
-  # Kaksi hyväksyttyä polkua:
+  # Hyväksytyt polut:
   #   1. push main-haaraan + workflow on unit-tests.yml
   #      → ainoa polku joka saa deploy-oikeuden
-  #   2. workflow_dispatch smoke-test.yml:stä (mistä tahansa haarasta)
-  #      → manuaalinen live-testi, ei deploy-oikeuksia
+  #   2. workflow_dispatch smoke-test.yml:stä main-haarassa
+  #      → manuaalinen live-testi, ei feature-branch-tokenia
   #
-  # Muut workflowt main-haarassa (esim. uusi workflow jonka joku lisää)
-  # eivät saa WIF-tokenia ilman tähän tiedostoon tehtyä muutosta.
+  # Muut workflowt tai haarat eivät saa WIF-tokenia ilman tähän tiedostoon
+  # tehtyä muutosta.
   attribute_condition = <<-EOT
     assertion.repository == 'uutisseuranta/bq-activitystreams' &&
+    assertion.ref == 'refs/heads/main' &&
     (
-      (
-        assertion.ref == 'refs/heads/main' &&
-        assertion.workflow == '.github/workflows/unit-tests.yml'
-      ) ||
+      assertion.workflow == '.github/workflows/unit-tests.yml' ||
       assertion.workflow == '.github/workflows/smoke-test.yml'
     )
   EOT

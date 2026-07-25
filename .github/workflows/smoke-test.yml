@@ -7,8 +7,7 @@
 #   - if: github.ref == 'refs/heads/main' estää ajon feature-brancheista
 #     joissa live-smoke-test.sh saattaa olla muokattu.
 #   - WIF attribute_condition (terraform/wif.tf) sallii tämän workflown
-#     mistä tahansa haarasta GCP-tasolla, mutta workflow-tason if-ehto
-#     on ensimmäinen puolustuslinja.
+#     vain main-haarasta myös GCP-tasolla.
 #   - concurrency-ryhmä estää rinnakkaiset ajot (ei vaaraa mutta siisti).
 
 name: Live smoke test
@@ -23,19 +22,15 @@ concurrency:
 jobs:
   smoke-test:
     runs-on: ubuntu-latest
-    # Sallitaan vain main-haarasta — estää live-testin ajamisen
-    # muokatulla live-smoke-test.sh:lla feature-brancheista.
     if: github.ref == 'refs/heads/main'
     permissions:
       id-token: write
       contents: read
     steps:
-      # SHA-pinnattu: actions/checkout v4.2.2
-      # Päivitä SHA tarkistamalla: gh release view v4.2.2 --repo actions/checkout
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: google-github-actions/auth@v2
+      - uses: google-github-actions/auth@71f986410dfbc7added4569d411d040a91dc6935 # v2.1.10
         with:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
-      - uses: google-github-actions/setup-gcloud@v2
+      - uses: google-github-actions/setup-gcloud@817b83d791af8a1f089ef2143eb5d630d403aa0d # v2.1.4
       - run: bash live-smoke-test.sh

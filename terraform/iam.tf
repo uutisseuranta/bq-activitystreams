@@ -6,7 +6,6 @@
 #   - roles/bigquery.dataEditor  (taulujen luku + kirjoitus)
 #   - roles/bigquery.user        (kyselyjobien ajaminen)
 #   - roles/run.invoker          (write-api ja og-scraper: Cloud Run IAM -kutsu)
-#   - roles/secretmanager.secretAccessor  (google-client-secret lukuoikeus)
 #
 # Issue-viittaukset:
 #   #28  Security Hardening – service account vähimmäisoikeudet
@@ -31,17 +30,6 @@ resource "google_project_iam_member" "bq_data_editor" {
 resource "google_project_iam_member" "bq_user" {
   project = var.gcp_project
   role    = "roles/bigquery.user"
-  member  = "serviceAccount:${local.sa_email}"
-}
-
-# Secret Manager -lukuoikeus: tarvitaan google-client-secret:n lukemiseen
-# Cloud Run -konttien käynnistyksen yhteydessä (cloudrun_services.tf).
-# secrets.tf määrittelee dataset-tason secretAccessor-bindingin lisäksi;
-# tämä projekti-tason binding varmistaa ettei uusia salaisuuksia tarvitse
-# erikseen valtuuttaa jos niitä lisätään myöhemmin.
-resource "google_project_iam_member" "secret_accessor" {
-  project = var.gcp_project
-  role    = "roles/secretmanager.secretAccessor"
   member  = "serviceAccount:${local.sa_email}"
 }
 
