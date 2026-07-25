@@ -221,7 +221,12 @@ class TestDeleteActivity(unittest.TestCase):
         }
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["status"], "deleted")
+        resp_data = response.json()
+        self.assertEqual(resp_data["status"], "deleted")
+        self.assertTrue(
+            resp_data["id"].startswith("https://activitystreams.uutisseuranta.net/ap/activities/deletes/"),
+            f"Delete-aktiviteetin id-kenttä väärässä muodossa: {resp_data.get('id')}"
+        )
 
     @patch("write_api.main.get_object_by_id")
     def test_delete_others_activity_returns_403(self, mock_get_obj):

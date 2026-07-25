@@ -115,6 +115,9 @@ jobs:
     #    helpompi seurata kokonaisstatusta.
     # Erillinen deploy.yml lisätään jos deploy-logiikka kasvaa merkittävästi
     # tai jos tarvitaan eri triggeri (esim. manuaalinen staging-deploy).
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
     needs: [unit-test, terraform-lint]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -131,7 +134,7 @@ jobs:
 
       - name: Tallenna nykyiset revisiot rollbackia varten
         run: |
-          for svc in query-api write-api; do
+          for svc in query-api write-api og-scraper; do
             REV=$(gcloud run services describe $svc \
               --region europe-north1 \
               --project uutisseuranta-activitystreams \
@@ -166,7 +169,7 @@ jobs:
       - name: Post-deploy healthcheck ja automaattinen rollback
         run: |
           FAILED=""
-          for svc in query-api write-api; do
+          for svc in query-api write-api og-scraper; do
             URL=$(gcloud run services describe $svc \
               --region europe-north1 \
               --project uutisseuranta-activitystreams \
