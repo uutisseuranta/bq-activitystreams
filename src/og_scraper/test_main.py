@@ -7,9 +7,14 @@ from unittest.mock import MagicMock, patch
 os.environ["GCP_PROJECT"] = "test-project"
 os.environ["BQ_DATASET"] = "test_dataset"
 
+# Mockataan BigQuery-asiakas ennen main.py:n importtausta,
+# jotta vältetään DefaultCredentialsError CI:ssä.
+import google.cloud.bigquery
 from fastapi.testclient import TestClient
 
-from og_scraper.main import app
+google.cloud.bigquery.Client = MagicMock()  # noqa: E402
+
+from og_scraper.main import app  # noqa: E402
 
 
 class TestOgScraper(unittest.TestCase):
@@ -19,7 +24,6 @@ class TestOgScraper(unittest.TestCase):
     @patch("og_scraper.main.bq_client")
     @patch("og_scraper.main.og_parser")
     def test_scrape_success(self, mock_parser, mock_bq):
-        # Mockataan parser-apuohjelmat
         mock_parser.robots_check.return_value = True
         mock_parser.fetch_url_stream.return_value = "<html></html>"
         mock_parser.parse_og_metadata.return_value = {
@@ -43,12 +47,10 @@ class TestOgScraper(unittest.TestCase):
         self.assertEqual(resp_data["image"]["url"], "https://example.com/kuva.jpg")
         self.assertEqual(resp_data["attributedTo"]["name"], "Testimedia")
 
-        # Tarkistetaan että BigQueryyn tehtiin tallennuskysely
         mock_bq.query.assert_called_once()
 
     @patch("og_scraper.main.og_parser")
     def test_scrape_robots_forbidden(self, mock_parser):
-        # Robots.txt estää haun
         mock_parser.robots_check.return_value = False
 
         payload = {"url": "https://example.com/uutinen"}
@@ -59,7 +61,6 @@ class TestOgScraper(unittest.TestCase):
 
     @patch("og_scraper.main.og_parser")
     def test_scrape_ssrf_forbidden(self, mock_parser):
-        # SSRF-tunnistus heittää PermissionErrorin
         mock_parser.robots_check.return_value = True
         mock_parser.fetch_url_stream.side_effect = PermissionError("SSRF error")
 
@@ -71,7 +72,6 @@ class TestOgScraper(unittest.TestCase):
 
     @patch("og_scraper.main.og_parser")
     def test_scrape_timeout(self, mock_parser):
-        # Timeout verkkohaussa
         mock_parser.robots_check.return_value = True
         mock_parser.fetch_url_stream.side_effect = Exception("Read timeout occurred")
 
@@ -83,7 +83,6 @@ class TestOgScraper(unittest.TestCase):
 
     @patch("og_scraper.main.og_parser")
     def test_scrape_bad_gateway(self, mock_parser):
-        # HTTP-virhe (esim 500) kohdepalvelimessa
         mock_parser.robots_check.return_value = True
         mock_parser.fetch_url_stream.side_effect = Exception("Bad status 500")
 
@@ -94,7 +93,6 @@ class TestOgScraper(unittest.TestCase):
         self.assertIn("Bad Gateway", response.json()["detail"])
 
     def test_scrape_invalid_url_format(self):
-        # Virheellinen URL syntaksi
         payload = {"url": "not-a-valid-url"}
         response = self.client.post("/ap/scrape", json=payload)
         self.assertEqual(response.status_code, 400)
