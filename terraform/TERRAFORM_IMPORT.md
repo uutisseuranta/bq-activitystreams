@@ -5,7 +5,7 @@ jotka saattavat olla olemassa Google Cloudissa tai GitHubissa ennen
 `terraform apply`:n ensimmäistä ajoa.
 
 Bq-activitystreams on backend-repo: importoitavia resursseja on sekä
-GCP-puolella (palvelutili, Artifact Registry, Cloud Run, Scheduler)
+GCP-puolella (palvelutili, Artifact Registry, Cloud Run, Scheduler, WIF)
 että GitHub-puolella (branch protection, labelit).
 
 ## Edellytykset
@@ -118,7 +118,34 @@ terraform import github_branch_protection.main "bq-activitystreams:main"
 
 ---
 
-## 7. GitHub Labelit – Shell-skripti
+## 7. Workload Identity Federation (WIF)
+
+WIF-resurssit on määritelty `terraform/wif.tf`:ssä. Ne luodaan `apply`:ssä
+automatically jos eivät ole olemassa. Jos pooli tai provider on luotu jo
+käsin Cloud Consolessa, importoi ne ennen `apply`:tä:
+
+```bash
+# WIF-pooli
+# Muoto: projects/<project>/locations/global/workloadIdentityPools/<pool-id>
+terraform import google_iam_workload_identity_pool.github \
+  "projects/uutisseuranta-activitystreams/locations/global/workloadIdentityPools/github-pool"
+
+# OIDC-provider
+# Muoto: projects/<project>/locations/global/workloadIdentityPools/<pool-id>/providers/<provider-id>
+terraform import google_iam_workload_identity_pool_provider.github \
+  "projects/uutisseuranta-activitystreams/locations/global/workloadIdentityPools/github-pool/providers/github-provider"
+
+# IAM-binding (yleensä ei importoida – idempotent)
+# Jos backend-SA:n binding on jo olemassa, Terraform ylikirjoittaa sen harmittomasti
+```
+
+> **Huom:** `google_service_account_iam_member.wif_backend` on idempotent –
+> sitä ei tarvitse importoida. `apply` lisää bindingin jos se puuttuu tai
+> vahvistaa sen jos se on jo olemassa.
+
+---
+
+## 8. GitHub Labelit – Shell-skripti
 
 ```bash
 #!/usr/bin/env bash
@@ -158,7 +185,7 @@ echo "Import valmis. Aja seuraavaksi: terraform plan"
 
 ---
 
-## 8. Täydellinen workflow ennen ensimmäistä apply:tä
+## 9. Täydellinen workflow ennen ensimmäistä apply:tä
 
 ```bash
 cd terraform/
@@ -199,6 +226,12 @@ terraform import google_cloud_scheduler_job.og_enrichment_schedule \
 terraform import google_cloud_scheduler_job.likes_and_updated_schedule \
   "projects/uutisseuranta-activitystreams/locations/europe-north1/jobs/likes-and-updated-schedule"
 
+# WIF (jos jo olemassa GCP:ssä)
+terraform import google_iam_workload_identity_pool.github \
+  "projects/uutisseuranta-activitystreams/locations/global/workloadIdentityPools/github-pool"
+terraform import google_iam_workload_identity_pool_provider.github \
+  "projects/uutisseuranta-activitystreams/locations/global/workloadIdentityPools/github-pool/providers/github-provider"
+
 # 3. GitHub
 terraform import github_branch_protection.main "bq-activitystreams:main"
 bash import_labels.sh
@@ -212,7 +245,96 @@ terraform apply
 
 ---
 
-## 9. Virhetilanteet
+## 10. WIF-käyttöönottoguide (GitHub Actions)
+
+Tämä luku kattaa kolme vaihetta joita tarvitaan **WIF:n aktivoimiseen GitHub
+Actionsissa** sen jälkeen kun `terraform apply` on ajettu.
+
+### Vaihe 1 — `terraform apply`
+
+```bash
+cd terraform/
+terraform init
+terraform plan   # tarkista diff: pitäisi luoda wif-pooli + provider + IAM-binding
+terraform apply
+```
+
+Mitä `apply` luo (`terraform/wif.tf`):
+
+| Resurssi | Nimi GCP:ssä | Kuvaus |
+|---|---|---|
+| `google_iam_workload_identity_pool.github` | `github-pool` | WIF-pooli GitHub Actionsille |
+| `google_iam_workload_identity_pool_provider.github` | `github-provider` | OIDC-provider (`token.actions.githubusercontent.com`) |
+| `google_service_account_iam_member.wif_backend` | — | Backend-SA:n personointioikeus poolille |
+
+Mitä `apply` päivittää (`terraform/github.tf`):
+
+| Resurssi | Muutos |
+|---|---|
+| `github_branch_protection.main` | `contexts=["unit-test"]` (korjattu), `enforce_admins=true`, force push estetty |
+
+### Vaihe 2 — GitHub Secrets
+
+Hae arvot Terraformin outputeista:
+
+```bash
+terraform output wif_provider
+# Esim: projects/123456789/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+
+terraform output wif_service_account
+# Esim: backend@uutisseuranta-activitystreams.iam.gserviceaccount.com
+```
+
+Aseta seuraavat secretit GitHubissa:
+**Settings → Secrets and variables → Actions → New repository secret**
+
+| Secret-nimi | Arvo (komennon tulos) |
+|---|---|
+| `WIF_PROVIDER` | `terraform output wif_provider` |
+| `WIF_SERVICE_ACCOUNT` | `terraform output wif_service_account` |
+
+> **Huom:** Arvot ovat pitkiä resurssinimiä – kopioi ne täsmälleen ilman
+> rivinvaihtoja tai lainausmerkkejä.
+
+### Vaihe 3 — Varmistus
+
+Odota ensin että GitHub Secrets on tallennettu. Tee sen jälkeen tyhjä
+test-push:
+
+```bash
+git commit --allow-empty -m "chore: test CI deploy trigger"
+git push origin main
+```
+
+Odotettu tulos GitHub Actionsissa
+(**Actions → unit-tests.yml → viimeisin ajo**):
+
+| Vaihe | Tila | Mitä tapahtuu |
+|---|---|---|
+| `unit-test` | ✅ vihreä | Ruff + yksikkötestit + STANDARDS.md-tarkistus |
+| `deploy` | ✅ vihreä | WIF-autentikointi + Cloud Run deploy × 3 |
+
+Sekä manuaalisesti:
+
+```
+Actions → Live smoke test → Run workflow (workflow_dispatch)
+```
+
+| Vaihe | Tila |
+|---|---|
+| WIF-autentikointi | ✅ vihreä |
+| `bash live-smoke-test.sh` | ✅ vihreä |
+
+Jos `deploy`-vaihe epäonnistuu `PERMISSION_DENIED`-virheellä:
+1. Tarkista että Secrets on asetettu oikein (ei ylimääräisiä välejä)
+2. Tarkista että `terraform apply` on ajettu ja WIF-pooli on olemassa GCP:ssä:
+   `gcloud iam workload-identity-pools list --location=global --project=uutisseuranta-activitystreams`
+3. Tarkista että backend-SA:lla on `roles/run.admin`:
+   `gcloud projects get-iam-policy uutisseuranta-activitystreams --flatten="bindings[].members" --filter="bindings.members:backend@"`
+
+---
+
+## 11. Virhetilanteet
 
 ### `Error: googleapi: Error 409: Resource already exists`
 Resurssi on GCP:ssä mutta ei Terraform state:ssa. Aja kyseinen import-komento.
@@ -231,3 +353,6 @@ Palvelu ei ole olemassa. Terraform luo sen `apply`:ssä. Ei tarvita importia.
 
 ### `Error: Permission denied on Cloud Run`
 Palvelutilillä pitää olla `roles/run.admin` sekä `roles/iam.serviceAccountUser`.
+
+### `PERMISSION_DENIED` GitHub Actionsissa (WIF)
+Ks. Vaihe 3 -vianmääritys yllä.
