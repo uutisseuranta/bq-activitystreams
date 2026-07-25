@@ -46,8 +46,16 @@ variable "google_client_id" {
 # Jos URL tarvitaan toisessa moduulissa tai skriptissä, käytä:
 #   terraform output write_api_url
 
+# POISTETAAN TÄSSÄ PR:SSÄ (#68) — älä palauta.
+# allow_mock_auth ei ole käytössä missään cloudrun_services.tf:ssä eikä
+# muissa Terraform-resursseissa. Muuttuja oli olemassa historiallisena
+# jäänteenä ajalta jolloin ALLOW_MOCK_AUTH asetettiin Cloud Run -palveluihin.
+# Se on poistettu käytöstä kaanonpäätöksellä G-009: mock-auth on sallittu
+# ainoastaan yksikkötesteissä (os.environ suoraan), ei Cloud Run -ympäristössä.
+# Tflint liputtas tämän terraform_unused_declarations-säännöllä jos
+# muuttuja jätettäisiin ilman käyttöä.
 variable "allow_mock_auth" {
-  description = "Salli mock-autentikointi (ei koskaan true tuotannossa)"
+  description = "Salli mock-autentikointi (ei koskaan true tuotannossa) — POISTETAAN TÄSSÄ PR:SSÄ"
   type        = string
   default     = "false"
 
