@@ -63,7 +63,8 @@ DATASET = os.getenv("BQ_DATASET")
 SOCIAL_DATASET = os.getenv("BQ_SOCIAL_DATASET", "activitystreams_social")
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 CLOUD_RUN_SERVICE_URL = os.getenv("CLOUD_RUN_SERVICE_URL", "")
-ALLOW_MOCK_AUTH = os.getenv("ALLOW_MOCK_AUTH", "false").lower() == "true"
+# ALLOW_MOCK_AUTH luetaan os.getenv:llä suoraan verify_auth_token-funktiossa
+# (ei moduulitason vakiota) jotta patch.dict(os.environ) toimii testeissä.
 
 ALLOWED_AUDIENCES = [a for a in [GOOGLE_CLIENT_ID, CLOUD_RUN_SERVICE_URL] if a]
 
@@ -97,7 +98,7 @@ def verify_auth_token(auth_header: Optional[str]) -> str:
         logger.warning("Autentikaatio hylätty: Bearer-token on tyhjä")
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header.")
 
-    if ALLOW_MOCK_AUTH and token == "mock-test":
+    if os.getenv("ALLOW_MOCK_AUTH", "false").lower() == "true" and token == "mock-test":
         logger.warning("Mock-autentikaatio käytössä — vain kehitysympäristöön")
         return "test-user-sub-12345"
 
