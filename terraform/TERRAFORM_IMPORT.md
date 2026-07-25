@@ -273,7 +273,7 @@ terraform apply
 ## 10. WIF-käyttöönottoguide (GitHub Actions)
 
 Tämä luku kattaa kolme vaihetta joita tarvitaan **WIF:n aktivoimiseen GitHub
-Actionsissa** sen jälkeen kun `terraform apply` on ajettu.
+Actionsissa** sen jälkeen kun infrastruktuuri on valmis.
 
 ### Vaihe 1 — `terraform apply`
 
@@ -339,7 +339,7 @@ Odotettu tulos GitHub Actionsissa
 | `unit-test` | ✅ vihreä | Ruff + yksikkötestit + STANDARDS.md-tarkistus |
 | `deploy` | ✅ vihreä | WIF-autentikointi + Cloud Run deploy × 3 |
 
-Sekä manuaalisesti:
+Manuaalinen smoke-testi:
 
 ```
 Actions → Live smoke test → Run workflow (workflow_dispatch)
