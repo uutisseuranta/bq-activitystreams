@@ -20,7 +20,9 @@
 # Ympäristömuuttujat (valinnaiset):
 #   BQ_SOCIAL_DATASET (oletus: activitystreams_social)
 #   CLOUD_RUN_SERVICE_URL (service-to-service audience)
-#   ALLOW_MOCK_AUTH     (vain testi/dev, ei koskaan tuotannossa)
+#   ALLOW_MOCK_AUTH     (vain yksikkötesteissä — EI SAA KOSKAAN olla true tuotannossa
+#                        eikä staging-ympäristössä. Puuttuva muuttuja == "false".
+#                        Tarkista terraform/cloud_run.tf: muuttujaa ei pidä olla siellä.)
 #
 # Muutoshistoria:
 #   #33/#48 – Lisätty Dislike-käsittelijä ja toggle-logiikka (Like ↔ Dislike)
@@ -65,6 +67,10 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 CLOUD_RUN_SERVICE_URL = os.getenv("CLOUD_RUN_SERVICE_URL", "")
 # ALLOW_MOCK_AUTH luetaan os.getenv:llä suoraan verify_auth_token-funktiossa
 # (ei moduulitason vakiota) jotta patch.dict(os.environ) toimii testeissä.
+# Python evaluoi moduulitason muuttujat kerran importin yhteydessä, minkä
+# jälkeen patch.dict ei vaikuta niihin. os.getenv() funktiossa kutsutaan
+# jokaisen HTTP-pyynnön yhteydessä uudelleen, joten ympäristö voidaan
+# vaihtaa testissä dynaamisesti.
 
 ALLOWED_AUDIENCES = [a for a in [GOOGLE_CLIENT_ID, CLOUD_RUN_SERVICE_URL] if a]
 
@@ -86,6 +92,14 @@ def verify_auth_token(auth_header: Optional[str]) -> str:
       'https://accounts.google.com' — muut issuerit hylätään.
     - sub-kenttä: palautetaan 401 jos puuttuu. Puuttuva sub aiheuttaisi
       muuten KeyError:n actorUrl-rakentamisessa (500-virhe).
+
+    ALLOW_MOCK_AUTH-haara:
+    - Ohittaa Google-tokeniverifioinnin kokonaan — sallii "mock-test"-
+      tokenin yksikkötesteissä ilman oikeaa GCP-yhteyttä.
+    - ALLOW_MOCK_AUTH=true EI SAA olla päällä Cloud Runissa. Jos se on,
+      kuka tahansa pääsee kirjoittamaan aktiviteetteja lähettämällä
+      Authorization: Bearer mock-test -otsakkeen.
+    - Tuotantoympäristössä muuttuja puuttuu kokonaan (default "false").
     """
     if not auth_header or not auth_header.startswith("Bearer "):
         logger.warning("Autentikaatio hylätty: Authorization-otsake puuttuu tai virheellinen")

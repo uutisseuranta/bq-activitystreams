@@ -20,11 +20,21 @@ class TestAuthSecurity(unittest.TestCase):
     """
     Autentikoinnin negatiiviset testit.
 
-    Huom: ALLOW_MOCK_AUTH=true ohittaa oikean Google-tokenin verifioinnin.
-    Nämä testit tarkistavat FastAPI-kerroksen suojauksen (puuttuva/epäkelpo
-    Authorization-otsake) ENNEN kuin verify_google_token-funktio kutsutaan.
-    Tokenin sisältö (aud, exp, iss) testataan erillisessä auth-test.sh:ssa
-    offline JWT -kirjastolla ilman oikeaa Googlea.
+    ALLOW_MOCK_AUTH=true on päällä koko tiedostossa (asetettu moduulitasolla
+    ennen importtia). Tämä tarkoittaa että "Bearer mock-test" -token ohittaa
+    Google-tokeniverifioinnin kaikissa muissa testeissä (TestDeleteActivity,
+    TestLikeActivity jne.) — se on tarkoituksellista, jotta näissä luokissa
+    voidaan testata bisneslogiikkaa ilman GCP-yhteyttä.
+
+    Tässä luokassa testataan FastAPI-kerroksen suojauksen (puuttuva/epäkelpo
+    Authorization-otsake) ENNEN kuin verify_auth_token tarkistaa tokenin sisällön.
+    Nämä tarkistukset toimivat ALLOW_MOCK_AUTH-tilasta riippumatta, koska
+    ne tapahtuvat ennen mock-haaraa (auth_header puuttuu tai ei ala "Bearer ").
+
+    Tokenin sisältö (aud, exp, iss, sub) testataan tässä luokassa suoraan
+    mockkaamalla google.oauth2.id_token.verify_oauth2_token ja
+    verify_google_token — katso test_expired_token_returns_401,
+    test_wrong_audience_returns_401 ja test_token_without_sub_returns_401.
     """
 
     def setUp(self):
@@ -119,7 +129,9 @@ class TestAuthSecurity(unittest.TestCase):
 
         Testataan mockkaamalla verify_oauth2_token suoraan (ei verify_google_token)
         jotta ALLOW_MOCK_AUTH ei ohita tarkistusta. os.getenv luetaan
-        dynaamisesti (ei moduulitason vakiota), joten patch.dict toimii.
+        dynaamisesti (ei moduulitason vakiota), joten patch.dict toimii:
+        Python evaluoi os.getenv() joka kutsulla uudelleen, toisin kuin
+        moduulitason vakio joka evaluoitaisiin kerran importin yhteydessä.
         """
         mock_verify_oauth2.return_value = {
             "email": "test@example.com",
