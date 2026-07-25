@@ -11,19 +11,38 @@
 #   #52  CSP-otsakkeet (toteutetaan frontendin puolella, tässä IAM-pohja)
 
 terraform {
-  required_version = ">= 1.7.0"
+  # ~> 1.9 sallii patch-päivitykset (1.9.x) mutta estää minor-hyppäykset
+  # (1.10, 2.x). CI ajaa kiinnitetyllä versiolla 1.9.8 — tämä varmistaa
+  # että paikallinen ajo ja CI käyttävät yhteensopivaa versiota.
+  # Älä nosta tätä ilman että CI:n setup-terraform-versio päivitetään ensin.
+  required_version = "~> 1.9"
+
   required_providers {
     google = {
-      source  = "hashicorp/google"
-      version = "~> 5.0"
+      source = "hashicorp/google"
+      # ~> 5.40 sallii patch-päivitykset 5.40.x+ mutta estää 6.x-hyppäyksen.
+      # Google Provider 5.x sisältää breaking changeja eri minor-versioissa —
+      # minor-pinned (5.0) on liian löysä. Nosta tätä harkiten ja tarkista
+      # CHANGELOG: https://github.com/hashicorp/terraform-provider-google/blob/main/CHANGELOG.md
+      version = "~> 5.40"
     }
     github = {
-      source  = "integrations/github"
+      source = "integrations/github"
+      # ~> 6.0 — GitHub provider on stabiilimpi kuin Google; minor-pinned riittää.
       version = "~> 6.0"
     }
   }
 
-  # Vaihda bucket ja prefix omaan GCS-backendiin.
+  # GCS-backend on toistaiseksi poissa käytöstä — state tallennetaan paikallisesti.
+  #
+  # HUOM: Backendin aktivointi on state migration -operaatio joka vaatii:
+  #   1. GCS-bucketin olemassaolon (uutisseuranta-activitystreams-tfstate)
+  #   2. Paikallisen state-tiedoston siirtämisen: terraform state push
+  #   3. Oman PR:n jossa ei ole muita inframuutoksia
+  #
+  # Aktivoi poistamalla kommentit ja ajamalla:
+  #   terraform init -migrate-state
+  #
   # backend "gcs" {
   #   bucket = "uutisseuranta-activitystreams-tfstate"
   #   prefix = "terraform/state"

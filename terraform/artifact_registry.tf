@@ -1,6 +1,8 @@
 # terraform/artifact_registry.tf
 # Artifact Registry Docker-repositorio kontti-imageille.
 # Korvaa deploy.sh:n ad-hoc "gcloud artifacts repositories create" -komennon.
+#
+# image_base local on siirretty locals.tf:ään — ks. sieltä.
 
 resource "google_artifact_registry_repository" "jobs" {
   project       = var.gcp_project
@@ -12,8 +14,4 @@ resource "google_artifact_registry_repository" "jobs" {
   lifecycle {
     prevent_destroy = true
   }
-}
-
-locals {
-  image_base = "${var.region}-docker.pkg.dev/${var.gcp_project}/jobs"
 }

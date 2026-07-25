@@ -38,11 +38,13 @@ variable "google_client_id" {
   sensitive   = true
 }
 
-variable "write_api_url" {
-  description = "Cloud Run write-api -palvelun URL (täytetään ensimmäisen deployn jälkeen)"
-  type        = string
-  default     = "https://write-api-7y62heo36a-lz.a.run.app"
-}
+# write_api_url on poistettu muuttujista.
+# Arvo tulee suoraan Cloud Run -resurssista outputs.tf:n kautta:
+#   google_cloud_run_v2_service.write_api.uri
+# Kovakoodattu default oli virhealtis: URL voi muuttua deployn yhteydessä
+# ja muuttujan päivittäminen vaatisi ylimääräisen terraform apply -kierroksen.
+# Jos URL tarvitaan toisessa moduulissa tai skriptissä, käytä:
+#   terraform output write_api_url
 
 variable "allow_mock_auth" {
   description = "Salli mock-autentikointi (ei koskaan true tuotannossa)"

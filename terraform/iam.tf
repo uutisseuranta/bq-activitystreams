@@ -15,6 +15,8 @@
 #   Tämä rajoittaa kompromissin vaikutuksen: kompromissoitu SA ei pääse
 #   kaikkiin projektissa oleviin secreteihin.
 #
+# sa_email local on siirretty locals.tf:ään — ks. sieltä.
+#
 # Resurssit:
 #   - IAM-palvelutili "backend"
 #   - roles/bigquery.dataEditor  (taulujen luku + kirjoitus)
@@ -29,10 +31,6 @@ resource "google_service_account" "backend" {
   display_name = "backend"
   description  = "ActivityStreams backend service account"
   project      = var.gcp_project
-}
-
-locals {
-  sa_email = google_service_account.backend.email
 }
 
 resource "google_project_iam_member" "bq_data_editor" {
