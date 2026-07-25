@@ -8,6 +8,10 @@
 #   write-api   → IAM-suojattu (--no-allow-unauthenticated)
 #   og-scraper  → IAM-suojattu (--no-allow-unauthenticated)
 #
+# max_instance_count = var.max_instance_count (default 10):
+#   Estää odottamattoman kustannusräjähdyksen bot-liikenteen tai
+#   sovelluksen bugin sattuessa. Nosta terraform.tfvars:ssa jos tarve kasvaa.
+#
 # Issue-viittaukset:
 #   #28  Security Hardening – CORS, autentikointi
 
@@ -21,6 +25,10 @@ resource "google_cloud_run_v2_service" "query_api" {
 
   template {
     service_account = local.sa_email
+
+    scaling {
+      max_instance_count = var.max_instance_count
+    }
 
     containers {
       image = "${local.image_base}/query-api:latest"
@@ -78,6 +86,10 @@ resource "google_cloud_run_v2_service" "write_api" {
   template {
     service_account = local.sa_email
 
+    scaling {
+      max_instance_count = var.max_instance_count
+    }
+
     containers {
       image = "${local.image_base}/write-api:latest"
 
@@ -114,6 +126,20 @@ resource "google_cloud_run_v2_service" "write_api" {
         value = var.allow_mock_auth
       }
 
+      # GOOGLE_CLIENT_SECRET luetaan Secret Managerista, ei plain-text env:stä.
+      # Secret Manager -resurssi on määritelty terraform/secrets.tf:ssä.
+      # Arvo syötetään käsin tai CI:ssä:
+      #   echo -n "$SECRET" | gcloud secrets versions add google-client-secret --data-file=-
+      env {
+        name = "GOOGLE_CLIENT_SECRET"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.google_client_secret.secret_id
+            version = "latest"
+          }
+        }
+      }
+
       liveness_probe {
         http_get {
           path = "/healthz"
@@ -127,7 +153,10 @@ resource "google_cloud_run_v2_service" "write_api" {
     }
   }
 
-  depends_on = [google_artifact_registry_repository.jobs]
+  depends_on = [
+    google_artifact_registry_repository.jobs,
+    google_secret_manager_secret.google_client_secret,
+  ]
 }
 
 # ── og-scraper ─────────────────────────────────────────────────────────────
@@ -140,6 +169,10 @@ resource "google_cloud_run_v2_service" "og_scraper" {
 
   template {
     service_account = local.sa_email
+
+    scaling {
+      max_instance_count = var.max_instance_count
+    }
 
     containers {
       image = "${local.image_base}/og-scraper:latest"

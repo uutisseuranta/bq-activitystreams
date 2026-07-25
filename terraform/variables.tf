@@ -15,7 +15,7 @@ variable "region" {
 }
 
 variable "bq_dataset" {
-  description = "BigQuery-pääddataset"
+  description = "BigQuery-päädataset"
   type        = string
   default     = "activitystreams"
 }
@@ -48,6 +48,26 @@ variable "allow_mock_auth" {
   description = "Salli mock-autentikointi (ei koskaan true tuotannossa)"
   type        = string
   default     = "false"
+
+  validation {
+    # Estää vahingollisen allow_mock_auth = "true" tai "1" tuotannossa.
+    # Ainoa sallittu arvo on "false". Jos tarvitset mock-autentikointia
+    # kehityksessä, käytä LOCAL_DEV=true -ympäristömuuttujaa suoraan
+    # prosessissa — älä muuta tätä muuttujaa.
+    condition     = var.allow_mock_auth == "false"
+    error_message = "allow_mock_auth ei saa olla muu kuin \"false\" tuotannossa. Mock-auth on sallittu vain paikallisessa kehityksessä."
+  }
+}
+
+variable "max_instance_count" {
+  description = "Cloud Run -palveluiden maksimi-instanssimäärä. Estää odottamattoman kustannusräjähdyksen bot-liikenteen tai bugin sattuessa."
+  type        = number
+  default     = 10
+
+  validation {
+    condition     = var.max_instance_count >= 1 && var.max_instance_count <= 100
+    error_message = "max_instance_count on oltava välillä 1–100."
+  }
 }
 
 variable "rss_feeds" {
