@@ -36,12 +36,19 @@ locals {
 }
 
 resource "google_project_iam_member" "bq_data_editor" {
+  #checkov:skip=CKV_GCP_34: bigquery.dataEditor on pakollinen projekti-tason rooli —
+  # BQ-datasetti-tason IAM ei ole mahdollinen tällä roolilla. Projekti-tason
+  # secretAccessor ON poistettu (G-009). Kompensaatio: secret-oikeudet annettu
+  # palvelukohtaisesti secrets.tf:ssä (secret_id-tason binding).
   project = var.gcp_project
   role    = "roles/bigquery.dataEditor"
   member  = "serviceAccount:${local.sa_email}"
 }
 
 resource "google_project_iam_member" "bq_user" {
+  #checkov:skip=CKV_GCP_34: bigquery.user on pakollinen projekti-tason rooli —
+  # kyselyjobien ajaminen vaatii projekti-tason oikeuden, datasetti-tason
+  # IAM ei riitä. Ks. bq_data_editor -annotaatio lisäperusteluille.
   project = var.gcp_project
   role    = "roles/bigquery.user"
   member  = "serviceAccount:${local.sa_email}"
