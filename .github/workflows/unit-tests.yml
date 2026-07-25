@@ -27,8 +27,30 @@ jobs:
           ./generate-standards.sh
           git diff --exit-code STANDARDS.md
 
+  terraform-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install checkov
+        run: pip install checkov
+      - name: Checkov – Terraform staattinen analyysi
+        # --soft-fail: CI ei kaadu tuntemattomiin sääntöihin, löydöt silti näkyvät
+        # --output github_failed_only: vain virheet annotaatioina PR-diffissä
+        # Poistetaan tarkistukset jotka eivät sovi tähän projektiin:
+        #   CKV_GCP_82 – vaatii binary authorization (ei käytössä)
+        #   CKV_GCP_34 – Cloud Run vaatii VPC connector (ei tarvita)
+        run: |
+          checkov -d terraform/ \
+            --framework terraform \
+            --output github_failed_only \
+            --soft-fail \
+            --skip-check CKV_GCP_82,CKV_GCP_34
+
   deploy:
-    needs: unit-test
+    needs: [unit-test, terraform-lint]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
