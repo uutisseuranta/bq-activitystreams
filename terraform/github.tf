@@ -7,6 +7,13 @@
 #   #65  Branch protection + required checks main-haaralle
 
 # ── Branch protection ─────────────────────────────────────────────────────
+#
+# Jos branch protection on jo asetettu GitHubissa käsin ennen `terraform apply`:ta,
+# aja ensin import jotta Terraform ei yritä luoda sitä uudelleen:
+#
+#   terraform import github_branch_protection.main "bq-activitystreams:main"
+#
+# Ks. myös terraform/TERRAFORM_IMPORT.md, luku 6.
 resource "github_branch_protection" "main" {
   repository_id = "bq-activitystreams"
   pattern       = "main"
@@ -27,7 +34,7 @@ resource "github_branch_protection" "main" {
   allows_deletions    = false
 }
 
-# ── Labels ────────────────────────────────────────────────────────────────
+# ── Labels ─────────────────────────────────────────────────────────────────
 # Milestone-labelit
 resource "github_issue_label" "milestone_v05" {
   repository  = "bq-activitystreams"
