@@ -435,8 +435,14 @@ class TestCreateActivity(unittest.TestCase):
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 201)
         body = response.json()
-        self.assertIn("id", body)
-        self.assertIn("object_id", body)
+        self.assertTrue(
+            body["id"].startswith("https://activitystreams.uutisseuranta.net/ap/activities/creates/"),
+            f"Create-aktiviteetin id väärässä muodossa: {body.get('id')}"
+        )
+        self.assertTrue(
+            body["object_id"].startswith("https://activitystreams.uutisseuranta.net/ap/objects/comments/"),
+            f"object_id väärässä muodossa: {body.get('object_id')}"
+        )
 
     @patch("write_api.main.get_object_by_id")
     def test_create_note_missing_inreplyto_returns_400(self, mock_get_obj):
