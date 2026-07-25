@@ -16,7 +16,14 @@ select = [
     "S",   # flake8-bandit: SAST-tietoturvatarkistukset (kovakoodatut salasanat, subprocess-käyttö)
     # ANN (type annotations) jätetty pois tarkoituksella — lisätään iteraation myöhemmässä vaiheessa
 ]
-ignore = []
+ignore = [
+    "S608",  # SQL injection false positives (f-strings used for BigQuery table/dataset interpolation)
+    "S105",  # Hardcoded password false positives (mock-test auth token checks)
+    "B008",  # Function call in default argument (standard FastAPI Query/Depends pattern)
+    "S110",  # try-except-pass (often intentional in parser error fallbacks)
+    "B904",  # raise-without-from-inside-except (too pedantic for simple HTTPException relaying)
+    "E501",  # Line too long (frequent in long SQL queries and inline JSON tests)
+]
 
 [tool.ruff.lint.per-file-ignores]
 # S101: assert-lauseet testeissä eivät ole tietoturvaongelma (Bandit false positive)
