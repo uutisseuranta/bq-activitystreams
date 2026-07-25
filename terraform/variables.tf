@@ -46,28 +46,12 @@ variable "google_client_id" {
 # Jos URL tarvitaan toisessa moduulissa tai skriptissä, käytä:
 #   terraform output write_api_url
 
-# POISTETAAN TÄSSÄ PR:SSÄ (#68) — älä palauta.
-# allow_mock_auth ei ole käytössä missään cloudrun_services.tf:ssä eikä
-# muissa Terraform-resursseissa. Muuttuja oli olemassa historiallisena
-# jäänteenä ajalta jolloin ALLOW_MOCK_AUTH asetettiin Cloud Run -palveluihin.
-# Se on poistettu käytöstä kaanonpäätöksellä G-009: mock-auth on sallittu
-# ainoastaan yksikkötesteissä (os.environ suoraan), ei Cloud Run -ympäristössä.
-# Tflint liputtas tämän terraform_unused_declarations-säännöllä jos
-# muuttuja jätettäisiin ilman käyttöä.
-variable "allow_mock_auth" {
-  description = "Salli mock-autentikointi (ei koskaan true tuotannossa) — POISTETAAN TÄSSÄ PR:SSÄ"
-  type        = string
-  default     = "false"
-
-  validation {
-    # Estää vahingollisen allow_mock_auth = "true" tai "1" tuotannossa.
-    # Ainoa sallittu arvo on "false". Jos tarvitset mock-autentikointia
-    # kehityksessä, käytä LOCAL_DEV=true -ympäristömuuttujaa suoraan
-    # prosessissa — älä muuta tätä muuttujaa.
-    condition     = var.allow_mock_auth == "false"
-    error_message = "allow_mock_auth ei saa olla muu kuin \"false\" tuotannossa. Mock-auth on sallittu vain paikallisessa kehityksessä."
-  }
-}
+# allow_mock_auth on poistettu (kaanonpäätös G-009, PR #68).
+# ALLOW_MOCK_AUTH-ympäristömuuttujaa ei aseteta Cloud Run -palveluissa.
+# main.py lukee os.getenv('ALLOW_MOCK_AUTH', 'false') suoraan — puuttuva
+# muuttuja käyttäytyy identtisesti kuin arvo 'false'.
+# Mock-auth on sallittu vain yksikkötesteissä (os.environ.setdefault).
+# Ks. terraform/cloudrun_services.tf yläosan kommentti.
 
 variable "max_instance_count" {
   description = "Cloud Run -palveluiden maksimi-instanssimäärä. Estää odottamattoman kustannusräjähdyksen bot-liikenteen tai bugin sattuessa."
