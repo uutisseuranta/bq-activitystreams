@@ -152,7 +152,7 @@ terraform import google_iam_workload_identity_pool_provider.github \
 
 ## 8. GitHub Labelit – Shell-skripti
 
-Skripti importoi sekä Jira-sync-labelit että `github.tf`:n määrittelemtä
+Skripti importoi sekä Jira-sync-labelit että `github.tf`:n määrittelemät
 repositorio-labelit. Labelit joita ei löydy reposta ohitetaan automaattisesti
 – ne luodaan `terraform apply`:ssä.
 
@@ -168,7 +168,6 @@ declare -A LABELS
 
 # Jira-sync-labelit
 LABELS["priority_highest"]="priority:highest"
-LABELS["priority_high_jira"]="priority:high"
 LABELS["priority_medium"]="priority:medium"
 LABELS["priority_low"]="priority:low"
 LABELS["priority_lowest"]="priority:lowest"
