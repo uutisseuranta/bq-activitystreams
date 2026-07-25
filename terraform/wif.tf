@@ -2,6 +2,18 @@
 # Workload Identity Federation (WIF) GitHub Actionsille.
 # Korvaa SA-avaimet (key.json) lyhytikäisillä OIDC-tokeneilla.
 #
+# TESTISTRATEGIA — ks. TERRAFORM_TESTING.md, Kerros 2 ja Kerros 3
+#
+#   terraform plan (CI, PR) validoi tämän tiedoston rakenteen ja
+#   attribute_condition-syntaksin ilman state-kirjoitusta (-backend=false).
+#   Live smoke-test (smoke-test.yml, manuaalinen, vain main) testaa
+#   WIF-autentikoinnin toimivuuden oikeaa GCP:tä vasten.
+#
+# auth-test.sh POISTETTU (kaanonpäätös G-009):
+#   Mock-simulaatiotestit autentikoinnille ovat kiellettyjä.
+#   Mock validoi testiin kirjoitettua mallia — ei oikeaa tuotantopolkua.
+#   Live smoke-test korvaa sen: oikea WIF-token, oikea Cloud Run.
+#
 # Issue-viittaukset:
 #   #21  WIF-konfiguraatio (unit-test.sh + live-smoke-test.sh)
 #   #64  CI/CD-pipeline — deploy-vaihe käyttää tätä WIF-pooliä
@@ -34,18 +46,21 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "attribute.workflow"   = "assertion.workflow"
   }
 
-  # Defence-in-depth: WIF-tason rajoitus joka on riippumaton workflow-tason
-  # if-ehdoista. Vaikka workflow-ehto unohdettaisiin, GCP ei myönnä tokenia
-  # jos tämä ehto ei täyty.
+  # KOLMITASOINEN PÄÄSYRAJOITUS (defence-in-depth)
+  #
+  # Taso 1 — GitHub UI:   workflow_dispatch.branches: [main]  → estetään UI-tasolla
+  # Taso 2 — Runtime:     if: github.ref == 'refs/heads/main'  → estetään jobin käynnistyksessä
+  # Taso 3 — GCP (tämä): attribute_condition                  → estetään OIDC-tokenin validoinnissa
+  #
+  # Nämä kolme kerrosta ovat itsenäisiä: yksi voi pettää ilman että muut pettävät.
+  # Taso 3 on ainoa kerros joka on organisaation ulkopuolisen hyökkääjän ulottumattomissa,
+  # koska se on Terraform-hallittu eikä muutettavissa pelkillä GitHub-oikeuksilla.
   #
   # Hyväksytyt polut:
   #   1. push main-haaraan + workflow on unit-tests.yml
   #      → ainoa polku joka saa deploy-oikeuden
   #   2. workflow_dispatch smoke-test.yml:stä main-haarassa
   #      → manuaalinen live-testi, ei feature-branch-tokenia
-  #
-  # Muut workflowt tai haarat eivät saa WIF-tokenia ilman tähän tiedostoon
-  # tehtyä muutosta.
   attribute_condition = <<-EOT
     assertion.repository == 'uutisseuranta/bq-activitystreams' &&
     assertion.ref == 'refs/heads/main' &&
@@ -56,9 +71,9 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   EOT
 }
 
-# Salli backend-SA:n personointi VAIN main-haarasta
+# Salli backend-SA:n personointi VAIN main-haarasta.
 # attribute.ref/refs/heads/main on yhdenmukaisempi attribute_condition:in kanssa
-# kuin aiempi attribute.repository, joka olisi sallinut myös feature-haarat.
+# kuin attribute.repository, joka olisi sallinut myös feature-haarat.
 resource "google_service_account_iam_member" "wif_backend" {
   service_account_id = google_service_account.backend.name
   role               = "roles/iam.workloadIdentityUser"

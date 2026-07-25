@@ -27,6 +27,22 @@ jobs:
           git diff --exit-code STANDARDS.md
 
   terraform-lint:
+    # TESTISTRATEGIA KERROS 1 — staattinen analyysi (ei GCP-yhteyttä)
+    # Järjestys: tflint → checkov
+    #
+    # tflint:  provider-skeema, deprecated-resurssit, nimeämiskonventiot
+    # checkov: tietoturvapolitiikat (CIS Benchmark)
+    #
+    # SHA-pinnaus kaikille actioneille: estää supply chain -hyökkäykset
+    # joissa tag siirretään osoittamaan haitalliseen committiin.
+    # Tagit ovat mutable — SHA:t eivät.
+    #
+    # Skipatut checkov-säännöt:
+    #   CKV_GCP_82 (google_compute_ssl_policy): ei load balanceria suoraan TF:ssä
+    #   CKV_GCP_34 (project-level IAM):         projekti-tason bigquery.dataEditor
+    #              ja bigquery.user ovat pakollisia — BQ-datasetti-tason IAM
+    #              ei ole mahdollinen näillä rooleilla. Projekti-tason
+    #              secretAccessor ON poistettu (kaanonpäätös G-009).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -42,6 +58,8 @@ jobs:
         with:
           tflint_version: "v0.55.0"
       - name: tflint init (google plugin)
+        # GITHUB_TOKEN tarvitaan jotta GitHub API ei rate-limit-pysäytä
+        # tflint-ruleset-google -pluginin latausta
         run: tflint --init
         working-directory: terraform/
         env:
@@ -58,6 +76,10 @@ jobs:
             --skip-check CKV_GCP_82,CKV_GCP_34
 
   terraform-plan:
+    # TESTISTRATEGIA KERROS 2 — integraatiotesti (WIF, ei state-kirjoitusta)
+    # Validoi resurssien väliset riippuvuudet oikeaa GCP-provider-skeemaa vasten.
+    # -backend=false: ei kirjoita state-tiedostoa → idempotent, turvallinen CI:ssä.
+    # Plan-output tallennetaan $GITHUB_STEP_SUMMARY:yn → näkyy PR-yhteenvedossa.
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     permissions:

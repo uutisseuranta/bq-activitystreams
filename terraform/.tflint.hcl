@@ -1,6 +1,19 @@
 # .tflint.hcl — tflint-konfiguraatio bq-activitystreams Terraform-koodille
 # Dokumentaatio: https://github.com/terraform-linters/tflint
 # Google-plugin: https://github.com/terraform-linters/tflint-ruleset-google
+#
+# TESTISTRATEGIA — ks. TERRAFORM_TESTING.md, Kerros 1 (staattinen analyysi)
+#
+# Miksi tflint checkovin lisäksi:
+#   Checkov tarkistaa tietoturvapolitiikat (CIS Benchmark, NIST).
+#   tflint täydentää sitä provider-skeema-tason tarkistuksilla:
+#   - Deprecated-resurssit: google_cloud_run_service → google_cloud_run_v2_service
+#   - Deprecated-argumentit: esim. poistetut kentät GCP-providerissa
+#   - Puuttuvat pakolliset kentät jotka terraform validate ei havaitse
+#     koska validate ei ota yhteyttä provideriin
+#
+# google-plugin v0.32.0 asennetaan `tflint --init`:lla CI:ssä.
+# GITHUB_TOKEN välitetään init-vaiheelle GitHub API rate limitin välttämiseksi.
 
 plugin "google" {
   enabled = true

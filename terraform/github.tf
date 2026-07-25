@@ -1,6 +1,16 @@
 # terraform/github.tf
 # GitHub-repositorion hallinta: labelit, branch protection.
 #
+# TESTISTRATEGIA — ks. TERRAFORM_TESTING.md, Kerros 2
+#
+#   terraform plan (CI, PR) validoi branch protection -asetukset
+#   GitHub-provider-skeemaa vasten. Erityisesti:
+#   - contexts=["unit-test"] vastaa unit-tests.yml:n job-nimeä
+#     (väärä nimi estäisi PR-mergaamisen tai jättäisi checkin ohittamatta)
+#   - enforce_admins=true estää admin-bypass-mergen
+#     (false salliisi repojen omistajan ohittaa branch protection)
+#   - allows_force_pushes=false estää historian uudelleenkirjoituksen
+#
 # Issue-viittaukset:
 #   #28  Security Hardening – branch protection
 #   #26  README ja nimeämiskonventio (labelit)
@@ -20,7 +30,8 @@ resource "github_branch_protection" "main" {
 
   required_status_checks {
     strict = true
-    # unit-test viittaa unit-tests.yml -workflown job-nimeen (#64)
+    # "unit-test" viittaa unit-tests.yml -workflown job-nimeen (#64).
+    # Väärä nimi (esim. "test") ohittaisi tarkistuksen hiljaisesti.
     contexts = ["unit-test"]
   }
 
@@ -29,6 +40,9 @@ resource "github_branch_protection" "main" {
     required_approving_review_count = 1
   }
 
+  # enforce_admins=true: admin ei voi ohittaa branch protectionia.
+  # false olisi turvallisuusriski: repon omistaja voisi mergata ilman
+  # unit-test-tarkistusta tai reviewer-hyväksyntää.
   enforce_admins      = true
   allows_force_pushes = false
   allows_deletions    = false

@@ -1,6 +1,20 @@
 # terraform/iam.tf
 # Korvaa deploy/init-sa.sh:n kokonaan.
 #
+# TESTISTRATEGIA — ks. TERRAFORM_TESTING.md, Kerros 2
+#
+#   terraform plan (CI, PR) validoi IAM-roolit GCP-provider-skeemaa vasten.
+#   Checkov (terraform-lint job) tarkistaa vähimmäisoikeus-periaatteen:
+#   CKV_GCP_34 (project-level roles) on skipattu perustellusti koska
+#   bigquery.dataEditor ja bigquery.user ovat projekti-tason rooleja —
+#   BQ-datasetti-tason IAM ei ole mahdollinen näillä rooleilla.
+#
+# VÄHIMMÄISOIKEUSPERIAATE (kaanonpäätös G-009):
+#   Projekti-tason secretAccessor on POISTETTU. Secret Manager -oikeus on
+#   annettu palvelukohtaisesti secrets.tf:ssä (secret_id-tason binding).
+#   Tämä rajoittaa kompromissin vaikutuksen: kompromissoitu SA ei pääse
+#   kaikkiin projektissa oleviin secreteihin.
+#
 # Resurssit:
 #   - IAM-palvelutili "backend"
 #   - roles/bigquery.dataEditor  (taulujen luku + kirjoitus)
