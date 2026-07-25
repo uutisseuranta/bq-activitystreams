@@ -7,16 +7,28 @@
 #
 #   terraform plan (CI, PR) paljastaa kaikki env-muuttujat plan-outputissa
 #   joka tallennetaan $GITHUB_STEP_SUMMARY:yn ja näkyy PR-yhteenvedossa.
-#   Tämä on rakenteellinen tae ALLOW_MOCK_AUTH-muuttujan hallinnalle:
-#   jos arvo on 'true' PR:ssä, se näkyy plan-outputissa ennen mergeä.
 #
-# ALLOW_MOCK_AUTH — turvallisuushuomio:
-#   Muuttuja on määritelty variables.tf:ssä oletusarvolla 'false'.
-#   Tuotannossa arvon on aina oltava 'false' — terraform.tfvars tai
-#   CI-ympäristömuuttuja TF_VAR_allow_mock_auth ei saa asettaa sitä 'true':ksi.
-#   Muuttujan POISTAMINEN koodista olisi rakenteellisesti turvallisempaa,
-#   mutta se jätetään toistaiseksi kehitysympäristöä varten.
-#   Jos staging-ympäristö lisätään, 'true' sallitaan vain siellä.
+# ALLOW_MOCK_AUTH — turvallisuusratkaisu (kaanonpäätös G-009):
+#
+#   Muuttujaa EI aseteta Cloud Run -palvelun env-lohkossa.
+#   Tämä on HashiCorpin IaC-periaatteen mukainen ratkaisu:
+#   infrastruktuuri on "single source of truth" — jos muuttujaa ei
+#   ole Terraform-konfiguraatiossa, sitä ei ole tuotannossa.
+#
+#   Miksi puuttuminen on turvallisempaa kuin oletusarvo 'false':
+#   1. Cloud Console ja 'gcloud run services update --set-env-vars'
+#      voivat muuttaa env-muuttujia Terraformin ulkopuolella ilman
+#      CI-tarkistusta tai PR-reviewta. Jos muuttujaa ei ole olemassa,
+#      sitä ei voi vahingossa tai tahallaan muuttaa 'true':ksi ilman
+#      Terraform-muutosta joka näkyy diffissä ja CI:ssä.
+#   2. os.getenv('ALLOW_MOCK_AUTH', 'false') main.py:ssä palauttaa
+#      'false' kun muuttujaa ei ole asetettu — puuttuva muuttuja
+#      käyttäytyy identtisesti kuin arvo 'false'.
+#   3. variables.tf:n validation-lohko estää 'terraform apply':n
+#      jos TF_VAR_allow_mock_auth='true' yritetään syöttää CI:stä.
+#
+#   Yhdessä nämä kolme kerrosta muodostavat defence-in-depth:
+#   Terraform-rakenne + CI-validation + Python-defaultarvo.
 #
 # Autentikointi:
 #   query-api   → julkinen  (--allow-unauthenticated)
@@ -136,13 +148,10 @@ resource "google_cloud_run_v2_service" "write_api" {
         name  = "CLOUD_RUN_SERVICE_URL"
         value = var.write_api_url
       }
-      # ALLOW_MOCK_AUTH: oletusarvo 'false' (variables.tf).
-      # Tuotannossa tämän on aina oltava 'false'.
-      # terraform plan paljastaa arvon PR-yhteenvedossa — tarkista ennen mergeä.
-      env {
-        name  = "ALLOW_MOCK_AUTH"
-        value = var.allow_mock_auth
-      }
+      # ALLOW_MOCK_AUTH ei ole env-lohkossa — ks. tiedoston yläosan kommentti (G-009).
+      # Puuttuva muuttuja == os.getenv('ALLOW_MOCK_AUTH', 'false') palauttaa 'false'.
+      # Muuttujaa ei voi muuttaa 'true':ksi Cloud Consolesta tai gcloud:ista
+      # koska sitä ei ole Cloud Run -palvelun ympäristössä.
 
       # GOOGLE_CLIENT_SECRET luetaan Secret Managerista, ei plain-text env:stä.
       # Secret Manager -resurssi on määritelty terraform/secrets.tf:ssä.
