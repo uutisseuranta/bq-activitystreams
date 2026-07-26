@@ -38,7 +38,7 @@ Kontekstiimäärittely `@context` on oltava rajapinnan palauttamissa Article-obj
   * `name`
   * `url` (Alkuperäinen uutisen URL toimituksen sivulla)
   * `published`
-- **Valinnaiset kentät:** `summary`, `content`, `updated`, `attributedTo`, `likes`, `dislikes`, `_uutisseuranta:reactionCount`, `tag` (morfologiset tagit `Hashtag`-objekteina)
+- **Valinnaiset kentät:** `summary`, `content`, `updated`, `attributedTo`, `likes`, `dislikes`, `_uutisseuranta:reactionCount`, `tag` (morfologiset tagit `Hashtag`-objekteina Jaccard-samankaltaisuusvertailua varten)
 
 ### Note (Kommentti)
 - **Pakolliset kentät:** `@context`, `type` (Note), `id`, `content`, `published`, `attributedTo`, `inReplyTo`
