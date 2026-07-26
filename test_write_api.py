@@ -20,8 +20,7 @@ os.environ.setdefault("ALLOW_MOCK_AUTH", "true")
 
 with patch("google.cloud.bigquery.Client"):
     from fastapi.testclient import TestClient  # noqa: E402
-
-    from write_api.main import app, verify_auth_token, limiter  # noqa: E402
+    from write_api import app, limiter, verify_auth_token  # noqa: E402
     # Estetään muiden testien epäonnistuminen poistamalla rate limitit käytöstä oletuksena
     # kaikille testiluokille. Erillinen TestWriteRateLimiting ottaa sen tarvittaessa käyttöön.
     limiter.enabled = False
@@ -96,7 +95,7 @@ class TestAuthSecurity(unittest.TestCase):
         self.assertEqual(response.status_code, 401,
             f"Epäkelpo token sai väärän statuksen: {response.status_code}")
 
-    @patch("write_api.main.verify_google_token")
+    @patch("write_api.verify_google_token")
     def test_expired_token_returns_401(self, mock_verify):
         """
         Vanhentunut ID-token → verify_google_token palauttaa None → 401.
@@ -114,7 +113,7 @@ class TestAuthSecurity(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 401)
 
-    @patch("write_api.main.verify_google_token")
+    @patch("write_api.verify_google_token")
     def test_wrong_audience_returns_401(self, mock_verify):
         """
         Token jolla on väärä audience (aud) → verify_google_token palauttaa None → 401.
@@ -131,7 +130,7 @@ class TestAuthSecurity(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 401)
 
-    @patch("write_api.main.id_token.verify_oauth2_token")
+    @patch("write_api.id_token.verify_oauth2_token")
     def test_token_without_sub_returns_401(self, mock_verify_oauth2):
         """
         Token josta puuttuu sub-kenttä → 401, ei KeyError/500.
@@ -162,7 +161,7 @@ class TestAuthSecurity(unittest.TestCase):
             self.assertIn("subject", ctx.exception.detail.lower(),
                 "Virheviesti ei mainitse puuttuvaa subject-kenttää")
 
-    @patch("write_api.main.verify_google_token")
+    @patch("write_api.verify_google_token")
     def test_valid_token_with_correct_sub_succeeds(self, mock_verify):
         """
         Kelvollinen token oikealla sub-kentillä → läpäise autentikoinnin.
@@ -176,9 +175,9 @@ class TestAuthSecurity(unittest.TestCase):
             "exp": int(time.time()) + 3600,
             "iss": "https://accounts.google.com",
         }
-        with patch("write_api.main.get_object_by_id") as mock_obj, \
-             patch("write_api.main.get_existing_reaction") as mock_reaction, \
-             patch("write_api.main.bq_client") as mock_bq:
+        with patch("write_api.get_object_by_id") as mock_obj, \
+             patch("write_api.get_existing_reaction") as mock_reaction, \
+             patch("write_api.bq_client") as mock_bq:
             mock_obj.return_value = {
                 "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
                 "deleted": False,
@@ -212,8 +211,8 @@ class TestDeleteActivity(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
 
-    @patch("write_api.main.get_object_by_id")
-    @patch("write_api.main.bq_client")
+    @patch("write_api.get_object_by_id")
+    @patch("write_api.bq_client")
     def test_delete_own_activity(self, mock_bq, mock_get_obj):
         mock_get_obj.return_value = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7Y",
@@ -241,7 +240,7 @@ class TestDeleteActivity(unittest.TestCase):
             f"Delete-aktiviteetin id-kenttä väärässä muodossa: {resp_data.get('id')}"
         )
 
-    @patch("write_api.main.get_object_by_id")
+    @patch("write_api.get_object_by_id")
     def test_delete_others_activity_returns_403(self, mock_get_obj):
         mock_get_obj.return_value = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/OTHER",
@@ -260,7 +259,7 @@ class TestDeleteActivity(unittest.TestCase):
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 403)
 
-    @patch("write_api.main.get_object_by_id")
+    @patch("write_api.get_object_by_id")
     def test_delete_already_deleted_returns_200(self, mock_get_obj):
         mock_get_obj.return_value = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7Y",
@@ -280,7 +279,7 @@ class TestDeleteActivity(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "already_deleted")
 
-    @patch("write_api.main.get_object_by_id")
+    @patch("write_api.get_object_by_id")
     def test_delete_nonexistent_returns_404(self, mock_get_obj):
         mock_get_obj.return_value = None
         headers = {"Authorization": "Bearer mock-test"}
@@ -309,9 +308,9 @@ class TestLikeActivity(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
 
-    @patch("write_api.main.get_object_by_id")
-    @patch("write_api.main.get_existing_reaction")
-    @patch("write_api.main.bq_client")
+    @patch("write_api.get_object_by_id")
+    @patch("write_api.get_existing_reaction")
+    @patch("write_api.bq_client")
     def test_like_success(self, mock_bq, mock_get_reaction, mock_get_obj):
         mock_get_obj.return_value = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
@@ -331,8 +330,8 @@ class TestLikeActivity(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertIn("id", response.json())
 
-    @patch("write_api.main.get_object_by_id")
-    @patch("write_api.main.get_existing_reaction")
+    @patch("write_api.get_object_by_id")
+    @patch("write_api.get_existing_reaction")
     def test_like_idempotency_duplicate(self, mock_get_reaction, mock_get_obj):
         mock_get_obj.return_value = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
@@ -351,7 +350,7 @@ class TestLikeActivity(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "already_reacted")
 
-    @patch("write_api.main.get_object_by_id")
+    @patch("write_api.get_object_by_id")
     def test_like_deleted_object_returns_404(self, mock_get_obj):
         mock_get_obj.return_value = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
@@ -367,7 +366,7 @@ class TestLikeActivity(unittest.TestCase):
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 404)
 
-    @patch("write_api.main.get_object_by_id")
+    @patch("write_api.get_object_by_id")
     def test_like_nonexistent_object_returns_404(self, mock_get_obj):
         mock_get_obj.return_value = None
         headers = {"Authorization": "Bearer mock-test"}
@@ -379,10 +378,10 @@ class TestLikeActivity(unittest.TestCase):
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 404)
 
-    @patch("write_api.main.get_object_by_id")
-    @patch("write_api.main.get_existing_reaction")
-    @patch("write_api.main.remove_reaction")
-    @patch("write_api.main.bq_client")
+    @patch("write_api.get_object_by_id")
+    @patch("write_api.get_existing_reaction")
+    @patch("write_api.remove_reaction")
+    @patch("write_api.bq_client")
     def test_like_toggle_from_dislike(self, mock_bq, mock_remove, mock_get_reaction, mock_get_obj):
         """Dislike → Like toggle: vanha poistetaan, uusi tallennetaan."""
         mock_get_obj.return_value = {
@@ -425,8 +424,8 @@ class TestCreateActivity(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
 
-    @patch("write_api.main.get_object_by_id")
-    @patch("write_api.main.bq_client")
+    @patch("write_api.get_object_by_id")
+    @patch("write_api.bq_client")
     def test_create_note_success(self, mock_bq, mock_get_obj):
         mock_get_obj.return_value = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
@@ -458,7 +457,7 @@ class TestCreateActivity(unittest.TestCase):
             f"object_id väärässä muodossa: {body.get('object_id')}"
         )
 
-    @patch("write_api.main.get_object_by_id")
+    @patch("write_api.get_object_by_id")
     def test_create_note_missing_inreplyto_returns_400(self, mock_get_obj):
         headers = {"Authorization": "Bearer mock-test"}
         payload = {
@@ -472,7 +471,7 @@ class TestCreateActivity(unittest.TestCase):
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 400)
 
-    @patch("write_api.main.get_object_by_id")
+    @patch("write_api.get_object_by_id")
     def test_create_note_wrong_type_returns_400(self, mock_get_obj):
         headers = {"Authorization": "Bearer mock-test"}
         payload = {
@@ -486,7 +485,7 @@ class TestCreateActivity(unittest.TestCase):
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 400)
 
-    @patch("write_api.main.get_object_by_id")
+    @patch("write_api.get_object_by_id")
     def test_create_reply_depth_limit(self, mock_get_obj):
         """Kommentti kommentille jonka vanhempi on jo kommentti → 400 (max 2 tasoa)."""
         parent_url = "https://activitystreams.uutisseuranta.net/ap/objects/comments/parent"
@@ -562,14 +561,14 @@ class TestHealthEndpoints(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "ok")
 
-    @patch("write_api.main.bq_client")
+    @patch("write_api.bq_client")
     def test_readyz_returns_ready_when_bq_ok(self, mock_bq):
         mock_bq.list_datasets.return_value = iter([])
         response = self.client.get("/readyz")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "ready")
 
-    @patch("write_api.main.bq_client")
+    @patch("write_api.bq_client")
     def test_readyz_returns_503_when_bq_fails(self, mock_bq):
         mock_bq.list_datasets.side_effect = Exception("BQ unreachable")
         response = self.client.get("/readyz")
@@ -579,12 +578,12 @@ class TestHealthEndpoints(unittest.TestCase):
 class TestWriteRateLimiting(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
-        from write_api.main import limiter
+        from write_api import limiter
         limiter.enabled = True
         limiter.reset()
 
-    @patch("write_api.main.bq_client")
-    @patch("write_api.main.get_object_by_id")
+    @patch("write_api.bq_client")
+    @patch("write_api.get_object_by_id")
     def test_activities_rate_limiting(self, mock_get_obj, mock_bq):
         mock_get_obj.return_value = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",

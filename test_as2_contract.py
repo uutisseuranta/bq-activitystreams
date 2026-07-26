@@ -2,20 +2,21 @@
 import datetime
 import unittest
 from unittest.mock import MagicMock, patch
-from fastapi.testclient import TestClient
 
 # Mockataan BQ-asiakas ennen main.py:n lataamista
 import google.cloud.bigquery
+from fastapi.testclient import TestClient
+
 google.cloud.bigquery.Client = MagicMock()
 
-from query_api.main import app
+from query_api import app  # noqa: E402
 
 
 class TestAS2Contract(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
 
-    @patch("query_api.main.bq_client")
+    @patch("query_api.bq_client")
     def test_outbox_contract_conformance(self, mock_bq):
         mock_row = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
@@ -46,7 +47,7 @@ class TestAS2Contract(unittest.TestCase):
 
         # 1. Haku outboxista
         response = self.client.get("/ap/outbox?tag=politiikka")
-        
+
         # 2. Tarkistetaan HTTP-status ja oikea MIME-tyyppi
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
@@ -55,7 +56,7 @@ class TestAS2Contract(unittest.TestCase):
         )
 
         resp_data = response.json()
-        
+
         # 3. Tarkistetaan OrderedCollection-tyyppi ja validoidaan se skeemaa vasten
         self.assertEqual(resp_data.get("type"), "OrderedCollection")
         items = resp_data.get("orderedItems", [])
@@ -64,12 +65,13 @@ class TestAS2Contract(unittest.TestCase):
         item = items[0]
 
         import json
-        import jsonschema
         import os
+
+        import jsonschema
 
         # Etsitään juurikansiosta *.schema.json tiedostot
         # Koska testit saatetaan ajaa alikansiosta, haetaan suhteellinen polku oikein
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        base_dir = os.path.dirname(os.path.abspath(__file__))
         collection_schema_path = os.path.join(base_dir, "collection.schema.json")
         article_schema_path = os.path.join(base_dir, "article.schema.json")
 

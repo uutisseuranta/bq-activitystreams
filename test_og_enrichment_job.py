@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 os.environ["GCP_PROJECT"] = "test-project"
 os.environ["BQ_DATASET"] = "test_dataset"
 
-from og_enrichment_job.main import main
+from og_enrichment_job import main
 
 
 def _make_bq_mock(mock_bq_class, object_json: str) -> MagicMock:
@@ -32,8 +32,8 @@ def _make_bq_mock(mock_bq_class, object_json: str) -> MagicMock:
 
 class TestOgEnrichmentJob(unittest.TestCase):
 
-    @patch("og_enrichment_job.main.bigquery.Client")
-    @patch("og_enrichment_job.main.og_parser")
+    @patch("og_enrichment_job.bigquery.Client")
+    @patch("og_enrichment_job.og_parser")
     def test_enrichment_success(self, mock_parser, mock_bq_class):
         mock_bq = _make_bq_mock(
             mock_bq_class,
@@ -48,7 +48,7 @@ class TestOgEnrichmentJob(unittest.TestCase):
             "image": "https://example.com/kuva.jpg",
             "modified_time": "2026-07-03T12:00:00Z",
         }
-        # og_enrichment_job.main käyttää og_parser.longer()-funktiota valitsemaan
+        # og_enrichment_job käyttää og_parser.longer()-funktiota valitsemaan
         # OG-otsikon ja RSS-otsikon välisestä pidemmästä — mock toistaa saman logiikan
         # jotta testi ei ole riippuvainen tuotantokoodin sisäisestä toteutuksesta
         mock_parser.longer = lambda x, y: y if (y and (not x or len(y) > len(x))) else x
@@ -69,8 +69,8 @@ class TestOgEnrichmentJob(unittest.TestCase):
         self.assertEqual(saved_json["image"]["url"], "https://example.com/kuva.jpg")
         self.assertEqual(saved_json["updated"], "2026-07-03T12:00:00Z")
 
-    @patch("og_enrichment_job.main.bigquery.Client")
-    @patch("og_enrichment_job.main.og_parser")
+    @patch("og_enrichment_job.bigquery.Client")
+    @patch("og_enrichment_job.og_parser")
     def test_enrichment_blocked_by_robots(self, mock_parser, mock_bq_class):
         mock_bq = _make_bq_mock(
             mock_bq_class,
@@ -87,8 +87,8 @@ class TestOgEnrichmentJob(unittest.TestCase):
         rows_to_load = args[0]
         self.assertEqual(rows_to_load[0]["og_enriched_error"], "Blocked by robots.txt")
 
-    @patch("og_enrichment_job.main.bigquery.Client")
-    @patch("og_enrichment_job.main.og_parser")
+    @patch("og_enrichment_job.bigquery.Client")
+    @patch("og_enrichment_job.og_parser")
     def test_enrichment_ssrf_error(self, mock_parser, mock_bq_class):
         mock_bq = _make_bq_mock(
             mock_bq_class,
@@ -105,7 +105,7 @@ class TestOgEnrichmentJob(unittest.TestCase):
         rows_to_load = args[0]
         self.assertIn("SSRF check failed", rows_to_load[0]["og_enriched_error"])
 
-    @patch("og_enrichment_job.main.bigquery.Client")
+    @patch("og_enrichment_job.bigquery.Client")
     def test_enrichment_no_unenriched_rows(self, mock_bq_class):
         mock_bq = MagicMock()
         mock_bq_class.return_value = mock_bq

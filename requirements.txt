@@ -1,8 +1,13 @@
 fastapi>=0.100.0
 uvicorn>=0.22.0
 google-cloud-bigquery>=3.0.0
+google-auth>=2.20.0
+requests>=2.31.0
+ulid-py>=1.1.0
+slowapi>=0.1.8
 httpx>=0.24.0
 beautifulsoup4>=4.11.0
 lxml>=4.9.0
 pydantic>=2.0.0
-slowapi>=0.1.8
+libvoikko>=1.9.0
+defusedxml>=0.7.1

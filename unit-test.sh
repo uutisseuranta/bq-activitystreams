@@ -210,25 +210,19 @@ print("  ✓ parse_feed: puuttuva <channel> → []")
 print("\nKaikki yksikkötestit läpäisty ✓")
 EOF
 
-export PYTHONPATH=src
+echo "Ajetaan jaetut ja lib-testit..."
+python3 -m unittest test_og_parser test_gcp_logging test_as2_contract
 
-echo "Ajetaan shared-paketin unittest-testit..."
-python3 -m unittest src/shared/test_og_parser.py
+echo "Ajetaan write_api-testit..."
+python3 -m unittest test_write_api
 
-echo "Ajetaan lib-paketin unittest-testit (logging ja AS2 contract)..."
-python3 -m unittest src/lib/test_gcp_logging.py
-python3 -m unittest src/lib/test_as2_contract.py
+echo "Ajetaan query_api-testit..."
+python3 -m unittest test_query_api
 
-echo "Ajetaan write_api-paketin unittest-testit..."
-python3 -m unittest src/write_api/test_main.py
+echo "Ajetaan og_scraper-testit..."
+python3 -m unittest test_og_scraper
 
-echo "Ajetaan query_api-paketin unittest-testit..."
-python3 -m unittest src/query_api/test_main.py
-
-echo "Ajetaan og_scraper-paketin unittest-testit..."
-python3 -m unittest src/og_scraper/test_main.py
-
-echo "Ajetaan og_enrichment_job-paketin unittest-testit..."
-python3 -m unittest src/og_enrichment_job/test_main.py
+echo "Ajetaan og_enrichment_job-testit..."
+python3 -m unittest test_og_enrichment_job
 
 echo "Kaikki testit suoritettu onnistuneesti!"

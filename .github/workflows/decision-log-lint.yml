@@ -28,10 +28,11 @@ jobs:
 
       - name: Tarkista duplikaatti-ID:t
         run: |
-          DUPES=$(tail -n +2 DECISION_LOG.csv | cut -d',' -f1 | sort | uniq -d)
+          DUPES=$(tail -n +2 DECISION_LOG.csv | grep -v '^[[:space:]]*$' | cut -d',' -f1 | sort | uniq -d)
           if [ -n "$DUPES" ]; then
             echo "❌ Duplikaatti-ID:t löytyi:"
             echo "$DUPES"
+            echo "💡 Korjausohje: Päätöslokin ID-tunnusten on oltava uniikkeja. Varmista, ettei samoja ID-arvoja ole käytetty useasti."
             exit 1
           fi
           echo "✅ Ei duplikaatteja"
@@ -39,13 +40,18 @@ jobs:
       - name: Tarkista päivämäärämuoto (YYYY-MM-DD)
         run: |
           BADDATES=$(tail -n +2 DECISION_LOG.csv | awk -F',' '
+            NF == 0 || $0 ~ /^[[:space:]]*$/ {
+              print "Rivi " NR+1 ": Tiedostossa on tyhjä rivi. Poista ylimääräiset tyhjät rivit tiedostosta."
+              next
+            }
             $2 !~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/ {
-              print "Rivi " NR+1 ": date-sarake on \"" $2 "\""
+              print "Rivi " NR+1 ": Päivämääräsarake \"" $2 "\" on virheellinen. Odotetaan muotoa YYYY-MM-DD."
             }
           ')
           if [ -n "$BADDATES" ]; then
-            echo "❌ Virheellinen päivämäärämuoto (odotetaan YYYY-MM-DD):"
+            echo "❌ Virheellinen päivämäärämuoto tai tyhjä rivi:"
             echo "$BADDATES"
+            echo "💡 Korjausohje: Varmista, ettei tiedoston lopussa tai välissä ole tyhjiä rivejä ja että päivämäärä vastaa muotoa YYYY-MM-DD."
             exit 1
           fi
           echo "✅ Päivämäärämuodot OK"
@@ -53,13 +59,15 @@ jobs:
       - name: Tarkista aikaleimamuoto (YYYY-MM-DD HH:MM:SS)
         run: |
           BADTIMESTAMPS=$(tail -n +2 DECISION_LOG.csv | awk -F',' '
+            NF == 0 || $0 ~ /^[[:space:]]*$/ { next }
             $3 !~ /^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$/ {
-              print "Rivi " NR+1 ": timestamp-sarake on \"" $3 "\""
+              print "Rivi " NR+1 ": Aikaleimasarake \"" $3 "\" on virheellinen. Odotetaan muotoa YYYY-MM-DD HH:MM:SS."
             }
           ')
           if [ -n "$BADTIMESTAMPS" ]; then
-            echo "❌ Virheellinen aikaleimamuoto (odotetaan YYYY-MM-DD HH:MM:SS):"
+            echo "❌ Virheellinen aikaleimamuoto:"
             echo "$BADTIMESTAMPS"
+            echo "💡 Korjausohje: Varmista, että aikaleima vastaa muotoa YYYY-MM-DD HH:MM:SS."
             exit 1
           fi
           echo "✅ Aikaleimamuodot OK"

@@ -49,5 +49,5 @@ Rajapintasopimuksen koneluettavat ja viralliset JSON Schema -määritelmät sija
 - [collection.schema.json](file:///Users/jaakkokorhonen/uutisseuranta/bq-activitystreams/collection.schema.json)
 - [hashtag.schema.json](file:///Users/jaakkokorhonen/uutisseuranta/bq-activitystreams/hashtag.schema.json)
 
-Näitä skeemoja käytetään automaattisesti yksikkötesteissä (`src/lib/test_as2_contract.py`) varmistamaan, että rajapinta tuottaa sopimuksen mukaista dataa.
+Näitä skeemoja käytetään automaattisesti yksikkötesteissä (`test_as2_contract.py`) varmistamaan, että rajapinta tuottaa sopimuksen mukaista dataa.
 

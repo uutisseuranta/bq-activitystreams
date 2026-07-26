@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 
 google.cloud.bigquery.Client = MagicMock()  # noqa: E402
 
-from query_api.main import _count_cache, app  # noqa: E402
+from query_api import _count_cache, app  # noqa: E402
 
 
 def create_mock_query_job(rows):
@@ -32,10 +32,10 @@ class TestOutboxQuery(unittest.TestCase):
         _count_cache.clear()
         # Otetaan rate limiting pois päältä muissa testeissä, jotta ne eivät vahingossa kuluta
         # globaalia/instanssikohtaista in-memory -rajaa ja aiheuta muiden testien epäonnistumista.
-        from query_api.main import limiter
+        from query_api import limiter
         limiter.enabled = False
 
-    @patch("query_api.main.bq_client")
+    @patch("query_api.bq_client")
     def test_outbox_success(self, mock_bq):
         mock_row = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
@@ -88,7 +88,7 @@ class TestOutboxQuery(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("Parameter 'n' must be between 1 and 500", response.json()["detail"])
 
-    @patch("query_api.main.bq_client")
+    @patch("query_api.bq_client")
     def test_outbox_database_error(self, mock_bq):
         mock_bq.query.side_effect = Exception("BigQuery connection error")
         response = self.client.get("/ap/outbox?tag=politiikka")
@@ -100,10 +100,10 @@ class TestCacheBehavior(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
         _count_cache.clear()
-        from query_api.main import limiter
+        from query_api import limiter
         limiter.enabled = False
 
-    @patch("query_api.main.bq_client")
+    @patch("query_api.bq_client")
     def test_total_items_cache(self, mock_bq):
         mock_row = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
@@ -142,14 +142,14 @@ class TestReadyzAndHealthz(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ok"})
 
-    @patch("query_api.main.bq_client")
+    @patch("query_api.bq_client")
     def test_readyz_success(self, mock_bq):
         mock_bq.list_datasets.return_value = []
         response = self.client.get("/readyz")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ready"})
 
-    @patch("query_api.main.bq_client")
+    @patch("query_api.bq_client")
     def test_readyz_failure(self, mock_bq):
         mock_bq.list_datasets.side_effect = Exception("Auth failed")
         response = self.client.get("/readyz")
@@ -161,10 +161,10 @@ class TestReactionAggregationPrep(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
         _count_cache.clear()
-        from query_api.main import limiter
+        from query_api import limiter
         limiter.enabled = False
 
-    @patch("query_api.main.bq_client")
+    @patch("query_api.bq_client")
     def test_reaction_aggregation_mapping(self, mock_bq):
         """Valmisteleva testi agreeCount/disagreeCount -kenttien parsimiselle."""
         mock_row = {
@@ -200,13 +200,13 @@ class TestReactionAggregationPrep(unittest.TestCase):
 class TestRateLimiting(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
-        from query_api.main import limiter
+        from query_api import limiter
         limiter.enabled = True
 
-    @patch("query_api.main.bq_client")
+    @patch("query_api.bq_client")
     def test_rate_limit_outbox(self, mock_bq):
         # Nollataan limiitit jokaiselle testille (instanssikohtainen in-memory)
-        from query_api.main import limiter
+        from query_api import limiter
         limiter.reset()
         mock_row = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
@@ -233,9 +233,9 @@ class TestRateLimiting(unittest.TestCase):
         self.assertEqual(response.status_code, 429)
         self.assertIn("Retry-After", response.headers)
 
-    @patch("query_api.main.bq_client")
+    @patch("query_api.bq_client")
     def test_dynamic_rate_limiting_authenticated(self, mock_bq):
-        from query_api.main import limiter
+        from query_api import limiter
         limiter.reset()
         mock_row = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
@@ -263,7 +263,7 @@ class TestRateLimiting(unittest.TestCase):
             response = self.client.get("/ap/outbox?tag=politiikka", headers=headers)
             self.assertEqual(response.status_code, 429)
 
-    @patch("query_api.main.bq_client")
+    @patch("query_api.bq_client")
     def test_invalid_token_returns_401(self, mock_bq):
         # Virheellinen tai vanhentunut token antaa 401 Unauthorized
         headers = {"Authorization": "Bearer invalid-or-expired-token"}

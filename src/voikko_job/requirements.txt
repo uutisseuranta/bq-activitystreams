@@ -1,2 +1,0 @@
-google-cloud-bigquery>=3.0.0
-libvoikko>=1.9.0
