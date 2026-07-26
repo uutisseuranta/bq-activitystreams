@@ -184,8 +184,14 @@ def get_outbox(
             detail="Parameter 'n' must be between 1 and 500."
         )
 
-    # Normalisoidaan tagit: pieniksi kirjaimiksi, valilyonnit siivotaan
-    search_tags = [t.strip().lower() for t in tag if t.strip()]
+    # Normalisoidaan tagit: pieniksi kirjaimiksi ja varmistetaan #-etuliite (Decision L-011)
+    search_tags = []
+    for t in tag:
+        val = t.strip().lower()
+        if val:
+            if not val.startswith("#"):
+                val = f"#{val}"
+            search_tags.append(val)
     if not search_tags:
         raise HTTPException(
             status_code=400,
@@ -296,8 +302,9 @@ def get_outbox(
     total_items = get_total_items_cached(search_tags)
 
     # 6. Rakennetaan self-URL AS2 OrderedCollection id-kenttaan
+    import urllib.parse
     base_url = "https://activitystreams.uutisseuranta.net/ap/outbox"
-    tag_params = "&".join(f"tag={t}" for t in search_tags)
+    tag_params = "&".join(f"tag={urllib.parse.quote(t)}" for t in search_tags)
     self_url = f"{base_url}?{tag_params}&n={n}"
 
     response_json = {

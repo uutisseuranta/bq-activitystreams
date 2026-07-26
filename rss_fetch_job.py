@@ -185,10 +185,6 @@ def fetch_rss_feed(feed_url: str, timeout: int) -> List[Dict[str, Any]]:
         pubdate_tag = item.find("pubDate")
         published_dt = parse_pubdate(pubdate_tag.text.strip() if pubdate_tag else "")
 
-        if not published_dt:
-            logger.warning(f"Ohitetaan artikkeli ilman toimivaa pubDatea. Otsikko: '{title}', URL: {link}")
-            continue
-
         # Kuva (media:thumbnail tai enclosure)
         image_url = None
 
@@ -226,10 +222,9 @@ def fetch_rss_feed(feed_url: str, timeout: int) -> List[Dict[str, Any]]:
 
 def build_as2_article(item: Dict[str, Any], source: str, domain: str) -> Dict[str, Any]:
     """Muodostaa standardin W3C Activity Streams 2.0 Article -rakenteen."""
-    url = item["link"]
-    # Lasketaan sha256 URL:sta ID:tä varten
-    url_hash = hashlib.sha256(url.encode("utf-8")).hexdigest()
-    as2_id = f"https://{domain}/ap/objects/articles/{source}/{url_hash}"
+    input_str = f"{source}{url}"
+    url_hash = hashlib.sha256(input_str.encode("utf-8")).hexdigest()[:16]
+    as2_id = f"https://uutisseuranta.net/ap/objects/{url_hash}"
 
     # Kartoitetaan lähde julkaisijaksi
     publisher_names = {
@@ -252,7 +247,10 @@ def build_as2_article(item: Dict[str, Any], source: str, domain: str) -> Dict[st
     publisher_name = publisher_names.get(source, source.capitalize())
     publisher_url = publisher_urls.get(source, "")
 
-    published_str = item["published"].isoformat().replace("+00:00", "Z")
+    if item["published"]:
+        published_str = item["published"].isoformat().replace("+00:00", "Z")
+    else:
+        published_str = None
 
     article_json = {
         "@context": "https://www.w3.org/ns/activitystreams",
@@ -286,9 +284,44 @@ def build_as2_article(item: Dict[str, Any], source: str, domain: str) -> Dict[st
 
 
 def write_to_bigquery(bq_client: bigquery.Client, project: str, dataset: str, articles: List[Dict[str, Any]]) -> None:
-    """Tallentaa AS2-artikkelit BigQueryyn väliaikaistaulun ja MERGE-lauseen kautta."""
+    """Tallentaa AS2-artikkelit BigQueryyn: päätauluun ja päivämäärättömät pending-tauluun."""
     if not articles:
         logger.info("Ei uusia artikkeleita tallennettavaksi.")
+        return
+
+    # Erotellaan julkaistut ja pending-artikkelit
+    published_articles = [a for a in articles if a["published"] is not None]
+    pending_articles = [a for a in articles if a["published"] is None]
+
+    if pending_articles:
+        logger.info(f"Ladataan {len(pending_articles)} päivämäärätöntä artikkelia pending-tauluun...")
+        pending_rows = []
+        for art in pending_articles:
+            pending_rows.append({
+                "id": art["id"],
+                "source": art["source"],
+                "received_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "object_json": json.dumps(art["object_json"])
+            })
+        pending_table_id = f"{project}.{dataset}.objects_pending"
+        pending_schema = [
+            bigquery.SchemaField("id", "STRING", mode="REQUIRED"),
+            bigquery.SchemaField("source", "STRING", mode="REQUIRED"),
+            bigquery.SchemaField("received_at", "TIMESTAMP", mode="REQUIRED"),
+            bigquery.SchemaField("object_json", "JSON", mode="NULLABLE"),
+        ]
+        pending_config = bigquery.LoadJobConfig(
+            write_disposition="WRITE_APPEND",
+            schema=pending_schema
+        )
+        try:
+            load_job = bq_client.load_table_from_json(pending_rows, pending_table_id, job_config=pending_config)
+            load_job.result()
+            logger.info("Päivämäärättömät artikkelit lisätty pending-tauluun.")
+        except Exception as e:
+            logger.error(f"Virhe kirjoitettaessa pending-tauluun: {e}")
+
+    if not published_articles:
         return
 
     # Luodaan uniikki temp-taulu tälle suoritukselle
@@ -296,7 +329,7 @@ def write_to_bigquery(bq_client: bigquery.Client, project: str, dataset: str, ar
 
     # Muunnetaan datetime ISO-merkkijonoksi ja object_json JSON-yhteensopivaksi
     rows_to_load = []
-    for art in articles:
+    for art in published_articles:
         rows_to_load.append({
             "id": art["id"],
             "source": art["source"],

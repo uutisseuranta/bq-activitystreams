@@ -65,7 +65,7 @@ class TestOutboxQuery(unittest.TestCase):
 
         resp_data = response.json()
         self.assertEqual(resp_data["type"], "OrderedCollection")
-        self.assertIn("tag=politiikka", resp_data["id"])
+        self.assertIn("tag=%23politiikka", resp_data["id"])
 
         items = resp_data["orderedItems"]
         self.assertEqual(len(items), 1)

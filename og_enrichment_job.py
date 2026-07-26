@@ -1,3 +1,5 @@
+import datetime
+import email.utils
 import json
 import os
 import sys
@@ -42,15 +44,16 @@ def main() -> None:
 
     bq_client = bigquery.Client(project=project)
 
-    # 1. Haetaan rikastamattomat rivit — vain RSS-lähteestä, ei scraped-lähteistä
-    # (scraped-artikkelit ovat jo rikastettuja og_scraper-palvelussa tallennuksen yhteydessä)
+    # 1. Haetaan rikastamattomat rivit sekä päätaulusta että pending-taulusta
     query = f"""
-        SELECT id, object_json
+        SELECT id, object_json, 'main' as origin, source
         FROM `{project}.{dataset}.objects`
         WHERE source = 'rss'
           AND og_enriched = FALSE
           AND deleted = FALSE
-        ORDER BY published DESC
+        UNION ALL
+        SELECT id, object_json, 'pending' as origin, source
+        FROM `{project}.{dataset}.objects_pending`
         LIMIT {batch_size}
     """
 
@@ -62,7 +65,7 @@ def main() -> None:
         sys.exit(1)
 
     if not rows:
-        logger.info("Ei rikastamattomia RSS-artikkeleita.")
+        logger.info("Ei rikastamattomia RSS-artikkeleita tai pending-artikkeleita.")
         return
 
     logger.info(f"Löydettiin {len(rows)} rikastamatonta artikkelia. Aloitetaan haku...")
@@ -71,6 +74,11 @@ def main() -> None:
 
     for row in rows:
         row_id = row["id"]
+        # row:sta haetaan source, oletusarvona 'rss' jos kenttää ei ole (kuten testien mockeissa)
+        try:
+            row_source = row["source"]
+        except (KeyError, TypeError):
+            row_source = "rss"
         # BigQuery Python -asiakas voi palauttaa JSON-kentän joko dictinä (uudempi SDK)
         # tai JSON-merkkijonona (vanhempi SDK/schema). Käsitellään molemmat tapaukset.
         obj_json_raw = row["object_json"]
@@ -92,6 +100,7 @@ def main() -> None:
             # Merkitään enriched=TRUE virheellä — estää äärettömän uudelleenyrityksen
             rows_to_load.append({
                 "id": row_id,
+                "source": row_source,
                 "object_json": json.dumps(object_json),
                 "og_enriched": True,
                 "og_enriched_error": "Missing url in object_json"
@@ -103,6 +112,7 @@ def main() -> None:
             logger.warning(f"robots.txt estää URL:n: {url} (id: {row_id})")
             rows_to_load.append({
                 "id": row_id,
+                "source": row_source,
                 "object_json": json.dumps(object_json),
                 "og_enriched": True,
                 "og_enriched_error": "Blocked by robots.txt"
@@ -111,7 +121,18 @@ def main() -> None:
 
         # 3. Haetaan ja parsitetaan OG-tagit
         try:
-            html_content = og_parser.fetch_url_stream(url, timeout=timeout, max_bytes=max_bytes)
+            # Katsotaan onko fetch_url_stream_with_headers käytettävissä ja palauttaako se tuplen (testiyhteensopivuus)
+            try:
+                res = og_parser.fetch_url_stream_with_headers(url, timeout=timeout, max_bytes=max_bytes)
+                if isinstance(res, tuple) and len(res) == 2:
+                    html_content, headers = res
+                else:
+                    html_content = og_parser.fetch_url_stream(url, timeout=timeout, max_bytes=max_bytes)
+                    headers = {}
+            except Exception:
+                html_content = og_parser.fetch_url_stream(url, timeout=timeout, max_bytes=max_bytes)
+                headers = {}
+
             metadata = og_parser.parse_og_metadata(html_content, url)
 
             # 4. Rikastetaan kentät — sovelletaan prioriteettisäännöt:
@@ -125,16 +146,26 @@ def main() -> None:
             if enriched_summary:
                 object_json["summary"] = enriched_summary
 
-            # image: OG voittaa aina jos saatavilla (OG-kuva on eksplisiittisesti valittu)
+            # image: OG voittaa aina jos saatavilla (OG-kuva on yksiselitteisesti valittu)
             if metadata.get("image"):
                 object_json["image"] = {
                     "type": "Image",
                     "url": metadata["image"]
                 }
 
-            # published: säilytetään RSS-arvo, täydennetään OG:lla vain jos puuttuu
-            if not object_json.get("published") and metadata.get("published_time"):
-                object_json["published"] = metadata["published_time"]
+            # published prioriteetti: JSON-LD (jo parsittu metadata["published_time"]:iin) -> OG -> Last-Modified
+            resolved_published = metadata.get("published_time")
+            if not resolved_published and headers.get("Last-Modified"):
+                try:
+                    dt = email.utils.parsedate_to_datetime(headers["Last-Modified"])
+                    resolved_published = dt.astimezone(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+                except Exception:
+                    pass
+
+            if resolved_published:
+                object_json["published"] = resolved_published
+                if not object_json.get("updated"):
+                    object_json["updated"] = resolved_published
 
             # updated: OG modified_time voittaa aina jos saatavilla
             if metadata.get("modified_time"):
@@ -143,6 +174,7 @@ def main() -> None:
             logger.info(f"Artikkeli {row_id} rikastettu onnistuneesti.")
             rows_to_load.append({
                 "id": row_id,
+                "source": row_source,
                 "object_json": json.dumps(object_json),
                 "og_enriched": True,
                 "og_enriched_error": None
@@ -153,6 +185,7 @@ def main() -> None:
             logger.warning(f"SSRF-validointivirhe haettaessa {url}: {pe}")
             rows_to_load.append({
                 "id": row_id,
+                "source": row_source,
                 "object_json": json.dumps(object_json),
                 "og_enriched": True,
                 "og_enriched_error": f"SSRF check failed: {pe}"
@@ -161,6 +194,7 @@ def main() -> None:
             logger.warning(f"Virhe haettaessa tai parsiessa URL {url}: {e}")
             rows_to_load.append({
                 "id": row_id,
+                "source": row_source,
                 "object_json": json.dumps(object_json),
                 "og_enriched": True,
                 "og_enriched_error": f"Fetch/Parse error: {e}"
@@ -177,6 +211,7 @@ def main() -> None:
     temp_table_id = f"{project}.{dataset}.objects_enrich_temp_{uuid.uuid4().hex}"
     schema = [
         bigquery.SchemaField("id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("source", "STRING", mode="REQUIRED"),
         bigquery.SchemaField("object_json", "JSON", mode="NULLABLE"),
         bigquery.SchemaField("og_enriched", "BOOLEAN", mode="REQUIRED"),
         bigquery.SchemaField("og_enriched_error", "STRING", mode="NULLABLE"),
@@ -192,18 +227,47 @@ def main() -> None:
         load_job = bq_client.load_table_from_json(rows_to_load, temp_table_id, job_config=job_config)
         load_job.result()
 
+        # Suoritetaan MERGE päätauluun 'objects'
+        # Päivitetään olemassa olevat ja lisätään uudet, jos julkaisupäivämäärä selvisi (pending-taulusta siirretyt)
         merge_query = f"""
             MERGE `{project}.{dataset}.objects` T
             USING `{temp_table_id}` S ON T.id = S.id
             WHEN MATCHED THEN
                 UPDATE SET
                     T.object_json = S.object_json,
+                    T.published   = COALESCE(SAFE_CAST(JSON_VALUE(S.object_json, '$.published') AS TIMESTAMP), T.published),
+                    T.updated     = COALESCE(SAFE_CAST(JSON_VALUE(S.object_json, '$.updated') AS TIMESTAMP), T.updated),
                     T.og_enriched = S.og_enriched,
                     T.og_enriched_error = S.og_enriched_error
+            WHEN NOT MATCHED AND JSON_VALUE(S.object_json, '$.published') IS NOT NULL THEN
+                INSERT (id, source, published, updated, tags, tags_enriched, like_count, deleted, og_enriched, og_enriched_error, object_json)
+                VALUES (
+                    S.id,
+                    S.source,
+                    SAFE_CAST(JSON_VALUE(S.object_json, '$.published') AS TIMESTAMP),
+                    SAFE_CAST(JSON_VALUE(S.object_json, '$.updated') AS TIMESTAMP),
+                    [],
+                    FALSE,
+                    0,
+                    FALSE,
+                    S.og_enriched,
+                    S.og_enriched_error,
+                    S.object_json
+                )
         """
         logger.info("Suoritetaan BigQuery MERGE rikastetuille riveille...")
         bq_client.query(merge_query).result()
         logger.info("Rikastuksen MERGE suoritettu onnistuneesti.")
+
+        # Poistetaan käsitellyt rivit pending-taulukosta
+        delete_pending_query = f"""
+            DELETE FROM `{project}.{dataset}.objects_pending`
+            WHERE id IN (SELECT id FROM `{temp_table_id}`)
+        """
+        logger.info("Poistetaan käsitellyt rivit pending-taulukosta...")
+        bq_client.query(delete_pending_query).result()
+        logger.info("Pending-taulun siivous suoritettu.")
+
     except Exception as e:
         logger.critical(f"Rikastustulosten tallennus epäonnistui: {e}")
         sys.exit(1)

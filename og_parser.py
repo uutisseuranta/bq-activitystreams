@@ -77,10 +77,11 @@ def validate_url_ip(url: str) -> bool:
         return False
 
 
-def fetch_url_stream(url: str, timeout: float = TIMEOUT, max_bytes: int = MAX_RESPONSE_BYTES) -> bytes:
+def fetch_url_stream_with_headers(url: str, timeout: float = TIMEOUT, max_bytes: int = MAX_RESPONSE_BYTES) -> tuple[bytes, dict[str, str]]:
     """Hakee sivun turvallisesti redirectejä seuraten ja SSRF-suojauksen tarkistaen.
 
     Streamataan vain </head>-tagiin asti tai max_bytes kokoon saakka.
+    Palauttaa tuplena (sisältö tavuina, otsikot sanakirjana).
     """
     current_url = url
     redirect_count = 0
@@ -125,7 +126,18 @@ def fetch_url_stream(url: str, timeout: float = TIMEOUT, max_bytes: int = MAX_RE
                     except Exception:
                         pass
 
-                return bytes(content_bytes)
+                headers_dict = dict(response.headers)
+                return bytes(content_bytes), headers_dict
+
+
+def fetch_url_stream(url: str, timeout: float = TIMEOUT, max_bytes: int = MAX_RESPONSE_BYTES) -> bytes:
+    """Hakee sivun turvallisesti redirectejä seuraten ja SSRF-suojauksen tarkistaen.
+
+    Säilyttää alkuperäisen rajapinnan palauttamalla vain sisällön tavuina.
+    """
+    content, _headers = fetch_url_stream_with_headers(url, timeout, max_bytes)
+    return content
+
 
 
 def get_robots_parser(url: str) -> RobotFileParser:
@@ -207,6 +219,36 @@ def parse_og_metadata(html_content: bytes, default_url: str) -> Dict[str, Option
         elif name_attr == "description" and not metadata["description"]:
             metadata["description"] = content
 
+    # 2. Etsitään JSON-LD-lohkoja (Schema.org)
+    import json
+    json_ld_published = None
+    json_ld_modified = None
+    for script in soup.find_all("script", type="application/ld+json"):
+        try:
+            data = json.loads(script.string or "")
+            if isinstance(data, dict):
+                # Voidaan käsitellä joko yksittäinen objekti tai lista (@graph)
+                if "@graph" in data and isinstance(data["@graph"], list):
+                    for graph_obj in data["@graph"]:
+                        if isinstance(graph_obj, dict):
+                            if "datePublished" in graph_obj:
+                                json_ld_published = graph_obj["datePublished"]
+                            if "dateModified" in graph_obj:
+                                json_ld_modified = graph_obj["dateModified"]
+                else:
+                    if "datePublished" in data:
+                        json_ld_published = data["datePublished"]
+                    if "dateModified" in data:
+                        json_ld_modified = data["dateModified"]
+        except Exception:
+            pass
+
+    # JSON-LD datePublished ja dateModified ovat ensisijaisia (prioriteettijärjestys)
+    if json_ld_published:
+        metadata["published_time"] = json_ld_published
+    if json_ld_modified:
+        metadata["modified_time"] = json_ld_modified
+
     # Fallback otsikolle jos og:title puuttuu
     if not metadata["title"]:
         title_tag = soup.find("title")
@@ -225,3 +267,4 @@ def longer(a: Optional[str], b: Optional[str]) -> Optional[str]:
     if not b_stripped:
         return a_stripped
     return a_stripped if len(a_stripped) >= len(b_stripped) else b_stripped
+
