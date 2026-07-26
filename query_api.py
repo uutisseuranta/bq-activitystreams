@@ -5,9 +5,11 @@ import datetime
 import json
 import os
 import time
+import urllib.parse
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, Header, HTTPException, Query, Request, Response
+import httpx
+from fastapi import FastAPI, Header, HTTPException, Query, Request, Response, BackgroundTasks
 from gcp_logging import get_logger
 from google.auth.transport import requests as google_requests
 from google.cloud import bigquery
@@ -327,6 +329,58 @@ def get_outbox(
         content=json.dumps(response_json, ensure_ascii=False),
         media_type="application/activity+json; charset=utf-8"
     )
+
+
+def update_archive_url_in_bq(url: str, archive_url: str):
+    """Päivitetään uutisen arkistolinkki BigQueryyn taustatehtävänä (BackgroundTasks)."""
+    try:
+        # JSON_SET vaatii JSON-tyyppisen arvon, joten PARSE_JSON muuntaa merkkijonon BigQueryssä oikein.
+        query = f"""
+            UPDATE `{PROJECT}.{DATASET}.objects`
+            SET object_json = JSON_SET(object_json, '$.url_archive', PARSE_JSON(@archive_url)),
+                updated = CURRENT_TIMESTAMP()
+            WHERE JSON_VALUE(object_json.url) = @url
+        """
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("archive_url", "STRING", json.dumps(archive_url)),
+                bigquery.ScalarQueryParameter("url", "STRING", url)
+            ]
+        )
+        bq_client.query(query, job_config=job_config).result()
+        logger.info(f"Päivitetty uutisen {url} arkistolinkki BigQueryyn: {archive_url}")
+    except Exception as e:
+        logger.error(f"Virhe päivitettäessä arkistolinkkiä uutiselle {url}: {e}")
+
+
+@app.get("/ap/check-status")
+async def check_status(url: str, background_tasks: BackgroundTasks):
+    """Tarkistaa onko artikkelilinkki tavoitettavissa ja tallentaa virhetilanteessa arkistolinkin BigQueryyn."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            raise HTTPException(status_code=400, detail="Invalid URL scheme.")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid URL.")
+
+    alive = False
+    try:
+        async with httpx.AsyncClient(timeout=2.0, follow_redirects=True) as client:
+            # Yritetään kevyempää HEAD-pyyntöä ensin
+            response = await client.head(url)
+            if response.status_code in (405, 501):
+                response = await client.get(url)
+            alive = response.status_code < 400
+    except Exception as e:
+        logger.warning(f"Uutissivun {url} ping-tarkistus epäonnistui: {e}")
+        alive = False
+
+    # Jos sivu on alhaalla, päivitetään BigQueryyn arkisto-URL taustatehtävänä
+    if not alive:
+        archive_url = f"https://web.archive.org/web/*/{url}"
+        background_tasks.add_task(update_archive_url_in_bq, url, archive_url)
+
+    return {"alive": alive}
 
 
 @app.get("/healthz")
