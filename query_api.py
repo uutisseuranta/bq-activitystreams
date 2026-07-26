@@ -80,13 +80,14 @@ def verify_auth_token_optional(auth_header: Optional[str]) -> Optional[str]:
     if not auth_header:
         return None
     if not auth_header.startswith("Bearer "):
-        logger.warning("Autentikaatio hylatty: Virheellinen Authorization-formaatti")
+        logger.warning("Autentikaatio hylätty: virheellinen Authorization-formaatti")
         raise HTTPException(status_code=401, detail="Invalid Authorization header format.")
 
     token = auth_header.split(" ")[1]
     allow_mock = os.getenv("ALLOW_MOCK_AUTH", "false").lower() == "true"
     if allow_mock and token == "mock-test":
-        logger.warning("Mock-autentikaatio kaytossa - vain kehitysymparistoon")
+        # ALLOW_MOCK_AUTH=true sallitaan vain kehitys- ja testiympäristöissä
+        logger.warning("Mock-autentikaatio käytössä — vain kehitysympäristöön")
         return "test-user-sub-12345"
 
     project_id = os.getenv("GCP_PROJECT", "uutisseuranta-activitystreams")
@@ -101,32 +102,32 @@ def verify_auth_token_optional(auth_header: Optional[str]) -> Optional[str]:
                 raise HTTPException(status_code=401, detail="Token lacks 'sub' claim.")
             return sub
 
-    logger.warning("Autentikaatio hylatty: OIDC-tokenia ei voitu vahvistaa")
+    logger.warning("Autentikaatio hylätty: OIDC-tokenia ei voitu vahvistaa")
     raise HTTPException(status_code=401, detail="Invalid OIDC token.")
 
-# Globaalit ymparistomuuttujat - luetaan kerran kaynistyksen yhteydessa
+# Globaalit ympäristömuuttujat — luetaan kerran käynnistyksen yhteydessä
 PROJECT = os.getenv("GCP_PROJECT")
 DATASET = os.getenv("BQ_DATASET")
 LOCATION = os.getenv("BQ_LOCATION", "europe-north1")
 
 if not PROJECT or not DATASET:
-    logger.critical("Virhe: GCP_PROJECT ja BQ_DATASET ymparistomuuttujat ovat pakollisia.")
+    logger.critical("Virhe: GCP_PROJECT ja BQ_DATASET ympäristömuuttujat ovat pakollisia.")
 
 bq_client = bigquery.Client(project=PROJECT)
 
 # In-memory cache totalItems-laskurille
 # Rakenne: { "tag1,tag2": { "value": int, "expires": float } }
-# Syy: COUNT(*)-kysely on kallis (full table scan), mutta arvo ei muutu sekunnin valein.
-# TTL=300s on kompromissi tuoreuden ja BQ-kustannusten valilla.
-# HUOM: cache on prosessikohtainen - Cloud Run -instanssien valilla ei jaeta cachea.
+# Syy: COUNT(*)-kysely on kallis (full table scan), mutta arvo ei muutu sekunnin välein.
+# TTL=300s on kompromissi tuoreuden ja BQ-kustannusten välillä.
+# HUOM: cache on prosessikohtainen — Cloud Run -instanssien välillä ei jaeta cachea.
 _count_cache: Dict[str, Dict[str, Any]] = {}
 CACHE_TTL = 300  # sekuntia (5 minuuttia)
 
 
 def get_total_items_cached(tags: List[str]) -> int:
-    """Laskee objektien kokonaismaaran valimuistia hyodyntaen."""
+    """Laskee kokonaismäärän välimuistia hyödyntäen (COUNT(*) per tag-yhdistelmä)."""
     now = time.time()
-    # Lajitellaan tagit - cache-avain on jarjestyksesta riippumaton
+    # Lajitellaan tagit — cache-avain on järjestyksestä riippumaton
     cache_key = ",".join(sorted(tags))
 
     cached = _count_cache.get(cache_key)
@@ -150,7 +151,7 @@ def get_total_items_cached(tags: List[str]) -> int:
         count = results[0]["c"] if results else 0
     except Exception as e:
         logger.error(f"Virhe laskettaessa totalItems-arvoa: {e}")
-        # Palautetaan vanha cache-arvo jos kaytettavissa, muuten 0
+        # Palautetaan vanha cache-arvo jos käytettävissä, muuten 0
         return cached["value"] if cached else 0
 
     _count_cache[cache_key] = {
@@ -165,7 +166,7 @@ def get_total_items_cached(tags: List[str]) -> int:
 def get_outbox(
     request: Request,
     tag: List[str] = Query(default=None, description="Haettavat tagit (toistuva parametri)"),
-    n: int = Query(default=50, description="Palautettavien kohteiden maara (1-500)"),
+    n: int = Query(default=50, description="Palautettavien kohteiden määrä (1-500)"),
     authorization: Optional[str] = Header(None)
 ):
     # Verifioidaan token jos sellainen on toimitettu
@@ -184,7 +185,8 @@ def get_outbox(
             detail="Parameter 'n' must be between 1 and 500."
         )
 
-    # Normalisoidaan tagit: pieniksi kirjaimiksi ja varmistetaan #-etuliite (Decision L-011)
+    # Normalisoidaan tagit: pieniksi kirjaimiksi ja varmistetaan #-etuliite (päätös L-011)
+    # Sallitaan sekä "politiikka" että "#politiikka" — molemmat normalisoidaan muotoon "#politiikka"
     search_tags = []
     for t in tag:
         val = t.strip().lower()
@@ -201,9 +203,9 @@ def get_outbox(
     logger.info(f"Haku tageilla: {search_tags}, koko n: {n}")
 
     # 3. BigQuery-haku relevanssipisteytyksen mukaan
-    # Relevanssi = osuvien hakutagien lukumaara artikkelin tagien joukossa.
-    # Esimerkki: haku ["politiikka", "EU"], artikkeli jolla molemmat tagit saa relevance=2.
-    # Tasatilanne ratkaistaan: like_count DESC -> updated DESC -> published DESC -> id ASC.
+    # Relevanssi = osuvien hakutagien lukumäärä artikkelin tagien joukossa.
+    # Esimerkki: haku ["#politiikka", "#EU"], artikkeli jolla molemmat tagit saa relevance=2.
+    # Tasatilanne ratkaistaan: like_count DESC → updated DESC → published DESC → id ASC.
     query = f"""
         SELECT
           id,
@@ -237,12 +239,12 @@ def get_outbox(
         query_job = bq_client.query(query, job_config=job_config)
         rows = list(query_job.result())
     except Exception as e:
-        logger.error(f"BigQuery-haku epaonnistui: {e}")
+        logger.error(f"BigQuery-haku epäonnistui: {e}")
         raise HTTPException(status_code=500, detail="Database query failed.")
 
-    # 4. Injektoidaan dynaamiset kentat (like_count, dislike_count, updated) AS2-dokumentteihin
-    # Nama kentat elavat BQ-riveilla erillaan object_json:sta jotta ne ovat helposti
-    # paivitettavissa ilman koko JSON-dokumentin uudelleenkirjoitusta.
+    # 4. Injektoidaan dynaamiset kentät (like_count, dislike_count, updated) AS2-dokumentteihin.
+    # Nämä kentät elävät BQ-riveillä erillään object_json:sta jotta ne ovat helposti
+    # päivitettävissä ilman koko JSON-dokumentin uudelleenkirjoitusta.
     ordered_items = []
     for row in rows:
         obj_json_raw = row["object_json"]
@@ -250,40 +252,43 @@ def get_outbox(
             continue
 
         try:
-            # BigQuery JSON -kentta voi tulla dictina tai merkkijonona - kasitellaan molemmat
+            # BigQuery JSON -kenttä voi tulla dictinä tai merkkijonona — käsitellään molemmat
             obj = json.loads(obj_json_raw) if isinstance(obj_json_raw, str) else obj_json_raw
 
             # @context laajennetaan kaksialkioiseksi listaksi:
-            # 1. AS2 ydinontologia (pakollinen, W3C AS2 SS2.1)
-            # 2. uutisseuranta-nimiavaruus - projektikohtaiset laajennukset (dislikes, reactionCount)
-            #    Namespace on IRI-pohjainen AS2-spesifikaation mukaisesti; valttaa konfliktit
+            # 1. AS2 ydinontologia (pakollinen, W3C AS2 §2.1)
+            # 2. uutisseuranta-nimiavaruus — projektikohtaiset laajennukset (dislikes, reactionCount)
+            #    Namespace on IRI-pohjainen AS2-spesifikaation mukaisesti; välttää konfliktit
             #    tulevien AS2-laajennusten kanssa. Ks. AS2_CONTRACT.md ja issue #33.
             obj["@context"] = [
                 "https://www.w3.org/ns/activitystreams",
-                {"_uutisseuranta": "https://uutisseuranta.net/ns#"}
+                {
+                    "_uutisseuranta": "https://uutisseuranta.net/ns#",
+                    "dislikes": "_uutisseuranta:dislikes"
+                }
             ]
 
-            # likes: AS2 Core SS5.7 -kentta, palautetaan Collection-muodossa (ei kokonaisluku).
-            # totalItems riittaa - koko aktiviteettilistan palauttaminen olisi liian raskas.
+            # likes: AS2 Core §5.7 -kenttä, palautetaan Collection-muodossa (ei kokonaisluku).
+            # totalItems riittää — koko aktiviteettilistan palauttaminen olisi liian raskas.
             obj["likes"] = {
                 "type": "Collection",
                 "totalItems": row["like_count"]
             }
 
-            # dislikes: projektikohtainen laajennus - ei AS2 Core -kentta (toisin kuin 'likes').
+            # dislikes: projektikohtainen laajennus — ei AS2 Core -kenttä (toisin kuin 'likes').
             # Kirjattu hallittuna laajennuksena AS2_CONTRACT.md:hen.
-            # Collection-rakenne on yhdenmukainen AS2 Core SS5.7 'likes'-kaytannon kanssa.
+            # Collection-rakenne on yhdenmukainen AS2 Core §5.7 'likes'-käytännön kanssa.
             obj["dislikes"] = {
                 "type": "Collection",
                 "totalItems": row["dislike_count"]
             }
 
-            # reactionCount = likes + dislikes (kaikki reaktiot yhteensa).
-            # Neutraali nimitys: sisaltaa seka Agree (Like) etta Disagree (Dislike) -reaktiot.
-            # Tarkoitus: frontend nayttaa yhteenlasketun reaktiomaaran ilman asiakaspuolen laskentaa.
-            # Invariantti: arvo on oikein vain jos write-api estaa duplikaattiaanet per kayttaja.
-            # Toggle-logiikka ja duplikaattiesto on ratkaistu write-apissa (poistetaan vanha ja lisataan uusi).
-            # Hallittu AS2-poikkeama: toggle ei kirjaa 'Undo Like' -aktiviteettia - ks. AS2_CONTRACT.md.
+            # reactionCount = likes + dislikes (kaikki reaktiot yhteensä).
+            # Neutraali nimitys: sisältää sekä Agree (Like) että Disagree (Dislike) -reaktiot.
+            # Tarkoitus: frontend näyttää yhteenlasketun reaktiomäärän ilman asiakaspuolen laskentaa.
+            # Invariantti: arvo on oikein vain jos write-api estää duplikaattiäänet per käyttäjä.
+            # Toggle-logiikka ja duplikaattiesto on ratkaistu write-apissa (poistetaan vanha, lisätään uusi).
+            # Hallittu AS2-poikkeama: toggle ei kirjaa 'Undo Like' -aktiviteettia — ks. AS2_CONTRACT.md §4.
             obj["_uutisseuranta:reactionCount"] = row["like_count"] + row["dislike_count"]
 
             if row["updated"]:
@@ -298,10 +303,10 @@ def get_outbox(
         except Exception as e:
             logger.error(f"Virhe objektin {row['id']} parsimisessa: {e}")
 
-    # 5. totalItems - cachetettu COUNT-kysely (ks. get_total_items_cached)
+    # 5. totalItems — cachetettu COUNT-kysely (ks. get_total_items_cached)
     total_items = get_total_items_cached(search_tags)
 
-    # 6. Rakennetaan self-URL AS2 OrderedCollection id-kenttaan
+    # 6. Rakennetaan self-URL AS2 OrderedCollection id-kenttään
     import urllib.parse
     base_url = "https://activitystreams.uutisseuranta.net/ap/outbox"
     tag_params = "&".join(f"tag={urllib.parse.quote(t)}" for t in search_tags)
@@ -325,7 +330,7 @@ def get_outbox(
 
 @app.get("/healthz")
 def liveness():
-    # Cloud Run liveness-probe - vastaa aina 200 OK jos prosessi on elossa
+    # Cloud Run liveness-probe — vastaa aina 200 OK jos prosessi on elossa
     return {"status": "ok"}
 
 
@@ -333,9 +338,9 @@ def liveness():
 def readiness():
     try:
         # Aktiivinen BQ-yhteystarkistus: list_datasets on kevyt API-kutsu
-        # joka vahvistaa seka autentikaation etta verkkoyhteyden toimivuuden
+        # joka vahvistaa sekä autentikaation että verkkoyhteyden toimivuuden
         bq_client.list_datasets(max_results=1)
         return {"status": "ready"}
     except Exception as e:
-        logger.error(f"Readiness-tarkistus epaonnistui: {e}")
+        logger.error(f"Readiness-tarkistus epäonnistui: {e}")
         raise HTTPException(status_code=503, detail="Database connection failed")
