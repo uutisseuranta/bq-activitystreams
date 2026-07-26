@@ -15,8 +15,7 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: |
-          pip install defusedxml -r requirements-dev.txt
-          find src -name "requirements.txt" -exec pip install -r {} \;
+          pip install defusedxml -r requirements.txt -r requirements-dev.txt
       - name: Run Ruff style and security checks
         run: ruff check . --output-format=github
       - run: bash unit-test.sh
@@ -62,15 +61,15 @@ jobs:
         # GITHUB_TOKEN tarvitaan jotta GitHub API ei rate-limit-pysäytä
         # tflint-ruleset-google -pluginin latausta
         run: tflint --init
-        working-directory: terraform/
+        working-directory: ./
         env:
           GITHUB_TOKEN: ${{ github.token }}
       - name: tflint – Terraform lint
         run: tflint --format compact --no-color
-        working-directory: terraform/
+        working-directory: ./
       - name: Checkov – Terraform staattinen analyysi
         run: |
-          checkov -d terraform/ \
+          checkov -d ./ \
             --framework terraform \
             --output github_failed_only \
             --hard-fail-on HIGH \
@@ -101,10 +100,10 @@ jobs:
         with:
           terraform_version: "1.9.8"
       - name: terraform init (no backend)
-        run: terraform -chdir=terraform init -backend=false
+        run: terraform init -backend=false
       - name: terraform plan
         run: |
-          terraform -chdir=terraform plan -no-color 2>&1 | tee -a $GITHUB_STEP_SUMMARY
+          terraform plan -no-color 2>&1 | tee -a $GITHUB_STEP_SUMMARY
         env:
           TF_VAR_gcp_project: uutisseuranta-activitystreams
           # GITHUB_TOKEN: ephemeral, actions:read + contents:read scope.
@@ -161,26 +160,29 @@ jobs:
       - name: Deploy query-api
         run: |
           gcloud run deploy query-api \
-            --source src/query_api \
+            --source . \
             --region europe-north1 \
             --project uutisseuranta-activitystreams \
-            --base-image python312
+            --base-image python312 \
+            --command "uvicorn query_api:app --host 0.0.0.0 --port 8080"
 
       - name: Deploy write-api
         run: |
           gcloud run deploy write-api \
-            --source src/write_api \
+            --source . \
             --region europe-north1 \
             --project uutisseuranta-activitystreams \
-            --base-image python312
+            --base-image python312 \
+            --command "uvicorn write_api:app --host 0.0.0.0 --port 8080"
 
       - name: Deploy og-scraper
         run: |
           gcloud run deploy og-scraper \
-            --source src/og_scraper \
+            --source . \
             --region europe-north1 \
             --project uutisseuranta-activitystreams \
-            --base-image python312
+            --base-image python312 \
+            --command "uvicorn og_scraper:app --host 0.0.0.0 --port 8080"
 
       - name: Post-deploy healthcheck ja automaattinen rollback
         run: |

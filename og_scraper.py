@@ -1,43 +1,33 @@
 import datetime
 import hashlib
 import json
-import logging
 import os
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, HTTPException, Response
+import og_parser
+from fastapi import FastAPI, HTTPException, Request, Response
+from gcp_logging import get_logger
 from google.cloud import bigquery
 from pydantic import BaseModel
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
-# Käytetään jaettua OG-parseria
-from shared import og_parser
+logger = get_logger("og-scraper")
 
-
-# JsonFormatter toistuu identtisenä og_enrichment_job-, og_scraper- ja query_api-palveluissa.
-# Tämä on tietoinen arkkitehtuuripäätös: Cloud Run -palvelut ovat toisistaan riippumattomia
-# deployable-yksikköjä. Jakaminen shared/-moduuliin lisäisi build-riippuvuuden ilman selvää hyötyä,
-# koska formatter on yksinkertainen (~10 riviä) eikä muutu usein.
-# Päätös kirjattu: TECHNICAL_DESIGN.md §4 "Suunnittelu- ja kehityskäytännöt".
-class JsonFormatter(logging.Formatter):
-    def format(self, record):
-        # Cloud Logging tunnistaa 'severity'-kentän automaattisesti logtasoksi
-        log_entry = {
-            "severity": record.levelname,
-            "message": record.getMessage(),
-            "logger": record.name,
-            # ISO 8601 UTC — Cloud Logging edellyttää Z-päätettä (ei +00:00)
-            "time": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
-        }
-        if record.exc_info:
-            log_entry["exception"] = self.formatException(record.exc_info)
-        return json.dumps(log_entry, ensure_ascii=False)
-
-handler = logging.StreamHandler()
-handler.setFormatter(JsonFormatter())
-logging.basicConfig(level=logging.INFO, handlers=[handler], force=True)
-logger = logging.getLogger("og-scraper")
-
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="ActivityStreams OG Scraper", version="1.0.0")
+app.state.limiter = limiter
+
+@app.exception_handler(RateLimitExceeded)
+async def custom_rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
+    response = Response(
+        status_code=429,
+        content=json.dumps({"error": f"Rate limit exceeded: {exc.detail}"}),
+        media_type="application/json"
+    )
+    response.headers["Retry-After"] = "60"
+    return response
 
 PROJECT = os.getenv("GCP_PROJECT")
 DATASET = os.getenv("BQ_DATASET", "activitystreams")
@@ -67,7 +57,8 @@ def readyz():
 
 
 @app.post("/ap/scrape", status_code=210)  # Standardissa palautetaan 201 tai 200, tiketti pyytää 201
-def scrape_url(req: ScrapeRequest, response: Response):
+@limiter.limit("60/minute")
+def scrape_url(request: Request, req: ScrapeRequest, response: Response):
     url = req.url.strip()
 
     # Validoi URL syntaksi — estetään tyhjät ja ei-HTTP(S)-protokollat ennen verkkopyyntöä

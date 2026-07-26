@@ -246,8 +246,9 @@ HTTP-statuskoodit autentikaatiovirheissä:
 API-rajapintojen kuormitusta ja BigQuery-kustannuksia suojataan FastAPI-sovelluksissa `slowapi`-kirjaston avulla.
 
 #### Rajoituspolitiikka ja rajat:
-- **`GET /ap/outbox` (query-api):** Rajoitettu 60 pyyntöön minuutissa per IP-osoite (anonyymit pyynnöt). Tarkistus suoritetaan sovelluksessa *ennen* BigQuery-kyselyn tekemistä, jotta estetään kyselykustannusten hallitsematon kasvu.
+- **`GET /ap/outbox` (query-api):** Dynaaminen rajoitus. Anonyymit pyynnöt on rajoitettu 60 pyyntöön minuutissa per IP-osoite. Autentikoiduille käyttäjille (OIDC JWT) raja on korotettu arvoon 120 pyyntöä minuutissa per käyttäjä (UID). Tarkistus suoritetaan sovelluksessa *ennen* BigQuery-kyselyn tekemistä, jotta estetään kyselykustannusten hallitsematon kasvu.
 - **`POST /ap/activities` (write-api):** Rajoitettu 30 pyyntöön minuutissa per käyttäjä (UID).
+- **`POST /ap/scrape` (og-scraper):** Rajoitettu 60 pyyntöön minuutissa per IP-osoite.
 - **Ylitystilanne:** API palauttaa HTTP-statuskoodin `429 Too Many Requests` ja `Retry-After`-otsakkeen, joka ilmaisee odotusajan sekunteina.
 
 > [!NOTE]
@@ -489,7 +490,7 @@ GROUP BY root_url
 
 ### Jaettu structured logging -moduuli (#60)
 
-Kaikki Cloud Run -palvelut ja -jobit käyttävät yhtenäistä structured logging -moduulia (`src/lib/gcp_logging.py`), joka muuntaa lokit JSON-muotoisiksi.
+Kaikki Cloud Run -palvelut ja -jobit käyttävät yhtenäistä structured logging -moduulia (`gcp_logging.py`), joka muuntaa lokit JSON-muotoisiksi.
 - **Severity-kenttä:** GCP Cloud Logging tunnistaa automaattisesti logitason (`INFO`, `WARNING`, `ERROR`, `CRITICAL`) lokirivistä.
 - **Trace-korrelaatio:** Jos `CLOUD_TRACE_CONTEXT`-ympäristömuuttuja on saatavilla, lokiriveihin injektoidaan `"logging.googleapis.com/trace"`-kenttä Cloud Trace -integraatiota varten.
 

@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 
 google.cloud.bigquery.Client = MagicMock()  # noqa: E402
 
-from query_api.main import _count_cache, app  # noqa: E402
+from query_api import _count_cache, app  # noqa: E402
 
 
 def create_mock_query_job(rows):
@@ -30,8 +30,12 @@ class TestOutboxQuery(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
         _count_cache.clear()
+        # Otetaan rate limiting pois päältä muissa testeissä, jotta ne eivät vahingossa kuluta
+        # globaalia/instanssikohtaista in-memory -rajaa ja aiheuta muiden testien epäonnistumista.
+        from query_api import limiter
+        limiter.enabled = False
 
-    @patch("query_api.main.bq_client")
+    @patch("query_api.bq_client")
     def test_outbox_success(self, mock_bq):
         mock_row = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
@@ -84,7 +88,7 @@ class TestOutboxQuery(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("Parameter 'n' must be between 1 and 500", response.json()["detail"])
 
-    @patch("query_api.main.bq_client")
+    @patch("query_api.bq_client")
     def test_outbox_database_error(self, mock_bq):
         mock_bq.query.side_effect = Exception("BigQuery connection error")
         response = self.client.get("/ap/outbox?tag=politiikka")
@@ -96,8 +100,10 @@ class TestCacheBehavior(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
         _count_cache.clear()
+        from query_api import limiter
+        limiter.enabled = False
 
-    @patch("query_api.main.bq_client")
+    @patch("query_api.bq_client")
     def test_total_items_cache(self, mock_bq):
         mock_row = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
@@ -136,14 +142,14 @@ class TestReadyzAndHealthz(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ok"})
 
-    @patch("query_api.main.bq_client")
+    @patch("query_api.bq_client")
     def test_readyz_success(self, mock_bq):
         mock_bq.list_datasets.return_value = []
         response = self.client.get("/readyz")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ready"})
 
-    @patch("query_api.main.bq_client")
+    @patch("query_api.bq_client")
     def test_readyz_failure(self, mock_bq):
         mock_bq.list_datasets.side_effect = Exception("Auth failed")
         response = self.client.get("/readyz")
@@ -155,8 +161,10 @@ class TestReactionAggregationPrep(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
         _count_cache.clear()
+        from query_api import limiter
+        limiter.enabled = False
 
-    @patch("query_api.main.bq_client")
+    @patch("query_api.bq_client")
     def test_reaction_aggregation_mapping(self, mock_bq):
         """Valmisteleva testi agreeCount/disagreeCount -kenttien parsimiselle."""
         mock_row = {
@@ -187,3 +195,78 @@ class TestReactionAggregationPrep(unittest.TestCase):
         self.assertEqual(item["likes"], {"type": "Collection", "totalItems": 12})
         self.assertEqual(item["dislikes"], {"type": "Collection", "totalItems": 4})
         self.assertEqual(item["_uutisseuranta:agreeCount"], 16)
+
+
+class TestRateLimiting(unittest.TestCase):
+    def setUp(self):
+        self.client = TestClient(app)
+        from query_api import limiter
+        limiter.enabled = True
+
+    @patch("query_api.bq_client")
+    def test_rate_limit_outbox(self, mock_bq):
+        # Nollataan limiitit jokaiselle testille (instanssikohtainen in-memory)
+        from query_api import limiter
+        limiter.reset()
+        mock_row = {
+            "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
+            "source": "rss",
+            "published": datetime.datetime(2026, 7, 3, 10, 0, tzinfo=datetime.timezone.utc),
+            "updated": None,
+            "like_count": 0,
+            "dislike_count": 0,
+            "object_json": '{"id": "some-id", "type": "Article"}'
+        }
+        def query_side_effect(sql, job_config=None):
+            if "COUNT(*) AS c" in sql:
+                return create_mock_query_job([{"c": 1}])
+            return create_mock_query_job([mock_row])
+        mock_bq.query.side_effect = query_side_effect
+
+        # Suoritetaan 60 pyyntöä
+        for _ in range(60):
+            response = self.client.get("/ap/outbox?tag=politiikka")
+            self.assertEqual(response.status_code, 200)
+
+        # 61. pyyntö antaa 429 Too Many Requests
+        response = self.client.get("/ap/outbox?tag=politiikka")
+        self.assertEqual(response.status_code, 429)
+        self.assertIn("Retry-After", response.headers)
+
+    @patch("query_api.bq_client")
+    def test_dynamic_rate_limiting_authenticated(self, mock_bq):
+        from query_api import limiter
+        limiter.reset()
+        mock_row = {
+            "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
+            "source": "rss",
+            "published": datetime.datetime(2026, 7, 3, 10, 0, tzinfo=datetime.timezone.utc),
+            "updated": None,
+            "like_count": 0,
+            "dislike_count": 0,
+            "object_json": '{"id": "some-id", "type": "Article"}'
+        }
+        def query_side_effect(sql, job_config=None):
+            if "COUNT(*) AS c" in sql:
+                return create_mock_query_job([{"c": 1}])
+            return create_mock_query_job([mock_row])
+        mock_bq.query.side_effect = query_side_effect
+
+        # Autentikoitu käyttäjä ("mock-test") saa tehdä 120 pyyntöä
+        headers = {"Authorization": "Bearer mock-test"}
+        with patch.dict(os.environ, {"ALLOW_MOCK_AUTH": "true"}):
+            for _ in range(120):
+                response = self.client.get("/ap/outbox?tag=politiikka", headers=headers)
+                self.assertEqual(response.status_code, 200)
+
+            # 121. pyyntö antaa 429
+            response = self.client.get("/ap/outbox?tag=politiikka", headers=headers)
+            self.assertEqual(response.status_code, 429)
+
+    @patch("query_api.bq_client")
+    def test_invalid_token_returns_401(self, mock_bq):
+        # Virheellinen tai vanhentunut token antaa 401 Unauthorized
+        headers = {"Authorization": "Bearer invalid-or-expired-token"}
+        response = self.client.get("/ap/outbox?tag=politiikka", headers=headers)
+        self.assertEqual(response.status_code, 401)
+        self.assertIn("Invalid OIDC token", response.json()["detail"])

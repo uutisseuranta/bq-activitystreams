@@ -2,7 +2,7 @@
 # rss_fetch_job.sh — RSS-hakuajurin käynnistin
 # Vastuu: Alustaa ympäristön ja käynnistää rss_fetch_job-pääohjelman.
 # Ympäristö: Paikallinen tai Cloud Run Job.
-# Riippuvuudet: fetch_helpers.sh, python3, src/rss_fetch_job/main.py.
+# Riippuvuudet: fetch_helpers.sh, python3, rss_fetch_job.py.
 
 # Otetaan käyttöön keskitetty alustuslogiikka (venv ja PYTHONPATH)
 # shellcheck source=../fetch_helpers.sh
@@ -13,4 +13,4 @@ check_env_vars "GCP_PROJECT" "BQ_DATASET" "RSS_FEEDS"
 
 # Suoritetaan Python-pohjainen haku
 echo "Käynnistetään rss_fetch_job..."
-python3 src/rss_fetch_job/main.py
+python3 rss_fetch_job.py

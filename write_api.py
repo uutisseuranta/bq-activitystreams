@@ -26,38 +26,58 @@
 #
 # Muutoshistoria:
 #   #33/#48 – Lisätty Dislike-käsittelijä ja toggle-logiikka (Like ↔ Dislike)
+import base64
 import datetime
 import json
-import logging
 import os
 from typing import Any, Dict, Optional
 
 import ulid
-from fastapi import FastAPI, Header, HTTPException, Response
+from fastapi import FastAPI, Header, HTTPException, Request, Response
+from gcp_logging import get_logger
 from google.auth.transport import requests as google_requests
 from google.cloud import bigquery
 from google.oauth2 import id_token
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
+logger = get_logger("write-api")
 
-# Lokitus
-class JsonFormatter(logging.Formatter):
-    def format(self, record):
-        log_entry = {
-            "severity": record.levelname,
-            "message": record.getMessage(),
-            "logger": record.name,
-            "time": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
-        }
-        if record.exc_info:
-            log_entry["exception"] = self.formatException(record.exc_info)
-        return json.dumps(log_entry, ensure_ascii=False)
+def get_user_id(request: Request) -> str:
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return get_remote_address(request)
+    token = auth_header.split(" ")[1]
+    if not token or token == "mock-test":
+        return "test-user-sub-12345"
+    # HUOM: get_user_id purkaa JWT-payloadin manuaalisesti base64-kirjastolla ilman allekirjoituksen
+    # verifiointia, koska oikea verify_auth_token()-kutsu tehdään myöhemmin reitin käsittelijässä.
+    # Tämä nopeuttaa rate limiting -päätöksen tekoa, mutta se ei ole tietoturvatarkistus.
+    try:
+        payload_part = token.split(".")[1]
+        payload_part += "=" * ((4 - len(payload_part) % 4) % 4)
+        payload = json.loads(base64.b64decode(payload_part).decode("utf-8"))
+        sub = payload.get("sub")
+        if sub:
+            return sub
+    except Exception:
+        pass
+    return get_remote_address(request)
 
-handler = logging.StreamHandler()
-handler.setFormatter(JsonFormatter())
-logging.basicConfig(level=logging.INFO, handlers=[handler], force=True)
-logger = logging.getLogger("write-api")
-
+limiter = Limiter(key_func=get_user_id)
 app = FastAPI(title="ActivityStreams Write API", version="1.0.0")
+app.state.limiter = limiter
+
+@app.exception_handler(RateLimitExceeded)
+async def custom_rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
+    response = Response(
+        status_code=429,
+        content=json.dumps({"error": f"Rate limit exceeded: {exc.detail}"}),
+        media_type="application/json"
+    )
+    response.headers["Retry-After"] = "60"
+    return response
 
 # Ympäristömuuttujat
 PROJECT = os.getenv("GCP_PROJECT")
@@ -335,7 +355,8 @@ def handle_reaction(act_type: str, actor_id: str, obj_id: str,
 
 
 @app.post("/ap/activities")
-def post_activity(activity: Dict[str, Any], authorization: Optional[str] = Header(None)):
+@limiter.limit("30/minute")
+def post_activity(request: Request, activity: Dict[str, Any], authorization: Optional[str] = Header(None)):
     sub = verify_auth_token(authorization)
     actor_id = f"https://activitystreams.uutisseuranta.net/ap/users/{sub}"
     activity["actor"] = actor_id

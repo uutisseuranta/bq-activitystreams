@@ -14,15 +14,17 @@ from fastapi.testclient import TestClient
 
 google.cloud.bigquery.Client = MagicMock()  # noqa: E402
 
-from og_scraper.main import app  # noqa: E402
+from og_scraper import app  # noqa: E402
 
 
 class TestOgScraper(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
+        from og_scraper import limiter
+        limiter.enabled = False
 
-    @patch("og_scraper.main.bq_client")
-    @patch("og_scraper.main.og_parser")
+    @patch("og_scraper.bq_client")
+    @patch("og_scraper.og_parser")
     def test_scrape_success(self, mock_parser, mock_bq):
         mock_parser.robots_check.return_value = True
         mock_parser.fetch_url_stream.return_value = "<html></html>"
@@ -49,7 +51,7 @@ class TestOgScraper(unittest.TestCase):
 
         mock_bq.query.assert_called_once()
 
-    @patch("og_scraper.main.og_parser")
+    @patch("og_scraper.og_parser")
     def test_scrape_robots_forbidden(self, mock_parser):
         mock_parser.robots_check.return_value = False
 
@@ -59,7 +61,7 @@ class TestOgScraper(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertIn("Forbidden by robots.txt", response.json()["detail"])
 
-    @patch("og_scraper.main.og_parser")
+    @patch("og_scraper.og_parser")
     def test_scrape_ssrf_forbidden(self, mock_parser):
         mock_parser.robots_check.return_value = True
         mock_parser.fetch_url_stream.side_effect = PermissionError("SSRF error")
@@ -70,7 +72,7 @@ class TestOgScraper(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertIn("Forbidden: SSRF validation failed", response.json()["detail"])
 
-    @patch("og_scraper.main.og_parser")
+    @patch("og_scraper.og_parser")
     def test_scrape_timeout(self, mock_parser):
         mock_parser.robots_check.return_value = True
         mock_parser.fetch_url_stream.side_effect = Exception("Read timeout occurred")
@@ -81,7 +83,7 @@ class TestOgScraper(unittest.TestCase):
         self.assertEqual(response.status_code, 504)
         self.assertIn("Gateway Timeout", response.json()["detail"])
 
-    @patch("og_scraper.main.og_parser")
+    @patch("og_scraper.og_parser")
     def test_scrape_bad_gateway(self, mock_parser):
         mock_parser.robots_check.return_value = True
         mock_parser.fetch_url_stream.side_effect = Exception("Bad status 500")
@@ -97,3 +99,37 @@ class TestOgScraper(unittest.TestCase):
         response = self.client.post("/ap/scrape", json=payload)
         self.assertEqual(response.status_code, 400)
         self.assertIn("Invalid URL format", response.json()["detail"])
+
+
+class TestScraperRateLimiting(unittest.TestCase):
+    def setUp(self):
+        self.client = TestClient(app)
+        from og_scraper import limiter
+        limiter.enabled = True
+        limiter.reset()
+
+    @patch("og_scraper.bq_client")
+    @patch("og_scraper.og_parser")
+    def test_scrape_rate_limiting(self, mock_parser, mock_bq):
+        mock_parser.robots_check.return_value = True
+        mock_parser.fetch_url_stream.return_value = "<html></html>"
+        mock_parser.parse_og_metadata.return_value = {
+            "title": "Uutinen otsikolla",
+            "description": "Artikkelin hieno tiivistelmä",
+            "image": "https://example.com/kuva.jpg",
+            "site_name": "Testimedia"
+        }
+        mock_parser.longer = lambda x, y: x or y
+        mock_bq.query.return_value = MagicMock()
+
+        payload = {"url": "https://example.com/uutinen"}
+
+        # 60 pyyntöä sallittu
+        for _ in range(60):
+            response = self.client.post("/ap/scrape", json=payload)
+            self.assertEqual(response.status_code, 201)
+
+        # 61. pyyntö antaa 429
+        response = self.client.post("/ap/scrape", json=payload)
+        self.assertEqual(response.status_code, 429)
+        self.assertIn("Retry-After", response.headers)

@@ -1,39 +1,108 @@
+import base64
+import contextvars
 import datetime
 import json
-import logging
 import os
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi import FastAPI, Header, HTTPException, Query, Request, Response
+from gcp_logging import get_logger
+from google.auth.transport import requests as google_requests
 from google.cloud import bigquery
+from google.oauth2 import id_token
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
+logger = get_logger("query-api")
 
-# JsonFormatter toistuu identtisenä og_enrichment_job-, og_scraper- ja query_api-palveluissa.
-# Tämä on tietoinen arkkitehtuuripäätös: Cloud Run -palvelut ovat toisistaan riippumattomia
-# deployable-yksikköjä. Jakaminen shared/-moduuliin lisäisi build-riippuvuuden ilman selvää hyötyä,
-# koska formatter on yksinkertainen (~10 riviä) eikä muutu usein.
-# Päätös kirjattu: TECHNICAL_DESIGN.md §4 "Suunnittelu- ja kehityskäytännöt".
-class JsonFormatter(logging.Formatter):
-    def format(self, record):
-        # Cloud Logging tunnistaa 'severity'-kentän automaattisesti logtasoksi
-        log_entry = {
-            "severity": record.levelname,
-            "message": record.getMessage(),
-            "logger": record.name,
-            # ISO 8601 UTC — Cloud Logging edellyttää Z-päätettä (ei +00:00)
-            "time": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
-        }
-        if record.exc_info:
-            log_entry["exception"] = self.formatException(record.exc_info)
-        return json.dumps(log_entry, ensure_ascii=False)
+current_request = contextvars.ContextVar("current_request")
 
-handler = logging.StreamHandler()
-handler.setFormatter(JsonFormatter())
-logging.basicConfig(level=logging.INFO, handlers=[handler], force=True)
-logger = logging.getLogger("query-api")
+def get_query_user_or_ip(request: Request) -> str:
+    current_request.set(request)
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        try:
+            token = auth_header.split(" ")[1]
+            if token == "mock-test":
+                return "uid:test-user-sub-12345"
+            payload_part = token.split(".")[1]
+            payload_part += "=" * ((4 - len(payload_part) % 4) % 4)
+            payload = json.loads(base64.b64decode(payload_part).decode("utf-8"))
+            sub = payload.get("sub")
+            if sub:
+                return f"uid:{sub}"
+        except Exception:
+            pass
+    return get_remote_address(request)
 
+def get_outbox_limit() -> str:
+    req = current_request.get(None)
+    if req:
+        key = get_query_user_or_ip(req)
+        if key.startswith("uid:"):
+            return "120/minute"
+    return "60/minute"
+
+limiter = Limiter(key_func=get_query_user_or_ip)
 app = FastAPI(title="ActivityStreams Query API", version="1.0.0")
+app.state.limiter = limiter
+
+@app.middleware("http")
+async def add_request_context_middleware(request: Request, call_next):
+    current_request.set(request)
+    response = await call_next(request)
+    return response
+
+@app.exception_handler(RateLimitExceeded)
+async def custom_rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
+    response = Response(
+        status_code=429,
+        content=json.dumps({"error": f"Rate limit exceeded: {exc.detail}"}),
+        media_type="application/json"
+    )
+    response.headers["Retry-After"] = "60"
+    return response
+
+# Google OIDC tokenin vahvistusfunktiot
+def verify_google_token(token: str, audience: str) -> Optional[Dict[str, Any]]:
+    try:
+        return id_token.verify_oauth2_token(
+            token,
+            google_requests.Request(),
+            audience=audience
+        )
+    except Exception:
+        return None
+
+def verify_auth_token_optional(auth_header: Optional[str]) -> Optional[str]:
+    if not auth_header:
+        return None
+    if not auth_header.startswith("Bearer "):
+        logger.warning("Autentikaatio hylätty: Virheellinen Authorization-formaatti")
+        raise HTTPException(status_code=401, detail="Invalid Authorization header format.")
+
+    token = auth_header.split(" ")[1]
+    allow_mock = os.getenv("ALLOW_MOCK_AUTH", "false").lower() == "true"
+    if allow_mock and token == "mock-test":
+        logger.warning("Mock-autentikaatio käytössä — vain kehitysympäristöön")
+        return "test-user-sub-12345"
+
+    project_id = os.getenv("GCP_PROJECT", "uutisseuranta-activitystreams")
+    svc_url = os.getenv("CLOUD_RUN_SERVICE_URL", "")
+    allowed_audiences = [a for a in [project_id, svc_url] if a]
+
+    for aud in allowed_audiences:
+        payload = verify_google_token(token, aud)
+        if payload:
+            sub = payload.get("sub")
+            if not sub:
+                raise HTTPException(status_code=401, detail="Token lacks 'sub' claim.")
+            return sub
+
+    logger.warning("Autentikaatio hylätty: OIDC-tokenia ei voitu vahvistaa")
+    raise HTTPException(status_code=401, detail="Invalid OIDC token.")
 
 # Globaalit ympäristömuuttujat — luetaan kerran käynnistyksen yhteydessä
 PROJECT = os.getenv("GCP_PROJECT")
@@ -92,10 +161,15 @@ def get_total_items_cached(tags: List[str]) -> int:
 
 
 @app.get("/ap/outbox")
+@limiter.limit(get_outbox_limit)
 def get_outbox(
+    request: Request,
     tag: List[str] = Query(default=None, description="Haettavat tagit (toistuva parametri)"),
-    n: int = Query(default=50, description="Palautettavien kohteiden määrä (1-500)")
+    n: int = Query(default=50, description="Palautettavien kohteiden määrä (1-500)"),
+    authorization: Optional[str] = Header(None)
 ):
+    # Verifioidaan token jos sellainen on toimitettu
+    verify_auth_token_optional(authorization)
     # 1. Validoidaan tagit
     if not tag:
         raise HTTPException(

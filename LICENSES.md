@@ -68,4 +68,4 @@ Projektissa käytetään laajalti Pythonin standardikirjastoa (`logging`, `json`
 | **Ylläpitäjä** | Python Software Foundation (PSF) |
 | **Maa** | 🇺🇸 Yhdysvallat |
 
-`JsonFormatter`-lokitusluokka (käytössä jokaisessa `src/*/main.py`) rakentuu yksinomaan standardikirjaston `logging`-, `json`- ja `datetime`-moduulien päälle — ei kolmannen osapuolen riippuvuuksia. Päätös on kirjattu `TECHNICAL_DESIGN.md`:n Lokitus-osiossa.
+`JsonFormatter`-lokitusluokka (käytössä lokitusjärjestelmässä `gcp_logging.py`) rakentuu yksinomaan standardikirjaston `logging`-, `json`- ja `datetime`-moduulien päälle — ei kolmannen osapuolen riippuvuuksia. Päätös on kirjattu `TECHNICAL_DESIGN.md`:n Lokitus-osiossa.
