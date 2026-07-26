@@ -270,3 +270,71 @@ class TestRateLimiting(unittest.TestCase):
         response = self.client.get("/ap/outbox?tag=politiikka", headers=headers)
         self.assertEqual(response.status_code, 401)
         self.assertIn("Invalid OIDC token", response.json()["detail"])
+
+
+class TestCheckStatus(unittest.TestCase):
+    def setUp(self):
+        self.client = TestClient(app)
+        from query_api import limiter
+        limiter.enabled = False
+
+    def test_check_status_invalid_url(self):
+        response = self.client.get("/ap/check-status?url=invalid-url")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Invalid URL", response.json()["detail"])
+
+        response = self.client.get("/ap/check-status?url=ftp://example.com")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Invalid URL scheme", response.json()["detail"])
+
+    @patch("query_api.httpx.AsyncClient")
+    def test_check_status_alive(self, mock_client_cls):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+
+        mock_client = MagicMock()
+        mock_client.__aenter__.return_value.head.return_value = mock_response
+        mock_client_cls.return_value = mock_client
+
+        response = self.client.get("/ap/check-status?url=https://example.com/alive")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"alive": True})
+
+    @patch("query_api.update_archive_url_in_bq")
+    @patch("query_api.httpx.AsyncClient")
+    def test_check_status_dead_triggers_archive(self, mock_client_cls, mock_update_bq):
+        mock_client = MagicMock()
+        mock_client.__aenter__.return_value.head.side_effect = Exception("Connection timeout")
+        mock_client_cls.return_value = mock_client
+
+        response = self.client.get("/ap/check-status?url=https://example.com/dead")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"alive": False})
+
+        # Verify that background BQ archiver task is queued/called
+        mock_update_bq.assert_called_once_with("https://example.com/dead", "https://web.archive.org/web/*/https://example.com/dead")
+
+    @patch("query_api.bq_client")
+    def test_get_stats_success(self, mock_bq):
+        import query_api
+        query_api._stats_cache = None
+
+        mock_result_sources = MagicMock()
+        mock_result_sources.cnt = 164
+        mock_result_articles = MagicMock()
+        mock_result_articles.cnt = 11842
+
+        mock_bq.query.side_effect = [
+            MagicMock(result=lambda: [mock_result_sources]),
+            MagicMock(result=lambda: [mock_result_articles])
+        ]
+
+        response = self.client.get("/ap/stats")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {
+            "sources_count": 164,
+            "articles_last_24h": 11842,
+            "update_interval_minutes": 5
+        })
+
+

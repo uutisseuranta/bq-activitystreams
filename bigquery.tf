@@ -35,10 +35,10 @@ resource "google_bigquery_dataset" "main" {
   }
 }
 
-# query-api: read-only activitystreams-datasettiin
+# query-api: kirjoitusoikeus activitystreams-datasettiin (arkistolinkkien päivitystä varten / UC-24)
 resource "google_bigquery_dataset_iam_member" "query_api_bq_viewer" {
   dataset_id = google_bigquery_dataset.main.dataset_id
-  role       = "roles/bigquery.dataViewer"
+  role       = "roles/bigquery.dataEditor"
   member     = "serviceAccount:${google_service_account.query_api.email}"
 }
 

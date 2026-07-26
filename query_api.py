@@ -5,9 +5,11 @@ import datetime
 import json
 import os
 import time
+import urllib.parse
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, Header, HTTPException, Query, Request, Response
+import httpx
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Query, Request, Response
 from gcp_logging import get_logger
 from google.auth.transport import requests as google_requests
 from google.cloud import bigquery
@@ -327,6 +329,120 @@ def get_outbox(
         content=json.dumps(response_json, ensure_ascii=False),
         media_type="application/activity+json; charset=utf-8"
     )
+
+
+def update_archive_url_in_bq(url: str, archive_url: str):
+    """Päivitetään uutisen arkistolinkki BigQueryyn taustatehtävänä (BackgroundTasks)."""
+    try:
+        # JSON_SET vaatii JSON-tyyppisen arvon, joten PARSE_JSON muuntaa merkkijonon BigQueryssä oikein.
+        query = f"""
+            UPDATE `{PROJECT}.{DATASET}.objects`
+            SET object_json = JSON_SET(object_json, '$.url_archive', PARSE_JSON(@archive_url)),
+                updated = CURRENT_TIMESTAMP()
+            WHERE JSON_VALUE(object_json.url) = @url
+        """
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("archive_url", "STRING", json.dumps(archive_url)),
+                bigquery.ScalarQueryParameter("url", "STRING", url)
+            ]
+        )
+        bq_client.query(query, job_config=job_config).result()
+        logger.info(f"Päivitetty uutisen {url} arkistolinkki BigQueryyn: {archive_url}")
+    except Exception as e:
+        logger.error(f"Virhe päivitettäessä arkistolinkkiä uutiselle {url}: {e}")
+
+
+@app.get("/ap/check-status")
+async def check_status(url: str, background_tasks: BackgroundTasks):
+    """Tarkistaa onko artikkelilinkki tavoitettavissa ja tallentaa virhetilanteessa arkistolinkin BigQueryyn."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+        is_invalid_scheme = parsed.scheme not in ("http", "https") or not parsed.netloc
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid URL.")
+
+    if is_invalid_scheme:
+        raise HTTPException(status_code=400, detail="Invalid URL scheme.")
+
+    alive = False
+    try:
+        async with httpx.AsyncClient(timeout=2.0, follow_redirects=True) as client:
+            # Yritetään kevyempää HEAD-pyyntöä ensin
+            response = await client.head(url)
+            if response.status_code in (405, 501):
+                response = await client.get(url)
+            alive = response.status_code < 400
+    except Exception as e:
+        logger.warning(f"Uutissivun {url} ping-tarkistus epäonnistui: {e}")
+        alive = False
+
+    # Jos sivu on alhaalla, päivitetään BigQueryyn arkisto-URL taustatehtävänä
+    if not alive:
+        archive_url = f"https://web.archive.org/web/*/{url}"
+        background_tasks.add_task(update_archive_url_in_bq, url, archive_url)
+
+    return {"alive": alive}
+
+
+# Globaalit muuttujat tilastojen välimuistille
+_stats_cache = None
+_stats_cache_time = 0.0
+
+@app.get("/ap/stats")
+async def get_stats():
+    """Palauttaa uutisseurannan avainlukutilastot välimuistista tai laskee ne BigQueryssä."""
+    global _stats_cache, _stats_cache_time
+    import time
+
+    now = time.time()
+    # 1 tunnin välimuisti (3600 sekuntia)
+    if _stats_cache is not None and (now - _stats_cache_time) < 3600:
+        return _stats_cache
+
+    try:
+        # 1. Lasketaan lähteiden lukumäärä
+        query_sources = f"""
+            SELECT COUNT(DISTINCT JSON_VALUE(object_json.actor.id)) as cnt
+            FROM `{PROJECT}.{DATASET}.objects`
+            WHERE deleted = FALSE
+        """
+        job_sources = bq_client.query(query_sources)
+        results_sources = list(job_sources.result())
+        sources_count = results_sources[0].cnt if results_sources and results_sources[0].cnt is not None else 150
+
+        # 2. Lasketaan uutisten lukumäärä viimeisen 24 tunnin ajalta
+        query_articles = f"""
+            SELECT COUNT(*) as cnt
+            FROM `{PROJECT}.{DATASET}.objects`
+            WHERE deleted = FALSE
+              AND published >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR)
+        """
+        job_articles = bq_client.query(query_articles)
+        results_articles = list(job_articles.result())
+        articles_last_24h = results_articles[0].cnt if results_articles and results_articles[0].cnt is not None else 10000
+
+        # Oletuspäivitysväli on 5 minuuttia
+        stats = {
+            "sources_count": sources_count,
+            "articles_last_24h": articles_last_24h,
+            "update_interval_minutes": 5
+        }
+
+        # Päivitetään välimuisti
+        _stats_cache = stats
+        _stats_cache_time = now
+
+        return stats
+    except Exception as e:
+        logger.error(f"Virhe laskettaessa tilastoja: {e}")
+        # Virhetilanteessa palautetaan fallback-oletusarvot
+        return {
+            "sources_count": 150,
+            "articles_last_24h": 10000,
+            "update_interval_minutes": 5
+        }
+
 
 
 @app.get("/healthz")

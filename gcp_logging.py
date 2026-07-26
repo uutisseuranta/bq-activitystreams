@@ -85,7 +85,7 @@ def send_ops_notification(job_name: str, status: str, details: str = None) -> No
     url = "https://api.github.com/repos/uutisseuranta/ops/dispatches"
     req_data = json.dumps(payload).encode("utf-8")
 
-    req = urllib.request.Request(
+    req = urllib.request.Request(  # noqa: S310
         url,
         data=req_data,
         headers={
