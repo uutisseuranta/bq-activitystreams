@@ -1,4 +1,6 @@
 # src/write_api/main.py
+# Käyttötapaus UC-6: Tykkäykset ja reaktiot — ks. TECHNICAL_DESIGN.md
+# Käyttötapaus UC-7: GDPR: käyttäjätietojen poisto — ks. TECHNICAL_DESIGN.md
 #
 # ActivityStreams Write API – HTTP-rajapinta aktiviteettien vastaanottamiseen
 #

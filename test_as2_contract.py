@@ -88,7 +88,10 @@ class TestAS2Contract(unittest.TestCase):
         context = item["@context"]
         self.assertTrue(isinstance(context, list))
         self.assertEqual(context[0], "https://www.w3.org/ns/activitystreams")
-        self.assertEqual(context[1], {"_uutisseuranta": "https://uutisseuranta.net/ns#"})
+        self.assertEqual(context[1], {
+            "_uutisseuranta": "https://uutisseuranta.net/ns#",
+            "dislikes": "_uutisseuranta:dislikes"
+        })
 
         # 5. Tarkistetaan reaktiolaajennukset
         self.assertIn("likes", item)

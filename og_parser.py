@@ -172,7 +172,9 @@ def get_robots_parser(url: str) -> RobotFileParser:
 
 
 def robots_check(url: str, user_agent: str = "Uutisseuranta-Bot") -> bool:
-    """Tarkistaa salliiko robots.txt haun kyseiselle URL-osoitteelle."""
+    """Tarkistaa salliiko robots.txt haun kyseiselle URL-osoitteelle.
+    Noudattaa Robots Exclusion Protocolia (RFC 9309).
+    """
     try:
         rp = get_robots_parser(url)
         return rp.can_fetch(user_agent, url) or rp.can_fetch("*", url)

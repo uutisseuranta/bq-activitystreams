@@ -1,3 +1,4 @@
+# Käyttötapaus UC-5: Uutisvirran lukeminen (Outbox) — ks. TECHNICAL_DESIGN.md
 import base64
 import contextvars
 import datetime

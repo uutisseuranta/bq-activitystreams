@@ -1,3 +1,5 @@
+# Käyttötapaus UC-2: pubDate-ttomat artikkelit — ks. TECHNICAL_DESIGN.md
+# Käyttötapaus UC-3: OG-rikastus — ks. TECHNICAL_DESIGN.md ja STANDARDS.md §4
 import datetime
 import email.utils
 import json

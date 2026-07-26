@@ -1,4 +1,5 @@
 # src/voikko_job/main.py
+# Käyttötapaus UC-4: Suomenkielinen morfologinen tägäys (Voikko) — ks. TECHNICAL_DESIGN.md
 import datetime
 import html as html_lib
 import json

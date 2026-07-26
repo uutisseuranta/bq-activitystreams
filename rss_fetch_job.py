@@ -1,4 +1,6 @@
 # src/rss_fetch_job/main.py
+# Käyttötapaus UC-1: RSS-syötteen haku ja tallennus — ks. TECHNICAL_DESIGN.md
+# Käyttötapaus UC-2: pubDate-ttomat uutiset — ks. TECHNICAL_DESIGN.md
 import datetime
 import email.utils
 import hashlib
