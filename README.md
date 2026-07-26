@@ -13,19 +13,24 @@ Ei täyttä ActivityPub-implementaatiota — tavoitteena AS2-yhteensopivuus.
 
 ## Deploy
 
-Manuaalinen deploy tehdään [`deploy/deploy.sh`](./deploy/deploy.sh)-skriptillä.
-Skripti kopioi `src/shared/`-hakemiston väliaikaisesti palveluiden build-kontekstiin
-ennen Docker-buildia (`linux/amd64`), ja siivoaa kopiot buildin jälkeen.
+Tuotantodeploy tapahtuu automaattisesti CI:ssä (`unit-tests.yml` `deploy`-job)
+jokaisella `main`-haaran pushilla. CI käyttää `gcloud run deploy --source`
+-komentoa, joka buildaa palvelun Cloud Buildin buildpackeilla suoraan
+lähdekoodista — erillisiä Dockerfileja ei tarvita.
+
+Manuaalinen re-deploy yksittäiselle palvelulle:
 
 ```bash
-bash deploy/deploy.sh
+gcloud run deploy <palvelu> \
+  --source src/<palvelu> \
+  --region europe-north1 \
+  --project uutisseuranta-activitystreams
 ```
 
-Tarvittavat esiehdot:
-- `docker` kirjautunut `europe-north1-docker.pkg.dev`-rekisteriin (`gcloud auth configure-docker`)
-- `gcloud` autentikoitu oikeaan projektiin (`uutisseuranta-activitystreams`)
-- `terraform` alustettu (`terraform init` hakemistossa `terraform/`)
-- `gh` CLI kirjautunut (`gh auth login`)
+Palvelut: `query-api`, `write-api`, `og-scraper`
+
+Bootstrap (ensimmäinen deploy tai WIF-secretien uudelleenasetus):
+katso [`terraform/DEPLOY.md`](./terraform/DEPLOY.md).
 
 ## Infrakustannukset
 
@@ -34,7 +39,6 @@ Arvioitu ~$0.10–2/kk normaalikuormalla:
 - Cloud Run Jobs: 4 ajastettua jobia (rss-fetch, og-enrichment, voikko, likes-and-updated)
 - Cloud Run Services: query-api, write-api, og-scraper (scale-to-zero)
 - Cloud Scheduler: 4 triggeriä (europe-west1)
-- Artifact Registry: Docker-kuvat
 - Secret Manager: google-client-secret
 
 ## Ristiin-linkit
