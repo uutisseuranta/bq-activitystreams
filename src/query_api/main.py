@@ -1,39 +1,33 @@
 import datetime
 import json
-import logging
 import os
 import time
 from typing import Any, Dict, List
 
-from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi import FastAPI, HTTPException, Query, Response, Request
 from google.cloud import bigquery
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
+from lib.gcp_logging import get_logger
 
-# JsonFormatter toistuu identtisenä og_enrichment_job-, og_scraper- ja query_api-palveluissa.
-# Tämä on tietoinen arkkitehtuuripäätös: Cloud Run -palvelut ovat toisistaan riippumattomia
-# deployable-yksikköjä. Jakaminen shared/-moduuliin lisäisi build-riippuvuuden ilman selvää hyötyä,
-# koska formatter on yksinkertainen (~10 riviä) eikä muutu usein.
-# Päätös kirjattu: TECHNICAL_DESIGN.md §4 "Suunnittelu- ja kehityskäytännöt".
-class JsonFormatter(logging.Formatter):
-    def format(self, record):
-        # Cloud Logging tunnistaa 'severity'-kentän automaattisesti logtasoksi
-        log_entry = {
-            "severity": record.levelname,
-            "message": record.getMessage(),
-            "logger": record.name,
-            # ISO 8601 UTC — Cloud Logging edellyttää Z-päätettä (ei +00:00)
-            "time": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
-        }
-        if record.exc_info:
-            log_entry["exception"] = self.formatException(record.exc_info)
-        return json.dumps(log_entry, ensure_ascii=False)
+logger = get_logger("query-api")
 
-handler = logging.StreamHandler()
-handler.setFormatter(JsonFormatter())
-logging.basicConfig(level=logging.INFO, handlers=[handler], force=True)
-logger = logging.getLogger("query-api")
-
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="ActivityStreams Query API", version="1.0.0")
+app.state.limiter = limiter
+
+@app.exception_handler(RateLimitExceeded)
+async def custom_rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
+    response = Response(
+        status_code=429,
+        content=json.dumps({"error": f"Rate limit exceeded: {exc.detail}"}),
+        media_type="application/json"
+    )
+    response.headers["Retry-After"] = "60"
+    return response
 
 # Globaalit ympäristömuuttujat — luetaan kerran käynnistyksen yhteydessä
 PROJECT = os.getenv("GCP_PROJECT")
@@ -92,7 +86,9 @@ def get_total_items_cached(tags: List[str]) -> int:
 
 
 @app.get("/ap/outbox")
+@limiter.limit("60/minute")
 def get_outbox(
+    request: Request,
     tag: List[str] = Query(default=None, description="Haettavat tagit (toistuva parametri)"),
     n: int = Query(default=50, description="Palautettavien kohteiden määrä (1-500)")
 ):

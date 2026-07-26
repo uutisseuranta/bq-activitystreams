@@ -30,6 +30,8 @@ class TestOutboxQuery(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
         _count_cache.clear()
+        from query_api.main import limiter
+        limiter.enabled = False
 
     @patch("query_api.main.bq_client")
     def test_outbox_success(self, mock_bq):
@@ -96,6 +98,8 @@ class TestCacheBehavior(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
         _count_cache.clear()
+        from query_api.main import limiter
+        limiter.enabled = False
 
     @patch("query_api.main.bq_client")
     def test_total_items_cache(self, mock_bq):
@@ -155,6 +159,8 @@ class TestReactionAggregationPrep(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
         _count_cache.clear()
+        from query_api.main import limiter
+        limiter.enabled = False
 
     @patch("query_api.main.bq_client")
     def test_reaction_aggregation_mapping(self, mock_bq):
@@ -187,3 +193,40 @@ class TestReactionAggregationPrep(unittest.TestCase):
         self.assertEqual(item["likes"], {"type": "Collection", "totalItems": 12})
         self.assertEqual(item["dislikes"], {"type": "Collection", "totalItems": 4})
         self.assertEqual(item["_uutisseuranta:agreeCount"], 16)
+
+
+class TestRateLimiting(unittest.TestCase):
+    def setUp(self):
+        self.client = TestClient(app)
+        from query_api.main import limiter
+        limiter.enabled = True
+
+    @patch("query_api.main.bq_client")
+    def test_rate_limit_outbox(self, mock_bq):
+        # Nollataan limiitit jokaiselle testille (instanssikohtainen in-memory)
+        from query_api.main import limiter
+        limiter.reset()
+        mock_row = {
+            "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
+            "source": "rss",
+            "published": datetime.datetime(2026, 7, 3, 10, 0, tzinfo=datetime.timezone.utc),
+            "updated": None,
+            "like_count": 0,
+            "dislike_count": 0,
+            "object_json": '{"id": "some-id", "type": "Article"}'
+        }
+        def query_side_effect(sql, job_config=None):
+            if "COUNT(*) AS c" in sql:
+                return create_mock_query_job([{"c": 1}])
+            return create_mock_query_job([mock_row])
+        mock_bq.query.side_effect = query_side_effect
+
+        # Suoritetaan 60 pyyntöä
+        for _ in range(60):
+            response = self.client.get("/ap/outbox?tag=politiikka")
+            self.assertEqual(response.status_code, 200)
+
+        # 61. pyyntö antaa 429 Too Many Requests
+        response = self.client.get("/ap/outbox?tag=politiikka")
+        self.assertEqual(response.status_code, 429)
+        self.assertIn("Retry-After", response.headers)

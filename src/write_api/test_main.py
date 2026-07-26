@@ -21,7 +21,8 @@ os.environ.setdefault("ALLOW_MOCK_AUTH", "true")
 with patch("google.cloud.bigquery.Client"):
     from fastapi.testclient import TestClient  # noqa: E402
 
-    from write_api.main import app, verify_auth_token  # noqa: E402
+    from write_api.main import app, verify_auth_token, limiter  # noqa: E402
+    limiter.enabled = False
 
 
 class TestAuthSecurity(unittest.TestCase):
@@ -571,3 +572,48 @@ class TestHealthEndpoints(unittest.TestCase):
         mock_bq.list_datasets.side_effect = Exception("BQ unreachable")
         response = self.client.get("/readyz")
         self.assertEqual(response.status_code, 503)
+
+
+class TestWriteRateLimiting(unittest.TestCase):
+    def setUp(self):
+        self.client = TestClient(app)
+        from write_api.main import limiter
+        limiter.enabled = True
+        limiter.reset()
+
+    @patch("write_api.main.bq_client")
+    @patch("write_api.main.get_object_by_id")
+    def test_activities_rate_limiting(self, mock_get_obj, mock_bq):
+        mock_get_obj.return_value = {
+            "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
+            "type": "Article",
+            "deleted": False,
+            "object_json": {"type": "Article", "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"}
+        }
+        mock_bq.insert_rows_json.return_value = []
+        mock_bq.query.return_value = patch("google.cloud.bigquery.job.QueryJob")
+
+        # 30 pyyntöä sallittu per minuutti per UID.
+        # Suoritetaan 30 Like-aktiviteettia.
+        for _ in range(30):
+            response = self.client.post(
+                "/ap/activities",
+                json={
+                    "type": "Like",
+                    "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"
+                },
+                headers={"Authorization": "Bearer mock-test"}
+            )
+            self.assertEqual(response.status_code, 201)
+
+        # 31. pyyntö antaa 429
+        response = self.client.post(
+            "/ap/activities",
+            json={
+                "type": "Like",
+                "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"
+            },
+            headers={"Authorization": "Bearer mock-test"}
+        )
+        self.assertEqual(response.status_code, 429)
+        self.assertIn("Retry-After", response.headers)

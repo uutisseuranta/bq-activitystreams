@@ -158,6 +158,12 @@ jobs:
             echo "Edellinen revisio ($svc): $REV"
           done
 
+      - name: Copy lib folder to services
+        run: |
+          cp -r src/lib src/query_api/
+          cp -r src/lib src/write_api/
+          cp -r src/lib src/og_scraper/
+
       - name: Deploy query-api
         run: |
           gcloud run deploy query-api \

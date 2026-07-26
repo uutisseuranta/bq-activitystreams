@@ -210,9 +210,14 @@ print("  ✓ parse_feed: puuttuva <channel> → []")
 print("\nKaikki yksikkötestit läpäisty ✓")
 EOF
 
-echo "Ajetaan shared-paketin unittest-testit..."
+export PYTHONPATH=src
 
+echo "Ajetaan shared-paketin unittest-testit..."
 python3 -m unittest src/shared/test_og_parser.py
+
+echo "Ajetaan lib-paketin unittest-testit (logging ja AS2 contract)..."
+python3 -m unittest src/lib/test_gcp_logging.py
+python3 -m unittest src/lib/test_as2_contract.py
 
 echo "Ajetaan write_api-paketin unittest-testit..."
 python3 -m unittest src/write_api/test_main.py
