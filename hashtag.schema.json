@@ -14,7 +14,8 @@
     },
     "name": {
       "type": "string",
-      "description": "Aihetunnisteen teksti (esim. '#politiikka' tai 'tekoäly')"
+      "pattern": "^#",
+      "description": "Aihetunnisteen teksti #-etuliitteellä (esim. '#politiikka'). Arvon on aina alettava #-merkillä."
     }
   },
   "required": ["type", "name"]

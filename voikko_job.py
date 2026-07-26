@@ -1,4 +1,5 @@
 # src/voikko_job/main.py
+# Käyttötapaus UC-4: Suomenkielinen morfologinen tägäys (Voikko) — ks. TECHNICAL_DESIGN.md
 import datetime
 import html as html_lib
 import json
@@ -176,17 +177,30 @@ def main() -> None:
         try:
             obj = json.loads(obj_json_raw) if isinstance(obj_json_raw, str) else obj_json_raw
             text = extract_text(obj)
-            tags = analyze_tags(text, v)
+            raw_tags = analyze_tags(text, v)
+
+            # Päivitetään object_json['tag'] AS2 Hashtageina (Decision L-011)
+            obj["tag"] = [
+                {
+                    "type": "Hashtag",
+                    "name": f"#{word}",
+                    "href": f"https://uutisseuranta.net/ap/outbox?tag=%23{word}"
+                }
+                for word in raw_tags
+            ]
+
+            tags = [f"#{w}" for w in raw_tags]
         except Exception as e:
             logger.error(f"Virhe objektin {obj_id} prosessoinnissa: {e}")
             tags = []  # Fallback tyhjään, jotta tagitus ei kaada koko ajoa
+            obj = json.loads(obj_json_raw) if isinstance(obj_json_raw, str) else obj_json_raw
+            obj["tag"] = []
 
         # Tallennettaessa asetetaan dynaamiset tagit AS2-objektiin
-        # Päivitetään myös objects_jsonin sisälle tags-kenttä (jos tarpeen, mutta speksissä tag on ARRAY<STRING> objects-taulussa)
-        # tags_enriched asetetaan aina TRUE (vaikka tag-lista olisi tyhjä), jottei yritetä prosessoida samaa viallista riviä ikuisesti.
         updates.append({
             "id": obj_id,
-            "tags": tags
+            "tags": tags,
+            "object_json": json.dumps(obj)
         })
         logger.info(f"Objekti {obj_id} -> Tagit: {tags}")
 
@@ -196,6 +210,7 @@ def main() -> None:
     schema = [
         bigquery.SchemaField("id", "STRING", mode="REQUIRED"),
         bigquery.SchemaField("tags", "STRING", mode="REPEATED"),
+        bigquery.SchemaField("object_json", "JSON", mode="NULLABLE"),
     ]
 
     load_config = bigquery.LoadJobConfig(
@@ -216,12 +231,14 @@ def main() -> None:
             WHEN MATCHED THEN
                 UPDATE SET
                     T.tags = S.tags,
+                    T.object_json = S.object_json,
                     T.tags_enriched = TRUE
         """
 
         logger.info("Suoritetaan BigQuery MERGE-operaatio tagien päivittämiseksi...")
         bq_client.query(merge_query).result()
         logger.info(f"Rikastus valmis. Päivitetty {len(updates)} objektia.")
+
 
     except Exception as e:
         logger.error(f"Virhe BigQueryyn tallennuksessa: {e}")
@@ -235,4 +252,16 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    from gcp_logging import send_ops_notification
+    try:
+        main()
+        send_ops_notification("voikko-job", "success")
+    except SystemExit as se:
+        if se.code == 0:
+            send_ops_notification("voikko-job", "success")
+        else:
+            send_ops_notification("voikko-job", "failure", f"SystemExit: {se.code}")
+        raise se
+    except BaseException as e:
+        send_ops_notification("voikko-job", "failure", str(e))
+        raise e

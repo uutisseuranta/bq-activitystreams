@@ -25,7 +25,7 @@
     },
     "id": {
       "type": "string",
-      "description": "Objektin yksikäsitteinen tunniste (IRI/URI)"
+      "description": "Objektin yksikäsitteinen pysyvä tunniste (persistent IRI: https://uutisseuranta.net/ap/objects/{hash})"
     },
     "name": {
       "type": "string",
@@ -53,7 +53,7 @@
     },
     "attributedTo": {
       "type": "string",
-      "description": "Artikkelin tekijä tai julkaisija (esim. uutislähteen nimi)"
+      "description": "Artikkelin tekijä tai julkaisija (esim. uutislähteen nimi)"
     },
     "likes": {
       "type": "object",
@@ -73,10 +73,40 @@
       "required": ["type", "totalItems"],
       "description": "Artikkelin dislike-reaktioiden kokoelma (projektikohtainen laajennus)"
     },
-    "_uutisseuranta:agreeCount": {
+    "_uutisseuranta:reactionCount": {
       "type": "integer",
-      "description": "Yhteenlaskettu reaktiomäärä (likes + dislikes) (projektikohtainen laajennus)"
+      "description": "Yhteenlaskettu reaktiomäärä (likes.totalItems + dislikes.totalItems). Neutraali nimitys: sisältää sekä Agree (Like) että Disagree (Dislike) -reaktiot."
+    },
+    "tag": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/hashtag"
+      },
+      "description": "Artikkeliin liittyvät AS2 Hashtag-objektit (Voikko-jobin tuottamat morfologiset tagit)"
     }
   },
-  "required": ["@context", "type", "id", "name", "url", "published"]
+  "required": ["@context", "type", "id", "name", "url", "published"],
+  "$defs": {
+    "hashtag": {
+      "title": "ActivityStreams 2.0 Hashtag",
+      "description": "Edustaa artikkelille tai Note-objektille annettua aihetunnistetta tai avainsanaa.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Objektin tyyppi, arvon on oltava 'Hashtag'"
+        },
+        "href": {
+          "type": "string",
+          "description": "Tunnisteeseen liittyvä haku- tai suodatuslinkki (URL)"
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^#",
+          "description": "Aihetunnisteen teksti #-etuliitteellä (esim. '#politiikka'). Arvon on aina alettava #-merkillä."
+        }
+      },
+      "required": ["type", "name"]
+    }
+  }
 }

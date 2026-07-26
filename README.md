@@ -14,28 +14,28 @@ Ei täyttä ActivityPub-implementaatiota — tavoitteena AS2-yhteensopivuus.
 ## Infrastruktuuri
 
 GCP-infrastruktuuri ja resurssit (Cloud Run -palvelut ja -jobit, Cloud Scheduler, IAM-oikeudet, BigQuery-taulut sekä Secret Manager) hallitaan koodina Terraformin avulla.
-Terraform-määrittelyt sijaitsevat kansiossa [`terraform/`](./terraform/).
+Terraform-määrittelyt sijaitsevat suoraan repositorion juurihakemistossa (`*.tf` tiedostot).
 
 ## Deploy
 
-Tuotantodeploy tapahtuu automaattisesti CI:ssä (`unit-tests.yml` `deploy`-job)
-jokaisella `main`-haaran pushilla. CI käyttää `gcloud run deploy --source`
--komentoa, joka buildaa palvelun Cloud Buildin buildpackeilla suoraan
-lähdekoodista — erillisiä Dockerfileja ei tarvita.
-
-Manuaalinen re-deploy yksittäiselle palvelulle:
+Tuotantodeploy tapahtuu automaattisesti CI:ssä (`unit-tests.yml` `deploy`-job) jokaisella `main`-haaran pushilla. CI käyttää `gcloud run deploy --source` -komentoa, joka buildaa palvelun Cloud Buildin buildpackeilla suoraan repositorion juuresta:
 
 ```bash
 gcloud run deploy <palvelu> \
-  --source src/<palvelu> \
+  --source . \
   --region europe-north1 \
-  --project uutisseuranta-activitystreams
+  --project uutisseuranta-activitystreams \
+  --base-image python312 \
+  --command "<käynnistyskomento>"
 ```
 
-Palvelut: `query-api`, `write-api`, `og-scraper`
+Palvelut ja niiden käynnistyskomennot:
+* `query-api`: `uvicorn query_api:app --host 0.0.0.0 --port 8080`
+* `write-api`: `uvicorn write_api:app --host 0.0.0.0 --port 8080`
+* `og-scraper`: `uvicorn og_scraper:app --host 0.0.0.0 --port 8080`
 
 Bootstrap (ensimmäinen deploy tai WIF-secretien uudelleenasetus):
-katso [`terraform/DEPLOY.md`](./terraform/DEPLOY.md).
+katso [`terraform-deploy.md`](./terraform-deploy.md).
 
 ## Infrakustannukset
 

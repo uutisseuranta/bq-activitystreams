@@ -1,3 +1,4 @@
+# Käyttötapaus UC-5: Uutisvirran lukeminen (Outbox) — ks. TECHNICAL_DESIGN.md
 import base64
 import contextvars
 import datetime
@@ -80,12 +81,13 @@ def verify_auth_token_optional(auth_header: Optional[str]) -> Optional[str]:
     if not auth_header:
         return None
     if not auth_header.startswith("Bearer "):
-        logger.warning("Autentikaatio hylätty: Virheellinen Authorization-formaatti")
+        logger.warning("Autentikaatio hylätty: virheellinen Authorization-formaatti")
         raise HTTPException(status_code=401, detail="Invalid Authorization header format.")
 
     token = auth_header.split(" ")[1]
     allow_mock = os.getenv("ALLOW_MOCK_AUTH", "false").lower() == "true"
     if allow_mock and token == "mock-test":
+        # ALLOW_MOCK_AUTH=true sallitaan vain kehitys- ja testiympäristöissä
         logger.warning("Mock-autentikaatio käytössä — vain kehitysympäristöön")
         return "test-user-sub-12345"
 
@@ -124,7 +126,7 @@ CACHE_TTL = 300  # sekuntia (5 minuuttia)
 
 
 def get_total_items_cached(tags: List[str]) -> int:
-    """Laskee objektien kokonaismäärän välimuistia hyödyntäen."""
+    """Laskee kokonaismäärän välimuistia hyödyntäen (COUNT(*) per tag-yhdistelmä)."""
     now = time.time()
     # Lajitellaan tagit — cache-avain on järjestyksestä riippumaton
     cache_key = ",".join(sorted(tags))
@@ -184,8 +186,15 @@ def get_outbox(
             detail="Parameter 'n' must be between 1 and 500."
         )
 
-    # Normalisoidaan tagit: pieniksi kirjaimiksi, välilyönnit siivotaan
-    search_tags = [t.strip().lower() for t in tag if t.strip()]
+    # Normalisoidaan tagit: pieniksi kirjaimiksi ja varmistetaan #-etuliite (päätös L-011)
+    # Sallitaan sekä "politiikka" että "#politiikka" — molemmat normalisoidaan muotoon "#politiikka"
+    search_tags = []
+    for t in tag:
+        val = t.strip().lower()
+        if val:
+            if not val.startswith("#"):
+                val = f"#{val}"
+            search_tags.append(val)
     if not search_tags:
         raise HTTPException(
             status_code=400,
@@ -196,7 +205,7 @@ def get_outbox(
 
     # 3. BigQuery-haku relevanssipisteytyksen mukaan
     # Relevanssi = osuvien hakutagien lukumäärä artikkelin tagien joukossa.
-    # Esimerkki: haku ["politiikka", "EU"], artikkeli jolla molemmat tagit saa relevance=2.
+    # Esimerkki: haku ["#politiikka", "#EU"], artikkeli jolla molemmat tagit saa relevance=2.
     # Tasatilanne ratkaistaan: like_count DESC → updated DESC → published DESC → id ASC.
     query = f"""
         SELECT
@@ -234,7 +243,7 @@ def get_outbox(
         logger.error(f"BigQuery-haku epäonnistui: {e}")
         raise HTTPException(status_code=500, detail="Database query failed.")
 
-    # 4. Injektoidaan dynaamiset kentät (like_count, dislike_count, updated) AS2-dokumentteihin
+    # 4. Injektoidaan dynaamiset kentät (like_count, dislike_count, updated) AS2-dokumentteihin.
     # Nämä kentät elävät BQ-riveillä erillään object_json:sta jotta ne ovat helposti
     # päivitettävissä ilman koko JSON-dokumentin uudelleenkirjoitusta.
     ordered_items = []
@@ -249,12 +258,15 @@ def get_outbox(
 
             # @context laajennetaan kaksialkioiseksi listaksi:
             # 1. AS2 ydinontologia (pakollinen, W3C AS2 §2.1)
-            # 2. uutisseuranta-nimiavaruus — projektikohtaiset laajennukset (dislikes, agreeCount)
+            # 2. uutisseuranta-nimiavaruus — projektikohtaiset laajennukset (dislikes, reactionCount)
             #    Namespace on IRI-pohjainen AS2-spesifikaation mukaisesti; välttää konfliktit
-            #    tulevien AS2-laajennusten kanssa. Ks. AS2_CONTRACT.md (tuleva: #54) ja issue #33.
+            #    tulevien AS2-laajennusten kanssa. Ks. AS2_CONTRACT.md ja issue #33.
             obj["@context"] = [
                 "https://www.w3.org/ns/activitystreams",
-                {"_uutisseuranta": "https://uutisseuranta.net/ns#"}
+                {
+                    "_uutisseuranta": "https://uutisseuranta.net/ns#",
+                    "dislikes": "_uutisseuranta:dislikes"
+                }
             ]
 
             # likes: AS2 Core §5.7 -kenttä, palautetaan Collection-muodossa (ei kokonaisluku).
@@ -265,19 +277,20 @@ def get_outbox(
             }
 
             # dislikes: projektikohtainen laajennus — ei AS2 Core -kenttä (toisin kuin 'likes').
-            # Kirjattu hallittuna laajennuksena AS2_CONTRACT.md:hen (#54).
+            # Kirjattu hallittuna laajennuksena AS2_CONTRACT.md:hen.
             # Collection-rakenne on yhdenmukainen AS2 Core §5.7 'likes'-käytännön kanssa.
             obj["dislikes"] = {
                 "type": "Collection",
                 "totalItems": row["dislike_count"]
             }
 
-            # agreeCount = likes + dislikes (kaikki reaktiot yhteensä).
+            # reactionCount = likes + dislikes (kaikki reaktiot yhteensä).
+            # Neutraali nimitys: sisältää sekä Agree (Like) että Disagree (Dislike) -reaktiot.
             # Tarkoitus: frontend näyttää yhteenlasketun reaktiomäärän ilman asiakaspuolen laskentaa.
             # Invariantti: arvo on oikein vain jos write-api estää duplikaattiäänet per käyttäjä.
-            # Toggle-logiikka ja duplikaattiesto on ratkaistu write-apissa (poistetaan vanha ja lisätään uusi).
-            # Hallittu AS2-poikkeama: toggle ei kirjaa 'Undo Like' -aktiviteettia — ks. AS2_CONTRACT.md (#54).
-            obj["_uutisseuranta:agreeCount"] = row["like_count"] + row["dislike_count"]
+            # Toggle-logiikka ja duplikaattiesto on ratkaistu write-apissa (poistetaan vanha, lisätään uusi).
+            # Hallittu AS2-poikkeama: toggle ei kirjaa 'Undo Like' -aktiviteettia — ks. AS2_CONTRACT.md §4.
+            obj["_uutisseuranta:reactionCount"] = row["like_count"] + row["dislike_count"]
 
             if row["updated"]:
                 updated_dt = row["updated"]
@@ -295,8 +308,9 @@ def get_outbox(
     total_items = get_total_items_cached(search_tags)
 
     # 6. Rakennetaan self-URL AS2 OrderedCollection id-kenttään
+    import urllib.parse
     base_url = "https://activitystreams.uutisseuranta.net/ap/outbox"
-    tag_params = "&".join(f"tag={t}" for t in search_tags)
+    tag_params = "&".join(f"tag={urllib.parse.quote(t)}" for t in search_tags)
     self_url = f"{base_url}?{tag_params}&n={n}"
 
     response_json = {
@@ -324,7 +338,7 @@ def liveness():
 @app.get("/readyz")
 def readiness():
     try:
-        # Aktiivinnen BQ-yhteystarkistus: list_datasets on kevyt API-kutsu
+        # Aktiivinen BQ-yhteystarkistus: list_datasets on kevyt API-kutsu
         # joka vahvistaa sekä autentikaation että verkkoyhteyden toimivuuden
         bq_client.list_datasets(max_results=1)
         return {"status": "ready"}

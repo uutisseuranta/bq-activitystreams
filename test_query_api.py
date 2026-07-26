@@ -65,13 +65,13 @@ class TestOutboxQuery(unittest.TestCase):
 
         resp_data = response.json()
         self.assertEqual(resp_data["type"], "OrderedCollection")
-        self.assertIn("tag=politiikka", resp_data["id"])
+        self.assertIn("tag=%23politiikka", resp_data["id"])
 
         items = resp_data["orderedItems"]
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0]["likes"], {"type": "Collection", "totalItems": 12})
         self.assertEqual(items[0]["dislikes"], {"type": "Collection", "totalItems": 5})
-        self.assertEqual(items[0]["_uutisseuranta:agreeCount"], 17)
+        self.assertEqual(items[0]["_uutisseuranta:reactionCount"], 17)
         self.assertEqual(items[0]["updated"], "2026-07-03T11:00:00Z")
 
     def test_outbox_missing_tag(self):
@@ -194,7 +194,7 @@ class TestReactionAggregationPrep(unittest.TestCase):
 
         self.assertEqual(item["likes"], {"type": "Collection", "totalItems": 12})
         self.assertEqual(item["dislikes"], {"type": "Collection", "totalItems": 4})
-        self.assertEqual(item["_uutisseuranta:agreeCount"], 16)
+        self.assertEqual(item["_uutisseuranta:reactionCount"], 16)
 
 
 class TestRateLimiting(unittest.TestCase):

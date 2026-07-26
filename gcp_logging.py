@@ -61,3 +61,44 @@ def get_logger(name: str) -> logging.Logger:
     logger.setLevel(logging.INFO)
     logger.propagate = False
     return logger
+
+
+def send_ops_notification(job_name: str, status: str, details: str = None) -> None:
+    """Lähettää suoritustiedon (heartbeat/error) ops-repositorioon repository dispatchilla.
+
+    status: 'success' tai 'failure'
+    """
+    import urllib.request
+    token = os.environ.get("OPS_DISPATCH_TOKEN")
+    if not token:
+        return
+
+    payload = {
+        "event_type": "job-notification",
+        "client_payload": {
+            "job": job_name,
+            "status": status,
+            "details": details or ""
+        }
+    }
+
+    url = "https://api.github.com/repos/uutisseuranta/ops/dispatches"
+    req_data = json.dumps(payload).encode("utf-8")
+
+    req = urllib.request.Request(
+        url,
+        data=req_data,
+        headers={
+            "Authorization": f"token {token}",
+            "Accept": "application/vnd.github.v3+json",
+            "Content-Type": "application/json"
+        },
+        method="POST"
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=10) as response:  # noqa: S310
+            response.read()
+    except Exception as e:
+        logging.getLogger(job_name).warning(f"Ops-ilmoituksen lähetys epäonnistui: {e}")
+

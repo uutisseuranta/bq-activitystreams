@@ -41,3 +41,19 @@ resource "google_secret_manager_secret_iam_member" "write_api_can_read_secret" {
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.write_api.email}"
 }
+
+# Luodaan ops-dispatch-token salaisuus keskusseurantaa varten
+resource "google_secret_manager_secret" "ops_dispatch_token" {
+  secret_id = "ops-dispatch-token"
+
+  replication {
+    auto {}
+  }
+}
+
+# Vain write-api SA:lla on oikeus lukea ops-dispatch-token
+resource "google_secret_manager_secret_iam_member" "write_api_can_read_ops_token" {
+  secret_id = google_secret_manager_secret.ops_dispatch_token.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.write_api.email}"
+}

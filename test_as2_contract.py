@@ -69,7 +69,7 @@ class TestAS2Contract(unittest.TestCase):
 
         import jsonschema
 
-        # Etsitään juurikansiosta *.schema.json tiedostot
+        # Etsitaan juurikansiosta *.schema.json tiedostot
         # Koska testit saatetaan ajaa alikansiosta, haetaan suhteellinen polku oikein
         base_dir = os.path.dirname(os.path.abspath(__file__))
         collection_schema_path = os.path.join(base_dir, "collection.schema.json")
@@ -88,7 +88,10 @@ class TestAS2Contract(unittest.TestCase):
         context = item["@context"]
         self.assertTrue(isinstance(context, list))
         self.assertEqual(context[0], "https://www.w3.org/ns/activitystreams")
-        self.assertEqual(context[1], {"_uutisseuranta": "https://uutisseuranta.net/ns#"})
+        self.assertEqual(context[1], {
+            "_uutisseuranta": "https://uutisseuranta.net/ns#",
+            "dislikes": "_uutisseuranta:dislikes"
+        })
 
         # 5. Tarkistetaan reaktiolaajennukset
         self.assertIn("likes", item)
@@ -99,5 +102,6 @@ class TestAS2Contract(unittest.TestCase):
         self.assertEqual(item["dislikes"]["type"], "Collection")
         self.assertEqual(item["dislikes"]["totalItems"], 2)
 
-        self.assertIn("_uutisseuranta:agreeCount", item)
-        self.assertEqual(item["_uutisseuranta:agreeCount"], 12)
+        # reactionCount = likes + dislikes (kaikki reaktiot yhteensa, neutraali nimitys)
+        self.assertIn("_uutisseuranta:reactionCount", item)
+        self.assertEqual(item["_uutisseuranta:reactionCount"], 12)

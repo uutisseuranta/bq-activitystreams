@@ -81,6 +81,18 @@ resource "google_bigquery_table" "feeds" {
   }
 }
 
+# Väliaikainen pending-taulu julkaisupäivämäärättömille RSS-artikkeleille
+resource "google_bigquery_table" "objects_pending" {
+  dataset_id          = google_bigquery_dataset.main.dataset_id
+  table_id            = "objects_pending"
+  deletion_protection = false
+  schema              = jsonencode([])
+
+  lifecycle {
+    ignore_changes = [schema]
+  }
+}
+
 # OG-välimuisti – Open Graph -metatiedot artikkeleille
 resource "google_bigquery_table" "og_cache" {
   dataset_id          = google_bigquery_dataset.main.dataset_id
