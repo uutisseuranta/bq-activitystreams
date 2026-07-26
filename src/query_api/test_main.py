@@ -39,6 +39,7 @@ class TestOutboxQuery(unittest.TestCase):
             "published": datetime.datetime(2026, 7, 3, 10, 0, tzinfo=datetime.timezone.utc),
             "updated": datetime.datetime(2026, 7, 3, 11, 0, tzinfo=datetime.timezone.utc),
             "like_count": 12,
+            "dislike_count": 5,
             "object_json": (
                 '{"id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y", '
                 '"type": "Article", "name": "Testiuutinen"}'
@@ -64,7 +65,9 @@ class TestOutboxQuery(unittest.TestCase):
 
         items = resp_data["orderedItems"]
         self.assertEqual(len(items), 1)
-        self.assertEqual(items[0]["likes"], 12)
+        self.assertEqual(items[0]["likes"], {"type": "Collection", "totalItems": 12})
+        self.assertEqual(items[0]["dislikes"], {"type": "Collection", "totalItems": 5})
+        self.assertEqual(items[0]["_uutisseuranta:agreeCount"], 17)
         self.assertEqual(items[0]["updated"], "2026-07-03T11:00:00Z")
 
     def test_outbox_missing_tag(self):
@@ -102,6 +105,7 @@ class TestCacheBehavior(unittest.TestCase):
             "published": datetime.datetime(2026, 7, 3, 10, 0, tzinfo=datetime.timezone.utc),
             "updated": datetime.datetime(2026, 7, 3, 11, 0, tzinfo=datetime.timezone.utc),
             "like_count": 0,
+            "dislike_count": 0,
             "object_json": '{"id": "some-id", "type": "Article"}'
         }
 
@@ -161,8 +165,7 @@ class TestReactionAggregationPrep(unittest.TestCase):
             "published": datetime.datetime(2026, 7, 3, 10, 0, tzinfo=datetime.timezone.utc),
             "updated": datetime.datetime(2026, 7, 3, 11, 0, tzinfo=datetime.timezone.utc),
             "like_count": 12,
-            "agreeCount": 8,
-            "disagreeCount": 4,
+            "dislike_count": 4,
             "object_json": (
                 '{"id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y", '
                 '"type": "Article"}'
@@ -181,8 +184,6 @@ class TestReactionAggregationPrep(unittest.TestCase):
         resp_data = response.json()
         item = resp_data["orderedItems"][0]
 
-        if "agreeCount" in item:
-            self.assertEqual(item["agreeCount"], 8)
-            self.assertEqual(item["disagreeCount"], 4)
-        else:
-            pass  # vaiheessa 3 tämä haara poistetaan ja mapping vaaditaan
+        self.assertEqual(item["likes"], {"type": "Collection", "totalItems": 12})
+        self.assertEqual(item["dislikes"], {"type": "Collection", "totalItems": 4})
+        self.assertEqual(item["_uutisseuranta:agreeCount"], 16)

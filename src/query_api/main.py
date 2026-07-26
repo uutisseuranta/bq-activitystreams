@@ -131,6 +131,7 @@ def get_outbox(
           published,
           updated,
           like_count,
+          dislike_count,
           object_json,
           (
             SELECT COUNT(*)
@@ -159,7 +160,7 @@ def get_outbox(
         logger.error(f"BigQuery-haku epäonnistui: {e}")
         raise HTTPException(status_code=500, detail="Database query failed.")
 
-    # 4. Injektoidaan dynaamiset kentät (like_count, updated) AS2-dokumentteihin
+    # 4. Injektoidaan dynaamiset kentät (like_count, dislike_count, updated) AS2-dokumentteihin
     # Nämä kentät elävät BQ-riveillä erillään object_json:sta jotta ne ovat helposti
     # päivitettävissä ilman koko JSON-dokumentin uudelleenkirjoitusta.
     ordered_items = []
@@ -172,8 +173,21 @@ def get_outbox(
             # BigQuery JSON -kenttä voi tulla dictinä tai merkkijonona — käsitellään molemmat
             obj = json.loads(obj_json_raw) if isinstance(obj_json_raw, str) else obj_json_raw
 
-            # like_count injektoidaan AS2 'likes'-kenttään (kokonaisluku, ei OrderedCollection)
-            obj["likes"] = row["like_count"]
+            # Päivitetään @context ja injektoidaan reaktiokentät AS2 Collection -muodossa
+            obj["@context"] = [
+                "https://www.w3.org/ns/activitystreams",
+                {"_uutisseuranta": "https://uutisseuranta.net/ns#"}
+            ]
+            obj["likes"] = {
+                "type": "Collection",
+                "totalItems": row["like_count"]
+            }
+            obj["dislikes"] = {
+                "type": "Collection",
+                "totalItems": row["dislike_count"]
+            }
+            obj["_uutisseuranta:agreeCount"] = row["like_count"] + row["dislike_count"]
+
             if row["updated"]:
                 updated_dt = row["updated"]
                 if isinstance(updated_dt, datetime.datetime):
