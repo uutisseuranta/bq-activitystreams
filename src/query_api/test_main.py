@@ -232,3 +232,41 @@ class TestRateLimiting(unittest.TestCase):
         response = self.client.get("/ap/outbox?tag=politiikka")
         self.assertEqual(response.status_code, 429)
         self.assertIn("Retry-After", response.headers)
+
+    @patch("query_api.main.bq_client")
+    def test_dynamic_rate_limiting_authenticated(self, mock_bq):
+        from query_api.main import limiter
+        limiter.reset()
+        mock_row = {
+            "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
+            "source": "rss",
+            "published": datetime.datetime(2026, 7, 3, 10, 0, tzinfo=datetime.timezone.utc),
+            "updated": None,
+            "like_count": 0,
+            "dislike_count": 0,
+            "object_json": '{"id": "some-id", "type": "Article"}'
+        }
+        def query_side_effect(sql, job_config=None):
+            if "COUNT(*) AS c" in sql:
+                return create_mock_query_job([{"c": 1}])
+            return create_mock_query_job([mock_row])
+        mock_bq.query.side_effect = query_side_effect
+
+        # Autentikoitu käyttäjä ("mock-test") saa tehdä 120 pyyntöä
+        headers = {"Authorization": "Bearer mock-test"}
+        with patch.dict(os.environ, {"ALLOW_MOCK_AUTH": "true"}):
+            for _ in range(120):
+                response = self.client.get("/ap/outbox?tag=politiikka", headers=headers)
+                self.assertEqual(response.status_code, 200)
+
+            # 121. pyyntö antaa 429
+            response = self.client.get("/ap/outbox?tag=politiikka", headers=headers)
+            self.assertEqual(response.status_code, 429)
+
+    @patch("query_api.main.bq_client")
+    def test_invalid_token_returns_401(self, mock_bq):
+        # Virheellinen tai vanhentunut token antaa 401 Unauthorized
+        headers = {"Authorization": "Bearer invalid-or-expired-token"}
+        response = self.client.get("/ap/outbox?tag=politiikka", headers=headers)
+        self.assertEqual(response.status_code, 401)
+        self.assertIn("Invalid OIDC token", response.json()["detail"])

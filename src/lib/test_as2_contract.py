@@ -27,7 +27,8 @@ class TestAS2Contract(unittest.TestCase):
             "object_json": (
                 '{"id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y", '
                 '"type": "Article", "name": "Sopimustesti uutinen", '
-                '"url": "https://example.com/sopimustesti"}'
+                '"url": "https://example.com/sopimustesti", '
+                '"published": "2026-07-03T10:00:00Z"}'
             )
         }
 
@@ -55,12 +56,30 @@ class TestAS2Contract(unittest.TestCase):
 
         resp_data = response.json()
         
-        # 3. Tarkistetaan OrderedCollection-tyyppi
+        # 3. Tarkistetaan OrderedCollection-tyyppi ja validoidaan se skeemaa vasten
         self.assertEqual(resp_data.get("type"), "OrderedCollection")
         items = resp_data.get("orderedItems", [])
         self.assertEqual(len(items), 1)
 
         item = items[0]
+
+        import json
+        import jsonschema
+        import os
+
+        # Etsitään juurikansiosta *.schema.json tiedostot
+        # Koska testit saatetaan ajaa alikansiosta, haetaan suhteellinen polku oikein
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        collection_schema_path = os.path.join(base_dir, "collection.schema.json")
+        article_schema_path = os.path.join(base_dir, "article.schema.json")
+
+        with open(collection_schema_path, "r") as f:
+            collection_schema = json.load(f)
+        jsonschema.validate(instance=resp_data, schema=collection_schema)
+
+        with open(article_schema_path, "r") as f:
+            article_schema = json.load(f)
+        jsonschema.validate(instance=item, schema=article_schema)
 
         # 4. Tarkistetaan JSON-LD @context -sopimus
         self.assertIn("@context", item)

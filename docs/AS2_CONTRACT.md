@@ -41,3 +41,13 @@ Kontekstimäärittely `@context` on oltava rajapinnan palauttamissa Article-obje
 
 ## 4. Hallitut poikkeamat standardista
 - **Undo Like -poikkeama:** Järjestelmä toteuttaa toggle-reaktiologiikan (Like ↔ Dislike) poistamalla vanhan reaktion tietokannasta ja lisäämällä uuden. Tästä ei luoda erillistä AS2 `Undo`-aktiviteettia lokiin historiatiedon anonymisoinnin säilyttämiseksi.
+
+## 5. Automaattinen skeemavalidointi (CI/CD)
+Rajapintasopimuksen koneluettavat ja viralliset JSON Schema -määritelmät sijaitsevat repositorion juuressa:
+- [article.schema.json](file:///Users/jaakkokorhonen/uutisseuranta/bq-activitystreams/article.schema.json)
+- [note.schema.json](file:///Users/jaakkokorhonen/uutisseuranta/bq-activitystreams/note.schema.json)
+- [collection.schema.json](file:///Users/jaakkokorhonen/uutisseuranta/bq-activitystreams/collection.schema.json)
+- [hashtag.schema.json](file:///Users/jaakkokorhonen/uutisseuranta/bq-activitystreams/hashtag.schema.json)
+
+Näitä skeemoja käytetään automaattisesti yksikkötesteissä (`src/lib/test_as2_contract.py`) varmistamaan, että rajapinta tuottaa sopimuksen mukaista dataa.
+
