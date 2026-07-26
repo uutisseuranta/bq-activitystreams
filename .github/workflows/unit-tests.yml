@@ -159,33 +159,34 @@ jobs:
 
       - name: Deploy query-api
         run: |
+          gcloud builds submit --pack image=europe-north1-docker.pkg.dev/uutisseuranta-activitystreams/jobs/query-api:latest \
+            --project uutisseuranta-activitystreams
           gcloud run deploy query-api \
-            --source . \
+            --image europe-north1-docker.pkg.dev/uutisseuranta-activitystreams/jobs/query-api:latest \
             --region europe-north1 \
             --project uutisseuranta-activitystreams \
-            --base-image python312 \
-            --repo jobs \
             --command "uvicorn query_api:app --host 0.0.0.0 --port 8080"
 
       - name: Deploy write-api
         run: |
+          gcloud builds submit --pack image=europe-north1-docker.pkg.dev/uutisseuranta-activitystreams/jobs/write-api:latest \
+            --project uutisseuranta-activitystreams
           gcloud run deploy write-api \
-            --source . \
+            --image europe-north1-docker.pkg.dev/uutisseuranta-activitystreams/jobs/write-api:latest \
             --region europe-north1 \
             --project uutisseuranta-activitystreams \
-            --base-image python312 \
-            --repo jobs \
             --command "uvicorn write_api:app --host 0.0.0.0 --port 8080"
 
       - name: Deploy og-scraper
         run: |
+          gcloud builds submit --pack image=europe-north1-docker.pkg.dev/uutisseuranta-activitystreams/jobs/og-scraper:latest \
+            --project uutisseuranta-activitystreams
           gcloud run deploy og-scraper \
-            --source . \
+            --image europe-north1-docker.pkg.dev/uutisseuranta-activitystreams/jobs/og-scraper:latest \
             --region europe-north1 \
             --project uutisseuranta-activitystreams \
-            --base-image python312 \
-            --repo jobs \
             --command "uvicorn og_scraper:app --host 0.0.0.0 --port 8080"
+
 
 
       - name: Post-deploy healthcheck ja automaattinen rollback
