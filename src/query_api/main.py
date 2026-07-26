@@ -201,7 +201,7 @@ def get_outbox(
             # agreeCount = likes + dislikes (kaikki reaktiot yhteensä).
             # Tarkoitus: frontend näyttää yhteenlasketun reaktiomäärän ilman asiakaspuolen laskentaa.
             # Invariantti: arvo on oikein vain jos write-api estää duplikaattiäänet per käyttäjä.
-            # Toggle-logiikka (MERGE vs. user_votes-taulu) ja duplikaattiesto ovat auki: ks. #33.
+            # Toggle-logiikka ja duplikaattiesto on ratkaistu write-apissa (poistetaan vanha ja lisätään uusi).
             # Hallittu AS2-poikkeama: toggle ei kirjaa 'Undo Like' -aktiviteettia — ks. AS2_CONTRACT.md (#54).
             obj["_uutisseuranta:agreeCount"] = row["like_count"] + row["dislike_count"]
 
