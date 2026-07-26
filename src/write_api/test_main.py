@@ -3,6 +3,8 @@ import time
 import unittest
 from unittest.mock import patch
 
+from fastapi import HTTPException
+
 # setdefault ei ylikirjoita CI-ympäristön muuttujia (toisin kuin os.environ[key] = value).
 # Tämä on tärkeää kahdesta syystä:
 # 1. Jos CI asettaa esim. GCP_PROJECT:n oikeaksi projektiarvoksi, se säilyy
@@ -150,7 +152,6 @@ class TestAuthSecurity(unittest.TestCase):
             # sub puuttuu tarkoituksella
         }
         with patch.dict(os.environ, {"ALLOW_MOCK_AUTH": "false"}):
-            from fastapi import HTTPException
             with self.assertRaises(HTTPException) as ctx:
                 verify_auth_token("Bearer jokin.oikea.token")
             self.assertEqual(ctx.exception.status_code, 401)
