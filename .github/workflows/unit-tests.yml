@@ -73,7 +73,7 @@ jobs:
           checkov -d terraform/ \
             --framework terraform \
             --output github_failed_only \
-            --check-level HIGH \
+            --hard-fail-on HIGH \
             --skip-check CKV_GCP_82,CKV_GCP_34
 
   terraform-plan:

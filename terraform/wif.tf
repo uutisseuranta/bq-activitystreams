@@ -79,21 +79,26 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   #      → manuaalinen live-testi, ei feature-branch-tokenia
   attribute_condition = <<-EOT
     assertion.repository == 'uutisseuranta/bq-activitystreams' &&
-    assertion.ref == 'refs/heads/main' &&
     (
-      assertion.job_workflow_ref == 'uutisseuranta/bq-activitystreams/.github/workflows/unit-tests.yml@refs/heads/main' ||
-      assertion.job_workflow_ref == 'uutisseuranta/bq-activitystreams/.github/workflows/smoke-test.yml@refs/heads/main'
+      (assertion.ref == 'refs/heads/main' && (
+        assertion.job_workflow_ref == 'uutisseuranta/bq-activitystreams/.github/workflows/unit-tests.yml@refs/heads/main' ||
+        assertion.job_workflow_ref == 'uutisseuranta/bq-activitystreams/.github/workflows/smoke-test.yml@refs/heads/main'
+      )) ||
+      (assertion.ref.startsWith('refs/pull/') &&
+        assertion.job_workflow_ref.startsWith('uutisseuranta/bq-activitystreams/.github/workflows/unit-tests.yml@refs/pull/')
+      )
     )
   EOT
 }
 
-# Salli backend-SA:n personointi VAIN main-haarasta.
-# attribute.ref/refs/heads/main on yhdenmukaisempi attribute_condition:in kanssa
-# kuin attribute.repository, joka olisi sallinut myös feature-haarat.
+# Salli backend-SA:n personointi kaikille valituille repon työnkuluille.
+# attribute.repository/uutisseuranta/bq-activitystreams sallii myös PR-haarat,
+# jotta terraform plan voi autentikoitua PR-vaiheessa.
+# Turvallisuusrajoitus on siirretty providerin attribute_conditioniin yllä.
 resource "google_service_account_iam_member" "wif_backend" {
   service_account_id = google_service_account.backend.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.ref/refs/heads/main"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/uutisseuranta/bq-activitystreams"
 }
 
 # Outputs — kopioi nämä GitHub Secretseihin (ks. DEPLOY.md, Vaihe 4)
