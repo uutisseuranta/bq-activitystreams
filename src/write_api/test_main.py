@@ -19,8 +19,8 @@ os.environ.setdefault("GOOGLE_CLIENT_ID", "test-client-id")
 os.environ.setdefault("ALLOW_MOCK_AUTH", "true")
 
 with patch("google.cloud.bigquery.Client"):
-    from fastapi.testclient import TestClient
-    from write_api.main import app, verify_auth_token
+    from fastapi.testclient import TestClient  # noqa: E402
+    from write_api.main import app, verify_auth_token  # noqa: E402
 
 
 class TestAuthSecurity(unittest.TestCase):
