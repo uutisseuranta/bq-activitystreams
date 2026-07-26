@@ -81,6 +81,11 @@ jobs:
     # Validoi resurssien väliset riippuvuudet oikeaa GCP-provider-skeemaa vasten.
     # -backend=false: ei kirjoita state-tiedostoa → idempotent, turvallinen CI:ssä.
     # Plan-output tallennetaan $GITHUB_STEP_SUMMARY:yn → näkyy PR-yhteenvedossa.
+    #
+    # EDELLYTYS: GitHub Secrets WIF_PROVIDER ja WIF_SERVICE_ACCOUNT täytyy olla
+    # asetettu repositoriossa ennen kuin tämä job voi autentikoitua GCP:hen.
+    # Asetus: terraform apply paikallisesti → terraform output → gh secret set
+    # Ohjeet: terraform/DEPLOY.md, Vaiheet 2–4.
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     permissions:
@@ -120,6 +125,11 @@ jobs:
     #    helpompi seurata kokonaisstatusta.
     # Erillinen deploy.yml lisätään jos deploy-logiikka kasvaa merkittävästi
     # tai jos tarvitaan eri triggeri (esim. manuaalinen staging-deploy).
+    #
+    # EDELLYTYS: GitHub Secrets WIF_PROVIDER ja WIF_SERVICE_ACCOUNT täytyy olla
+    # asetettu repositoriossa ennen kuin tämä job voi autentikoitua GCP:hen.
+    # Asetus: terraform apply paikallisesti → terraform output → gh secret set
+    # Ohjeet: terraform/DEPLOY.md, Vaiheet 2–4.
     concurrency:
       group: deploy-production
       cancel-in-progress: false

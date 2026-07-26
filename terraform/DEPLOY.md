@@ -92,8 +92,24 @@ Tai manuaalisesti:
 - `WIF_SERVICE_ACCOUNT` = `wif_service_account`-outputin arvo
 
 > ⚠️ **Järjestys on kriittinen:** Secrets täytyy olla tallennettuna ennen seuraavaa
-> push-to-main-tapahtumaa. Jos Secrets puuttuu, `deploy`-job epäonnistuu välittömästi
-> `WIF_PROVIDER`-secretin puuttumiseen.
+> push-to-main-tapahtumaa. Jos Secrets puuttuu, `terraform-plan`- ja `deploy`-jobit
+> epäonnistuvat välittömästi WIF-autentikoinnissa.
+
+### Miksi Secrets asetetaan manuaalisesti eikä Terraformilla?
+
+Terraform tallentaa kaikkien hallinnoimiensa resurssien arvot `terraform.tfstate`-tiedostoon
+selkotekstinä. Jos state on paikallinen tiedosto (ei remote backend kuten GCS),
+`github_actions_secret`-resurssit vuotaisivat Secretien arvot levylle.
+
+Lisäksi `github_actions_secret` vaatisi GitHub-tokenin `secrets:write`-scopella
+Terraform-ajon aikana — laajempi scope kuin pelkkä `contents:read + actions:read`
+jota käytetään nyt.
+
+`WIF_PROVIDER` ja `WIF_SERVICE_ACCOUNT` eivät ole salaisia arvoja (näkyvät
+GCP-konsolissa), mutta niiden hallinta erillään Terraform statesta on selkeämpi
+ja turvallisempi malli. Jos myöhemmin siirrytään remote backendiin (esim. GCS-bucket
+state-tiedostolle), automatisointi `github_actions_secret`-resurssilla on
+helppo lisätä — ks. `wif.tf`-kommentit.
 
 ---
 

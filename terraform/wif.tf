@@ -18,9 +18,20 @@
 #   #21  WIF-konfiguraatio (unit-test.sh + live-smoke-test.sh)
 #   #64  CI/CD-pipeline — deploy-vaihe käyttää tätä WIF-pooliä
 #
-# GitHub Secrets (aseta manuaalisesti Settings → Secrets → Actions):
+# GitHub Secrets (aseta manuaalisesti — ks. terraform/DEPLOY.md, Vaihe 4):
 #   WIF_PROVIDER        = google_iam_workload_identity_pool_provider.github.name
 #   WIF_SERVICE_ACCOUNT = google_service_account.backend.email
+#
+# MIKSI MANUAALINEN EIKÄ TERRAFORM (github_actions_secret)?
+#   Terraform tallentaa kaikkien hallinnoimiensa resurssien arvot
+#   terraform.tfstate-tiedostoon selkotekstinä. Jos state on paikallinen
+#   tiedosto (ei remote backend kuten GCS), Secretien arvot vuotaisivat
+#   levylle. Lisäksi github_actions_secret vaatisi GitHub-tokenin
+#   secrets:write-scopella Terraform-ajon aikana — laajempi scope kuin
+#   pelkkä contents:read + actions:read jota nyt käytetään.
+#   WIF_PROVIDER ja WIF_SERVICE_ACCOUNT eivät ole salaisia arvoja
+#   (näkyvät GCP-konsolissa) mutta niiden hallinta erillään Terraform
+#   statesta on selkeämpi ja turvallisempi malli.
 
 resource "google_iam_workload_identity_pool" "github" {
   project                   = var.gcp_project
@@ -80,7 +91,7 @@ resource "google_service_account_iam_member" "wif_backend" {
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.ref/refs/heads/main"
 }
 
-# Outputs — kopioi nämä GitHub Secretseihin
+# Outputs — kopioi nämä GitHub Secretseihin (ks. DEPLOY.md, Vaihe 4)
 output "wif_provider" {
   description = "WIF_PROVIDER — kopioi GitHub Secretsiin"
   value       = google_iam_workload_identity_pool_provider.github.name
