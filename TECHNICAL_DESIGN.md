@@ -45,3 +45,10 @@ Uutissivustojen ohjelmallinen haku (scraping) rikastusprosessissa (`og_enrichmen
 *   **Välimuisti:** Palvelimen ylikuormituksen estämiseksi `robots.txt`-säännöt välimuistitetaan paikallisesti 24 tunniksi.
 *   **Kapasiteetin säästö:** Ladattavaa HTML-sivun kokoa rajoitetaan siten, että response-lukeminen keskeytetään heti, kun HTML-head-alue päättyy (max ~2 MB), mikä säästää sekä palvelimen että kohteiden verkkokapasiteettia.
 
+## Wayback Machine -arkistointi (Päätös L-013)
+
+Kun artikkeli haetaan tai se saa ensimmäisen tykkäyksen/kommentin, uutisen URL-osoite lähetetään arkistoitavaksi Internet Archiven Wayback Machineen (SPN2 API):
+*   **Wildcard-URL vs. Timestamp-URL:** Järjestelmä tallentaa ja palauttaa `url_archive`-kentässä aina wildcard-osoitteen muodossa `https://web.archive.org/web/*/{url}` kiinteän aikaleimaosoitteen sijaan.
+*   **Perustelu:** Wildcard-osoite ohjaa käyttäjän aina uusimpaan saatavilla olevaan versioon ilman tarvetta pollata SPN2-rajapintaa ja odottaa arkistoinnin valmistumista (mikä lisäisi API-latenssia ja taustaprosessien kompleksisuutta).
+*   **Fallback-käyttö:** Mikäli alkuperäinen sivu on tyhjä (redirect virhesivulle) tai palauttaa 404-virheen, uutisseuranta.github.io#24 käyttää tätä `url_archive`-linkkiä fallback-reittinä sisällön näyttämiseksi.
+
