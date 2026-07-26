@@ -1,4 +1,4 @@
-# Design Guidelines: gcs-activitystreams
+# Design Guidelines: bq-activitystreams
 
 Nämä periaatteet ohjaavat kaikkia arkkitehtuuripäätöksiä. Viittaa tähän dokumenttiin tikettejä kirjoittaessasi.
 
@@ -38,18 +38,40 @@ AS2-spesifikaatio tukee `actor`-kentässä `Person`-tyyppiä, mutta tässä proj
 
 ---
 
-## Ei `Dislike`, ei `Undo`, ei `Announce`
+## Reaktiot: Like, Dislike ja Undo
 
-Kun asiat riitelevät eikä ihmiset, ei ole tarvetta osoittaa epämieltymystä muita ihmisiä kohtaan. `Like` on sisällön kiinnostavuuden mittari, ei sosiaalisen hyväksynnän signaali.
+Kun asiat riitelevät eikä ihmiset, reaktiot ovat sisällön kiinnostavuuden mittareita — eivät sosiaalisen hyväksynnän tai hylkimisen signaaleja. `Like` (Agree) ja `Dislike` (Disagree) muodostavat Agree/Disagree-togglen: ne mittaavat suhdetta *sisältöön*, eivät muihin ihmisiin.
 
 | Aktiviteetti | Tila | Perustelu |
 |---|---|---|
-| `Like` | ✅ Toteutetaan | Käyttäjä merkitsee artikkelin/asian kiinnostavaksi |
-| `Dislike` | ❌ Ei toteuteta | Ei tarvetta sosiaaliselle epämieltymykselle |
-| `Undo Like` | ❌ Ei toteuteta | Like on tarkoituksellisesti peruuttamaton — kuten sanottu asiaa ei voi sanomatta |
+| `Like` | ✅ Toteutetaan | Käyttäjä merkitsee artikkelin/asian kiinnostavaksi (Agree) |
+| `Dislike` | ✅ Toteutetaan | Käyttäjä merkitsee artikkelin/asian kiistanalaiseksi (Disagree) — vastine Likelle, ei henkilökohtainen hyökkäys |
+| `Undo Like` / toggle | ✅ Toteutetaan mekaniikalla | Käyttäjä voi vaihtaa reaktionsa: vanha poistetaan kannasta, uusi kirjataan. `Undo`-aktiviteettia **ei kirjata lokiin** — anonymisoinnin säilyttämiseksi (ks. alla) |
 | `Announce` | ❌ Ei toteuteta | Käyttäjä julkaisee sisältöä `Create`-aktiviteetilla, ei uudelleenjakamisella |
 | `Update` | ✅ Toteutetaan | Client-sovellus kirjoittaa `Update`-aktiviteetin muokatusta sisällöstä |
 | `Delete` | ✅ Toteutetaan | Käyttäjä voi poistaa oman kommenttinsa tai artikkelinsa |
+
+### Toggle-mekaniikka ja anonymisointi (Päätös DECISION_LOG L-009 / AS2_CONTRACT.md §4)
+
+Kun käyttäjä vaihtaa `Like` → `Dislike` tai `Dislike` → `Like`:
+
+1. Vanha reaktio poistetaan `activitystreams_social.likes`-taulusta
+2. Uusi reaktio kirjataan tilalle
+3. AS2 `Undo`-aktiviteettia **ei luoda** append-only-lokiin
+
+Perustelu: `Undo`-aktiviteetin kirjaaminen paljastaisi reaktiohistorian, mikä on ristiriidassa anonymisoinnin kanssa. Historiallinen tieto siitä, kuka on milloin vaihtanut reaktionsa, ei kuulu avoimeen dataan.
+
+### `_uutisseuranta:reactionCount`
+
+API palauttaa jokaisessa Article-objektissa yhteenlasketun reaktiomäärän (`likes.totalItems + dislikes.totalItems`) projektikohtaisessa `_uutisseuranta:reactionCount`-kentässä. Nimitys on neutraali: se ei implikoi yksimielisyyttä.
+
+```json
+{
+  "likes":   { "type": "Collection", "totalItems": 42 },
+  "dislikes": { "type": "Collection", "totalItems": 7 },
+  "_uutisseuranta:reactionCount": 49
+}
+```
 
 ---
 
@@ -75,7 +97,7 @@ AS2-speksin mukaan `published` on objektin luontihetki ja `updated` on muokkaush
 | RSS-artikkeli | `<pubDate>` tai `<dc:date>` syötteessä | `<atom:updated>` jos saatavilla |
 | OpenAhjo-päätös | Päätöksen alkuperäinen julkaisupäivä julkaisijan sivuilla | `metadata_modified` jos muuttunut |
 | HRI-datasetti | `metadata_created` CKAN-vastauksessa | `metadata_modified` |
-| OG-scrapattu sivu | `article:published_time` OG-tagista | `article:modified_time` |
+| OG-scrapattu sivu | `article:published_time` OG-tagista (prioriteetti: JSON-LD `datePublished` → OG `article:published_time` → HTTP `Last-Modified`) | `article:modified_time` |
 | Fallback (ei metatietoa) | `null` — merkitään epätarkkuudeksi lokiin | Scrape-hetki |
 
 > [!NOTE]
@@ -109,12 +131,11 @@ Article                        (taso 0 – thread_root)
 
 Tykkäysmäärä julkaistaan objektin `tags`-taulukossa tagina muotoa `likes:N`. Tagi on **anonyymi** — se kertoo vain lukumäärän, ei kuka on tykkännyt. Laskentajob päivittää tagin säännöllisesti sosiaalisesta BigQuerystä avoimen datan BigQueryyn.
 
-- Laskuri voi vain **kasvaa** — `Undo Like` ei ole mahdollinen. Tämä on tietoinen valinta: kuten sanottu asiaa ei voi sanomatta.
-- **Duplikaattisuojaus**: Tykkäys tapahtuu Gmail SSO -tunnistuksen kautta. Sama Google-tili voi kirjata `Like`-aktiviteetin objektille vain kerran — backend hylkää duplikaatin.
-- **Bottisuojaus**: Cloudflare suojaa endpointit automatisoitujen pyyntöjen volyymilta. Vahvistamaton pyyntö ei pääse kirjoittamaan `Like`-aktiviteettia.
-- **GDPR**: `Like`-laskuri on anonyymi — avoimeen dataan siirtyy pelkkä lukumäärä, ei tunnistetta. Koska tieto ei ole henkilöön yhdistettävissä, GDPR:n tiedon poisto-oikeus ei koske sitä.
-- Tieto siitä kuka on tykkännyt ei koskaan siirry avoimeen dataan
-- Yksi `likes:`-tagi per objekti — päivitys korvaa edellisen
+- **Duplikaattisuojaus**: Tykkäys tapahtuu Gmail SSO -tunnistuksen kautta. Sama Google-tili voi kirjata `Like`- tai `Dislike`-aktiviteetin objektille vain kerran — backend hylkää duplikaatin.
+- **Bottisuojaus**: Cloudflare suojaa endpointit automatisoitujen pyyntöjen volyymilta. Vahvistamaton pyyntö ei pääse kirjoittamaan reaktioaktiviteetteja.
+- **GDPR**: Reaktiolaskurit ovat anonyymejä — avoimeen dataan siirtyy pelkkä lukumäärä, ei tunnistetta. Koska tieto ei ole henkilöön yhdistettävissä, GDPR:n tiedon poisto-oikeus ei koske sitä.
+- Tieto siitä kuka on reagoinut ei koskaan siirry avoimeen dataan.
+- Yksi `likes:`-tagi per objekti — päivitys korvaa edellisen.
 
 ```
 tags: ["asuminen", "helsinki", "päätös", "likes:42"]
@@ -139,7 +160,7 @@ Lähde (RSS, Ahjo, HRI, OG-scrape) on sisäinen toteutusyksityiskohta, ei julkin
 
 ### Järjestys
 
-Outbox palauttaa objektit **tagirelevanssijärjestyksessä**, ei aikajärjestyksessä. Relevanssi on yksinkertainen osumien laskenta: kuinka monta clientin pyytämistä tageista löytyy objektin `tags`-kentästä. Tasatilanteessa järjestetään `likes_count DESC, updated DESC, published DESC NULLS LAST, id ASC` missä `likes_count` luetaan `likes:N`-tagista.
+Outbox palauttaa objektit **tagirelevanssijärjestyksessä**, ei aikajärjestyksessä. Relevanssi on yksinkertainen osumien laskenta: kuinka monta clientin pyytämistä tageista löytyy objektin `tags`-kentästä. Tasatilanteessa järjestetään `like_count DESC, updated DESC, published DESC NULLS LAST, id ASC`.
 
 Aikajärjestystä ei käytetä pääjärjestyksenä, koska saman aiheen uutiset eri lähteistä ovat tasavertaisia riippumatta siitä, kuka julkaisi ensin.
 
@@ -153,7 +174,7 @@ GET /ap/outbox?tag=asuminen&n=50   → top-50 (sisältää edellisen 5, client s
 GET /ap/outbox?tag=asuminen&n=500  → top-500 (maksimi)
 ```
 
-`OrderedCollectionPage`-tasoa ei tarvita — pelkkä `OrderedCollection` riittää.
+`OrderedCollectionPage`-tasoa ei tarvita — pelkkä `OrderedCollection` riittää (Päätös L-009).
 
 ### n=500 on katto — hinta ja suorituskyky
 
@@ -197,3 +218,6 @@ Ei `next`, ei `prev`, ei `cursor`, ei `first`. `totalItems` kertoo clientille pa
 - #13 Delete-toiminto
 - #19 Gmail SSO → id_token-validointi
 - #23 OG-scraper
+- #33 Like/Dislike-togglet ja `_uutisseuranta:reactionCount`
+- [AS2_CONTRACT.md](./AS2_CONTRACT.md) — rajapintasopimus, §4 hallitut poikkeamat
+- [DECISION_LOG.csv](./DECISION_LOG.csv) — L-009 (paginaatio), L-015 (reactionCount-uudelleennimeäminen)
