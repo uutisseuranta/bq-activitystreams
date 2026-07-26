@@ -10,13 +10,13 @@
 #   WIF-autentikoinnin toimivuuden oikeaa GCP:tä vasten.
 #
 # auth-test.sh POISTETTU (kaanonpäätös G-009):
-#   Mock-simulaatiotestit autentikoinnille ovat kiellettyjä.
+#   Mock-simulaatiotestit autentikoinnille ovat kiellettyjn.
 #   Mock validoi testiin kirjoitettua mallia — ei oikeaa tuotantopolkua.
 #   Live smoke-test korvaa sen: oikea WIF-token, oikea Cloud Run.
 #
 # Issue-viittaukset:
 #   #21  WIF-konfiguraatio (unit-test.sh + live-smoke-test.sh)
-#   #64  CI/CD-pipeline — deploy-vaihe käyttää tätä WIF-pooliä
+#   #64  CI/CD-pipeline — deploy-vaihe käyttää tätä WIF-poolia
 #
 # GitHub Secrets (aseta manuaalisesti — ks. terraform/DEPLOY.md, Vaihe 4):
 #   WIF_PROVIDER        = google_iam_workload_identity_pool_provider.github.name
@@ -51,10 +51,10 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   }
 
   attribute_mapping = {
-    "google.subject"       = "assertion.sub"
-    "attribute.repository" = "assertion.repository"
-    "attribute.ref"        = "assertion.ref"
-    "attribute.workflow"   = "assertion.workflow"
+    "google.subject"              = "assertion.sub"
+    "attribute.repository"        = "assertion.repository"
+    "attribute.ref"               = "assertion.ref"
+    "attribute.job_workflow_ref"  = "assertion.job_workflow_ref"
   }
 
   # KAKSITASOINEN PÄÄSYRAJOITUS (defence-in-depth)
@@ -67,6 +67,11 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   # Taso 2 on ainoa kerros joka on organisaation ulkopuolisen hyökkääjän ulottumattomissa,
   # koska se on Terraform-hallittu eikä muutettavissa pelkillä GitHub-oikeuksilla.
   #
+  # KENTTÄVALINTA: assertion.job_workflow_ref (ei assertion.workflow)
+  #   assertion.workflow    = workflow 'name:'-kenttä (esim. 'CI Tests') — EI tiedostopolku
+  #   assertion.job_workflow_ref = 'org/repo/.github/workflows/file.yml@ref' — oikea kenttä
+  #   Väärä kenttä aiheuttaa unauthorized_client-virheen kaikissa tokeneissa.
+  #
   # Hyväksytyt polut:
   #   1. push main-haaraan + workflow on unit-tests.yml
   #      → ainoa polku joka saa deploy-oikeuden
@@ -76,8 +81,8 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     assertion.repository == 'uutisseuranta/bq-activitystreams' &&
     assertion.ref == 'refs/heads/main' &&
     (
-      assertion.workflow == '.github/workflows/unit-tests.yml' ||
-      assertion.workflow == '.github/workflows/smoke-test.yml'
+      assertion.job_workflow_ref == 'uutisseuranta/bq-activitystreams/.github/workflows/unit-tests.yml@refs/heads/main' ||
+      assertion.job_workflow_ref == 'uutisseuranta/bq-activitystreams/.github/workflows/smoke-test.yml@refs/heads/main'
     )
   EOT
 }
