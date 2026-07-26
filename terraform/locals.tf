@@ -23,5 +23,4 @@ locals {
   query_api_sa_email  = google_service_account.query_api.email
   write_api_sa_email  = google_service_account.write_api.email
   og_scraper_sa_email = google_service_account.og_scraper.email
-  deploy_sa_email     = google_service_account.backend.email
 }
