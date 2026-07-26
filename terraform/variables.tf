@@ -14,6 +14,12 @@ variable "region" {
   default     = "europe-north1"
 }
 
+variable "scheduler_region" {
+  description = "Cloud Scheduler -alue (ei tue europe-north1, käytetään europe-west3)"
+  type        = string
+  default     = "europe-west3"
+}
+
 variable "bq_dataset" {
   description = "BigQuery-pääddataset"
   type        = string

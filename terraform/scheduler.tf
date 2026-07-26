@@ -8,10 +8,13 @@
 #   2. og-enrichment-job   → rikastaa OG-metatiedoilla
 #   3. voikko-job          → lemmatisoi suomenkieliset termit
 #   4. likes-and-updated   → päivittää sosiaaliset metriikat
+#
+# Huom: Cloud Scheduler ei tue europe-north1-regioonia.
+# Käytetään var.scheduler_region (default: europe-west3).
 
 resource "google_cloud_scheduler_job" "rss_fetch" {
   name             = "rss-fetch-job-trigger"
-  region           = var.region
+  region           = var.scheduler_region
   project          = var.gcp_project
   description      = "Ajaa rss-fetch-jobin joka 15. minuutti"
   schedule         = "*/15 * * * *"
@@ -34,7 +37,7 @@ resource "google_cloud_scheduler_job" "rss_fetch" {
 
 resource "google_cloud_scheduler_job" "og_enrichment" {
   name             = "og-enrichment-job-trigger"
-  region           = var.region
+  region           = var.scheduler_region
   project          = var.gcp_project
   description      = "Rikastaa OG-metatiedot uusille artikkeleille tunneittain"
   schedule         = "5 * * * *"
@@ -57,7 +60,7 @@ resource "google_cloud_scheduler_job" "og_enrichment" {
 
 resource "google_cloud_scheduler_job" "voikko" {
   name             = "voikko-job-trigger"
-  region           = var.region
+  region           = var.scheduler_region
   project          = var.gcp_project
   description      = "Lemmatisoi uudet artikkelit kerran tunnissa"
   schedule         = "20 * * * *"
@@ -80,7 +83,7 @@ resource "google_cloud_scheduler_job" "voikko" {
 
 resource "google_cloud_scheduler_job" "likes_and_updated" {
   name             = "likes-and-updated-job-trigger"
-  region           = var.region
+  region           = var.scheduler_region
   project          = var.gcp_project
   description      = "Päivittää sosiaaliset metriikat (tykkäykset, päivitysajat) joka toinen tunti"
   schedule         = "0 */2 * * *"
