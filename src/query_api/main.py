@@ -173,19 +173,36 @@ def get_outbox(
             # BigQuery JSON -kenttä voi tulla dictinä tai merkkijonona — käsitellään molemmat
             obj = json.loads(obj_json_raw) if isinstance(obj_json_raw, str) else obj_json_raw
 
-            # Päivitetään @context ja injektoidaan reaktiokentät AS2 Collection -muodossa
+            # @context laajennetaan kaksialkioiseksi listaksi:
+            # 1. AS2 ydinontologia (pakollinen, W3C AS2 §2.1)
+            # 2. uutisseuranta-nimiavaruus — projektikohtaiset laajennukset (dislikes, agreeCount)
+            #    Namespace on IRI-pohjainen AS2-spesifikaation mukaisesti; välttää konfliktit
+            #    tulevien AS2-laajennusten kanssa. Ks. AS2_CONTRACT.md (tuleva: #54) ja issue #33.
             obj["@context"] = [
                 "https://www.w3.org/ns/activitystreams",
                 {"_uutisseuranta": "https://uutisseuranta.net/ns#"}
             ]
+
+            # likes: AS2 Core §5.7 -kenttä, palautetaan Collection-muodossa (ei kokonaisluku).
+            # totalItems riittää — koko aktiviteettilistan palauttaminen olisi liian raskas.
             obj["likes"] = {
                 "type": "Collection",
                 "totalItems": row["like_count"]
             }
+
+            # dislikes: projektikohtainen laajennus — ei AS2 Core -kenttä (toisin kuin 'likes').
+            # Kirjattu hallittuna laajennuksena AS2_CONTRACT.md:hen (#54).
+            # Collection-rakenne on yhdenmukainen AS2 Core §5.7 'likes'-käytännön kanssa.
             obj["dislikes"] = {
                 "type": "Collection",
                 "totalItems": row["dislike_count"]
             }
+
+            # agreeCount = likes + dislikes (kaikki reaktiot yhteensä).
+            # Tarkoitus: frontend näyttää yhteenlasketun reaktiomäärän ilman asiakaspuolen laskentaa.
+            # Invariantti: arvo on oikein vain jos write-api estää duplikaattiäänet per käyttäjä.
+            # Toggle-logiikka (MERGE vs. user_votes-taulu) ja duplikaattiesto ovat auki: ks. #33.
+            # Hallittu AS2-poikkeama: toggle ei kirjaa 'Undo Like' -aktiviteettia — ks. AS2_CONTRACT.md (#54).
             obj["_uutisseuranta:agreeCount"] = row["like_count"] + row["dislike_count"]
 
             if row["updated"]:
