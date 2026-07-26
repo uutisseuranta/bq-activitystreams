@@ -1,18 +1,38 @@
 # terraform/github.tf
 # GitHub-repositorion hallinta: labelit, branch protection.
 #
+# TESTISTRATEGIA — ks. TERRAFORM_TESTING.md, Kerros 2
+#
+#   terraform plan (CI, PR) validoi branch protection -asetukset
+#   GitHub-provider-skeemaa vasten. Erityisesti:
+#   - contexts=["unit-test"] vastaa unit-tests.yml:n job-nimeä
+#     (väärä nimi estäisi PR-mergaamisen tai jättäisi checkin ohittamatta)
+#   - enforce_admins=true estää admin-bypass-mergen
+#     (false salliisi repojen omistajan ohittaa branch protection)
+#   - allows_force_pushes=false estää historian uudelleenkirjoituksen
+#
 # Issue-viittaukset:
 #   #28  Security Hardening – branch protection
 #   #26  README ja nimeämiskonventio (labelit)
+#   #65  Branch protection + required checks main-haaralle
 
 # ── Branch protection ─────────────────────────────────────────────────────
+#
+# Jos branch protection on jo asetettu GitHubissa käsin ennen `terraform apply`:ta,
+# aja ensin import jotta Terraform ei yritä luoda sitä uudelleen:
+#
+#   terraform import github_branch_protection.main "bq-activitystreams:main"
+#
+# Ks. myös terraform/TERRAFORM_IMPORT.md, luku 6.
 resource "github_branch_protection" "main" {
   repository_id = "bq-activitystreams"
   pattern       = "main"
 
   required_status_checks {
-    strict   = true
-    contexts = ["test"]
+    strict = true
+    # "unit-test" viittaa unit-tests.yml -workflown job-nimeen (#64).
+    # Väärä nimi (esim. "test") ohittaisi tarkistuksen hiljaisesti.
+    contexts = ["unit-test"]
   }
 
   required_pull_request_reviews {
@@ -20,10 +40,15 @@ resource "github_branch_protection" "main" {
     required_approving_review_count = 1
   }
 
-  enforce_admins = false
+  # enforce_admins=true: admin ei voi ohittaa branch protectionia.
+  # false olisi turvallisuusriski: repon omistaja voisi mergata ilman
+  # unit-test-tarkistusta tai reviewer-hyväksyntää.
+  enforce_admins      = true
+  allows_force_pushes = false
+  allows_deletions    = false
 }
 
-# ── Labels ────────────────────────────────────────────────────────────────
+# ── Labels ─────────────────────────────────────────────────────────────────
 # Milestone-labelit
 resource "github_issue_label" "milestone_v05" {
   repository  = "bq-activitystreams"

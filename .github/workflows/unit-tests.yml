@@ -9,8 +9,8 @@ jobs:
   unit-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
       - name: Install dependencies
@@ -18,7 +18,6 @@ jobs:
           pip install defusedxml -r requirements-dev.txt
           find src -name "requirements.txt" -exec pip install -r {} \;
       - name: Run Ruff style and security checks
-        # --output-format=github: löydöt näkyvät PR:n diff-näkymässä annotation-nuolina
         run: ruff check . --output-format=github
       - run: bash unit-test.sh
       - name: Verify STANDARDS.md is in sync with schemas
@@ -26,3 +25,187 @@ jobs:
           chmod +x generate-standards.sh
           ./generate-standards.sh
           git diff --exit-code STANDARDS.md
+
+  terraform-lint:
+    # TESTISTRATEGIA KERROS 1 — staattinen analyysi (ei GCP-yhteyyttä)
+    # Järjestys: tflint → checkov
+    #
+    # tflint:  provider-skeema, deprecated-resurssit, nimeämiskonventiot
+    # checkov: tietoturvapolitiikat (CIS Benchmark)
+    #
+    # SHA-pinnaus kaikille actioneille: estää supply chain -hyökkäykset
+    # joissa tag siirretään osoittamaan haitalliseen committiin.
+    # Tagit ovat mutable — SHA:t eivät.
+    #
+    # Skipatut checkov-säännöt:
+    #   CKV_GCP_82 (google_compute_ssl_policy): ei load balanceria suoraan TF:ssä
+    #   CKV_GCP_34 (project-level IAM):         projekti-tason bigquery.dataEditor
+    #              ja bigquery.user ovat pakollisia — BQ-datasetti-tason IAM
+    #              ei ole mahdollinen näillä rooleilla. Projekti-tason
+    #              secretAccessor ON poistettu (kaanonpäätös G-009).
+    #              Resurssitason #checkov:skip-annotaatiot: terraform/iam.tf.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+      - name: Install checkov
+        run: pip install checkov==3.2.348
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.22"
+      - uses: terraform-linters/setup-tflint@6e1e0642c0289bd619021bf6b34e3c08ed1e005a # v6.3.0
+        with:
+          tflint_version: "v0.55.0"
+      - name: tflint init (google plugin)
+        # GITHUB_TOKEN tarvitaan jotta GitHub API ei rate-limit-pysäytä
+        # tflint-ruleset-google -pluginin latausta
+        run: tflint --init
+        working-directory: terraform/
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: tflint – Terraform lint
+        run: tflint --format compact --no-color
+        working-directory: terraform/
+      - name: Checkov – Terraform staattinen analyysi
+        run: |
+          checkov -d terraform/ \
+            --framework terraform \
+            --output github_failed_only \
+            --hard-fail-on HIGH \
+            --skip-check CKV_GCP_82,CKV_GCP_34
+
+  terraform-plan:
+    # TESTISTRATEGIA KERROS 2 — integraatiotesti (WIF, ei state-kirjoitusta)
+    # Validoi resurssien väliset riippuvuudet oikeaa GCP-provider-skeemaa vasten.
+    # -backend=false: ei kirjoita state-tiedostoa → idempotent, turvallinen CI:ssä.
+    # Plan-output tallennetaan $GITHUB_STEP_SUMMARY:yn → näkyy PR-yhteenvedossa.
+    #
+    # EDELLYTYS: GitHub Secrets WIF_PROVIDER ja WIF_SERVICE_ACCOUNT täytyy olla
+    # asetettu repositoriossa ennen kuin tämä job voi autentikoitua GCP:hen.
+    # Asetus: terraform apply paikallisesti → terraform output → gh secret set
+    # Ohjeet: terraform/DEPLOY.md, Vaiheet 2–4.
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: google-github-actions/auth@71f986410dfbc7added4569d411d040a91dc6935 # v2.1.10
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "1.9.8"
+      - name: terraform init (no backend)
+        run: terraform -chdir=terraform init -backend=false
+      - name: terraform plan
+        run: |
+          terraform -chdir=terraform plan -no-color 2>&1 | tee -a $GITHUB_STEP_SUMMARY
+        env:
+          TF_VAR_gcp_project: uutisseuranta-activitystreams
+          # GITHUB_TOKEN: ephemeral, actions:read + contents:read scope.
+          # Riittää github_branch_protection-resurssille (lukee repo-metatietoja).
+          # Jos lisätään kirjoittavia resursseja (github_actions_secret,
+          # github_repository-päivitykset jne.), tarkista permissions-lohkosta
+          # että tarvittavat scopet on määritelty eksplisiittisesti.
+          TF_VAR_github_token: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy:
+    # ARKKITEHTUURIPÄÄTÖS (kaanonpäätös I-002):
+    # deploy-job on tässä tiedostossa eikä erillisessä deploy.yml:ssä koska:
+    # 1. needs: [unit-test, terraform-lint] — deploy vaatii molempien läpäisyn.
+    #    Erillinen tiedosto ei voi viitata toisen tiedoston job-tuloksiin.
+    # 2. Yhteinen WIF-auth-konfiguraatio: sama google-github-actions/auth-versio
+    #    ja secrets pysyvät synkronissa yhdessä paikassa.
+    # 3. PR-näkymässä kaikki CI-jobit näkyvät yhdessä checklistassa —
+    #    helpompi seurata kokonaisstatusta.
+    # Erillinen deploy.yml lisätään jos deploy-logiikka kasvaa merkittävästi
+    # tai jos tarvitaan eri triggeri (esim. manuaalinen staging-deploy).
+    #
+    # EDELLYTYS: GitHub Secrets WIF_PROVIDER ja WIF_SERVICE_ACCOUNT täytyy olla
+    # asetettu repositoriossa ennen kuin tämä job voi autentikoitua GCP:hen.
+    # Asetus: terraform apply paikallisesti → terraform output → gh secret set
+    # Ohjeet: terraform/DEPLOY.md, Vaiheet 2–4.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    needs: [unit-test, terraform-lint]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: google-github-actions/auth@71f986410dfbc7added4569d411d040a91dc6935 # v2.1.10
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@817b83d791af8a1f089ef2143eb5d630d403aa0d # v2.1.4
+
+      - name: Tallenna nykyiset revisiot rollbackia varten
+        run: |
+          for svc in query-api write-api og-scraper; do
+            REV=$(gcloud run services describe $svc \
+              --region europe-north1 \
+              --project uutisseuranta-activitystreams \
+              --format='value(status.traffic[0].revisionName)' 2>/dev/null || echo "")
+            echo "PREV_${svc//-/_}=$REV" >> $GITHUB_ENV
+            echo "Edellinen revisio ($svc): $REV"
+          done
+
+      - name: Deploy query-api
+        run: |
+          gcloud run deploy query-api \
+            --source src/query_api \
+            --region europe-north1 \
+            --project uutisseuranta-activitystreams
+
+      - name: Deploy write-api
+        run: |
+          gcloud run deploy write-api \
+            --source src/write_api \
+            --region europe-north1 \
+            --project uutisseuranta-activitystreams
+
+      - name: Deploy og-scraper
+        run: |
+          gcloud run deploy og-scraper \
+            --source src/og_scraper \
+            --region europe-north1 \
+            --project uutisseuranta-activitystreams
+
+      - name: Post-deploy healthcheck ja automaattinen rollback
+        run: |
+          FAILED=""
+          for svc in query-api write-api og-scraper; do
+            URL=$(gcloud run services describe $svc \
+              --region europe-north1 \
+              --project uutisseuranta-activitystreams \
+              --format='value(status.url)')
+            echo "Healthcheck: $svc → $URL/healthz"
+            if ! curl -sf --retry 5 --retry-delay 10 --retry-connrefused "$URL/healthz"; then
+              echo "VIRHE: $svc /healthz epäonnistui deployn jälkeen."
+              VAR="PREV_${svc//-/_}"
+              PREV_REV="${!VAR}"
+              if [ -n "$PREV_REV" ]; then
+                echo "Palautetaan liikenne revisioon $PREV_REV"
+                gcloud run services update-traffic $svc \
+                  --to-revisions="$PREV_REV=100" \
+                  --region europe-north1 \
+                  --project uutisseuranta-activitystreams
+              else
+                echo "Edellinen revisio tuntematon — rollback ei mahdollinen"
+              fi
+              FAILED="$FAILED $svc"
+            fi
+          done
+          if [ -n "$FAILED" ]; then
+            echo "Healthcheck epäonnistui palveluille:$FAILED"
+            exit 1
+          fi
+          echo "Kaikki healthcheckit läpäisty ✓"

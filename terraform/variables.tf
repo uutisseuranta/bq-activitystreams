@@ -21,7 +21,7 @@ variable "scheduler_region" {
 }
 
 variable "bq_dataset" {
-  description = "BigQuery-pääddataset"
+  description = "BigQuery-päädataset"
   type        = string
   default     = "activitystreams"
 }
@@ -44,16 +44,30 @@ variable "google_client_id" {
   sensitive   = true
 }
 
-variable "write_api_url" {
-  description = "Cloud Run write-api -palvelun URL (täytetään ensimmäisen deployn jälkeen)"
-  type        = string
-  default     = "https://write-api-7y62heo36a-lz.a.run.app"
-}
+# write_api_url on poistettu muuttujista.
+# Arvo tulee suoraan Cloud Run -resurssista outputs.tf:n kautta:
+#   google_cloud_run_v2_service.write_api.uri
+# Kovakoodattu default oli virhealtis: URL voi muuttua deployn yhteydessä
+# ja muuttujan päivittäminen vaatisi ylimääräisen terraform apply -kierroksen.
+# Jos URL tarvitaan toisessa moduulissa tai skriptissä, käytä:
+#   terraform output write_api_url
 
-variable "allow_mock_auth" {
-  description = "Salli mock-autentikointi (ei koskaan true tuotannossa)"
-  type        = string
-  default     = "false"
+# allow_mock_auth on poistettu (kaanonpäätös G-009, PR #68).
+# ALLOW_MOCK_AUTH-ympäristömuuttujaa ei aseteta Cloud Run -palveluissa.
+# main.py lukee os.getenv('ALLOW_MOCK_AUTH', 'false') suoraan — puuttuva
+# muuttuja käyttäytyy identtisesti kuin arvo 'false'.
+# Mock-auth on sallittu vain yksikkötesteissä (os.environ.setdefault).
+# Ks. terraform/cloudrun_services.tf yläosan kommentti.
+
+variable "max_instance_count" {
+  description = "Cloud Run -palveluiden maksimi-instanssimäärä. Estää odottamattoman kustannusräjähdyksen bot-liikenteen tai bugin sattuessa."
+  type        = number
+  default     = 10
+
+  validation {
+    condition     = var.max_instance_count >= 1 && var.max_instance_count <= 100
+    error_message = "max_instance_count on oltava välillä 1–100."
+  }
 }
 
 variable "rss_feeds" {

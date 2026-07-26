@@ -20,7 +20,9 @@
 # Ympäristömuuttujat (valinnaiset):
 #   BQ_SOCIAL_DATASET (oletus: activitystreams_social)
 #   CLOUD_RUN_SERVICE_URL (service-to-service audience)
-#   ALLOW_MOCK_AUTH     (vain testi/dev, ei koskaan tuotannossa)
+#   ALLOW_MOCK_AUTH     (vain yksikkötesteissä — EI SAA KOSKAAN olla true tuotannossa
+#                        eikä staging-ympäristössä. Puuttuva muuttuja == "false".
+#                        Tarkista terraform/cloud_run.tf: muuttujaa ei pidä olla siellä.)
 #
 # Muutoshistoria:
 #   #33/#48 – Lisätty Dislike-käsittelijä ja toggle-logiikka (Like ↔ Dislike)
@@ -63,7 +65,12 @@ DATASET = os.getenv("BQ_DATASET")
 SOCIAL_DATASET = os.getenv("BQ_SOCIAL_DATASET", "activitystreams_social")
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 CLOUD_RUN_SERVICE_URL = os.getenv("CLOUD_RUN_SERVICE_URL", "")
-ALLOW_MOCK_AUTH = os.getenv("ALLOW_MOCK_AUTH", "false").lower() == "true"
+# ALLOW_MOCK_AUTH luetaan os.getenv:llä suoraan verify_auth_token-funktiossa
+# (ei moduulitason vakiota) jotta patch.dict(os.environ) toimii testeissä.
+# Python evaluoi moduulitason muuttujat kerran importin yhteydessä, minkä
+# jälkeen patch.dict ei vaikuta niihin. os.getenv() funktiossa kutsutaan
+# jokaisen HTTP-pyynnön yhteydessä uudelleen, joten ympäristö voidaan
+# vaihtaa testissä dynaamisesti.
 
 ALLOWED_AUDIENCES = [a for a in [GOOGLE_CLIENT_ID, CLOUD_RUN_SERVICE_URL] if a]
 
@@ -73,31 +80,78 @@ if not PROJECT or not DATASET:
 bq_client = bigquery.Client(project=PROJECT)
 
 
+def verify_google_token(token: str, audience: str) -> Optional[Dict[str, Any]]:
+    """Validoi Google OIDC-tokenin annetulle audiencelle."""
+    try:
+        return id_token.verify_oauth2_token(
+            token,
+            google_requests.Request(),
+            audience=audience
+        )
+    except Exception:
+        return None
+
+
 def verify_auth_token(auth_header: Optional[str]) -> str:
-    """Validoi Google OIDC JWT-tokenin ja palauttaa käyttäjän sub-tunnisteen."""
+    """Validoi Google OIDC JWT-tokenin ja palauttaa käyttäjän sub-tunnisteen.
+
+    Turvallisuushuomiot:
+    - exp-tarkistus: google.oauth2.id_token.verify_oauth2_token hylkää
+      vanhentuneet tokenit automaattisesti (ValueError 'Token expired').
+    - aud-tarkistus: Google tarkistaa että token on tarkoitettu tälle
+      palvelulle. Estää token reuse -hyökkäykset.
+    - iss-tarkistus: Google hyväksyy vain 'accounts.google.com' ja
+      'https://accounts.google.com' — muut issuerit hylätään.
+    - sub-kenttä: palautetaan 401 jos puuttuu. Puuttuva sub aiheuttaisi
+      muuten KeyError:n actorUrl-rakentamisessa (500-virhe).
+
+    ALLOW_MOCK_AUTH-haara:
+    - Ohittaa Google-tokeniverifioinnin kokonaan — sallii "mock-test"-
+      tokenin yksikkötesteissä ilman oikeaa GCP-yhteyttä.
+    - ALLOW_MOCK_AUTH=true EI SAA olla päällä Cloud Runissa. Jos se on,
+      kuka tahansa pääsee kirjoittamaan aktiviteetteja lähettämällä
+      Authorization: Bearer mock-test -otsakkeen.
+    - Tuotantoympäristössä muuttuja puuttuu kokonaan (default "false").
+    """
     if not auth_header or not auth_header.startswith("Bearer "):
         logger.warning("Autentikaatio hylätty: Authorization-otsake puuttuu tai virheellinen")
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header.")
 
     token = auth_header.split(" ")[1]
 
-    if ALLOW_MOCK_AUTH and token == "mock-test":
+    # Tyhjä token Bearer-otsakkeen jälkeen
+    if not token:
+        logger.warning("Autentikaatio hylätty: Bearer-token on tyhjä")
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header.")
+
+    if os.getenv("ALLOW_MOCK_AUTH", "false").lower() == "true" and token == "mock-test":
         logger.warning("Mock-autentikaatio käytössä — vain kehitysympäristöön")
         return "test-user-sub-12345"
 
     last_error = None
     for audience in ALLOWED_AUDIENCES:
         try:
-            id_info = id_token.verify_oauth2_token(
-                token,
-                google_requests.Request(),
-                audience=audience
-            )
+            id_info = verify_google_token(token, audience)
+            if not id_info:
+                raise ValueError("Token verification failed")
+
             if not id_info.get("email_verified"):
                 logger.warning(f"Autentikaatio hylätty: email_verified=false, sub={id_info.get('sub')}")
                 raise HTTPException(status_code=403, detail="Email domain must be verified.")
-            logger.info(f"Autentikaatio onnistui: sub={id_info['sub']}, aud={audience}")
-            return id_info["sub"]
+
+            # sub-kentän puuttuminen aiheuttaisi KeyError:n actorUrl-rakentamisessa.
+            # Palautetaan 401 selkeällä viestillä sen sijaan että päästettäisiin
+            # läpi ja kaaduttaisiin 500:een myöhemmin.
+            sub = id_info.get("sub")
+            if not sub:
+                logger.warning(
+                    f"Autentikaatio hylätty: sub-kenttä puuttuu tokenista, "
+                    f"aud={audience}, email={id_info.get('email')}"
+                )
+                raise HTTPException(status_code=401, detail="Token missing subject claim.")
+
+            logger.info(f"Autentikaatio onnistui: sub={sub}, aud={audience}")
+            return sub
         except HTTPException:
             raise
         except Exception as e:
