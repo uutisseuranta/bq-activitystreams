@@ -153,3 +153,20 @@ resource "google_project_iam_member" "backend_storage_source" {
   role    = "roles/storage.objectCreator"
   member  = "serviceAccount:${google_service_account.backend.email}"
 }
+
+# Cloud Run Admin -oikeus deploy-SA:lle, jotta se voi päivittää ja hallinnoida Cloud Run -palveluita
+resource "google_project_iam_member" "backend_run_admin" {
+  #checkov:skip=CKV_GCP_34: Deploy-SA vaatii projektitason oikeudet Cloud Runin hallintaan deploissa
+  project = var.gcp_project
+  role    = "roles/run.admin"
+  member  = "serviceAccount:${google_service_account.backend.email}"
+}
+
+# Service Account User -oikeus deploy-SA:lle, jotta se voi actAs Cloud Runin runtime-palvelutileinä deploissa
+resource "google_project_iam_member" "backend_sa_user" {
+  #checkov:skip=CKV_GCP_34: Deploy-SA:lla on oltava oikeus toimia runtime-palvelutilinä deploissa
+  project = var.gcp_project
+  role    = "roles/iam.serviceAccountUser"
+  member  = "serviceAccount:${google_service_account.backend.email}"
+}
+
