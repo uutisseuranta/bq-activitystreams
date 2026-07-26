@@ -1,7 +1,7 @@
 import os
 import time
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 # setdefault ei ylikirjoita CI-ympäristön muuttujia (toisin kuin os.environ[key] = value).
 # Tämä on tärkeää kahdesta syystä:
@@ -19,8 +19,6 @@ os.environ.setdefault("ALLOW_MOCK_AUTH", "true")
 with patch("google.cloud.bigquery.Client"):
     from fastapi.testclient import TestClient
     from write_api.main import app, verify_auth_token
-
-import json  # noqa: E402
 
 
 class TestAuthSecurity(unittest.TestCase):
