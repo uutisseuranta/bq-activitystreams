@@ -107,7 +107,6 @@ class TestAuthSecurity(unittest.TestCase):
             json=self.valid_payload
         )
         self.assertEqual(response.status_code, 401)
-        self.assertIn("401", str(response.status_code))
 
     @patch("write_api.main.verify_google_token")
     def test_wrong_audience_returns_401(self, mock_verify):
