@@ -214,3 +214,42 @@ jobs:
             exit 1
           fi
           echo "Kaikki healthcheckit läpäisty ✓"
+
+  notify-ops:
+    needs: [unit-test, terraform-lint, terraform-plan, deploy]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine overall status
+        id: status
+        run: |
+          if [ "${{ needs.unit-test.result }}" = "failure" ] || \
+             [ "${{ needs.terraform-lint.result }}" = "failure" ] || \
+             [ "${{ needs.terraform-plan.result }}" = "failure" ] || \
+             [ "${{ needs.deploy.result }}" = "failure" ]; then
+            echo "status=failure" >> $GITHUB_OUTPUT
+          else
+            echo "status=success" >> $GITHUB_OUTPUT
+          fi
+      - name: Send Status to Centralized CI Monitor (ops repo)
+        env:
+          OPS_TOKEN: ${{ secrets.OPS_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$OPS_TOKEN" ]; then
+            echo "::warning::OPS_DISPATCH_TOKEN secret is missing! Skipping notification."
+            exit 0
+          fi
+          curl -s -X POST \
+            -H "Authorization: token $OPS_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/uutisseuranta/ops/dispatches \
+            -d '{
+              "event_type": "workflow-notification",
+              "client_payload": {
+                "repo": "${{ github.repository }}",
+                "workflow": "${{ github.workflow }}",
+                "status": "${{ steps.status.outputs.status }}",
+                "run_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+              }
+            }'
+
