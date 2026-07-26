@@ -163,21 +163,24 @@ jobs:
           gcloud run deploy query-api \
             --source src/query_api \
             --region europe-north1 \
-            --project uutisseuranta-activitystreams
+            --project uutisseuranta-activitystreams \
+            --base-image python312
 
       - name: Deploy write-api
         run: |
           gcloud run deploy write-api \
             --source src/write_api \
             --region europe-north1 \
-            --project uutisseuranta-activitystreams
+            --project uutisseuranta-activitystreams \
+            --base-image python312
 
       - name: Deploy og-scraper
         run: |
           gcloud run deploy og-scraper \
             --source src/og_scraper \
             --region europe-north1 \
-            --project uutisseuranta-activitystreams
+            --project uutisseuranta-activitystreams \
+            --base-image python312
 
       - name: Post-deploy healthcheck ja automaattinen rollback
         run: |
