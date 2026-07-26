@@ -9,13 +9,16 @@
 #   SA-jako:
 #     sa-query-api   → bigquery.dataViewer (datasetti-taso) + bigquery.user
 #     sa-write-api   → bigquery.dataEditor (datasetti-taso) + bigquery.user + secretAccessor
-#     sa-og-scraper  → bigquery.dataEditor (og_cache-datasetti, datasetti-taso) + run.invoker (write-api kutsuoikeus)
+#                      + run.invoker Cloud Run -jobeille (scheduler-kutsu)
+#     sa-og-scraper  → bigquery.dataEditor (og_cache-datasetti, datasetti-taso)
+#                      + run.invoker (write-api kutsuoikeus)
 #     backend        → deploy-SA: cloudbuild.builds.editor + storage.objectCreator + WIF-binding
 #
 # VÄHIMMÄISOIKEUSPERIAATE:
 #   - Projekti-tason bigquery.dataEditor POISTETTU. Korvattu datasetti-tason bindingillä.
 #   - bigquery.user säilyy projekti-tasolla (pakollinen kyselyjobien ajamiseen — ei datasetti-tason vaihtoehto).
 #   - Secret Manager -oikeus vain write-api SA:lle (secrets.tf).
+#   - deploy-SA:lla ei ole run.invoker-oikeutta — se ei koskaan kutsu runtime-resursseja.
 #
 # Issue-viittaukset:
 #   #28  Security Hardening – service account vähimmäisoikeudet
@@ -42,13 +45,13 @@ resource "google_project_iam_member" "query_api_bq_user" {
 }
 
 # ---------------------------------------------------------------------------
-# SA: write-api (IAM-suojattu kirjoitusendpoint)
+# SA: write-api (IAM-suojattu kirjoitusendpoint + Cloud Run Jobs -ajaja)
 # ---------------------------------------------------------------------------
 
 resource "google_service_account" "write_api" {
   account_id   = "sa-write-api"
   display_name = "write-api"
-  description  = "ActivityStreams write-api: BQ-kirjoitus + Secret Manager"
+  description  = "ActivityStreams write-api: BQ-kirjoitus + Secret Manager + Cloud Run Jobs -ajaja"
   project      = var.gcp_project
 }
 
@@ -61,12 +64,46 @@ resource "google_project_iam_member" "write_api_bq_user" {
 }
 
 # og-scraper kutsuu write-apita Cloud Run IAM:n kautta
-resource "google_cloud_run_v2_service_iam_member" "write_api_invoker" {
+resource "google_cloud_run_v2_service_iam_member" "og_scraper_can_invoke_write_api" {
   project  = var.gcp_project
   location = var.region
   name     = google_cloud_run_v2_service.write_api.name
   role     = "roles/run.invoker"
   member   = "serviceAccount:${google_service_account.og_scraper.email}"
+}
+
+# Cloud Scheduler kutsuu Cloud Run -jobeja write_api-SA:n tokenilla.
+# Jokaiselle jobille tarvitaan erillinen resource-tason binding.
+resource "google_cloud_run_v2_job_iam_member" "write_api_invoke_rss_fetch" {
+  project  = var.gcp_project
+  location = var.region
+  name     = google_cloud_run_v2_job.rss_fetch.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.write_api.email}"
+}
+
+resource "google_cloud_run_v2_job_iam_member" "write_api_invoke_og_enrichment" {
+  project  = var.gcp_project
+  location = var.region
+  name     = google_cloud_run_v2_job.og_enrichment.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.write_api.email}"
+}
+
+resource "google_cloud_run_v2_job_iam_member" "write_api_invoke_voikko" {
+  project  = var.gcp_project
+  location = var.region
+  name     = google_cloud_run_v2_job.voikko.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.write_api.email}"
+}
+
+resource "google_cloud_run_v2_job_iam_member" "write_api_invoke_likes_and_updated" {
+  project  = var.gcp_project
+  location = var.region
+  name     = google_cloud_run_v2_job.likes_and_updated.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.write_api.email}"
 }
 
 # ---------------------------------------------------------------------------
