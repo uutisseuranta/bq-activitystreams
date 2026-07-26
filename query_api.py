@@ -385,6 +385,66 @@ async def check_status(url: str, background_tasks: BackgroundTasks):
     return {"alive": alive}
 
 
+# Globaalit muuttujat tilastojen välimuistille
+_stats_cache = None
+_stats_cache_time = 0.0
+
+@app.get("/ap/stats")
+async def get_stats():
+    """Palauttaa uutisseurannan avainlukutilastot välimuistista tai laskee ne BigQueryssä."""
+    global _stats_cache, _stats_cache_time
+    import time
+    
+    now = time.time()
+    # 1 tunnin välimuisti (3600 sekuntia)
+    if _stats_cache is not None and (now - _stats_cache_time) < 3600:
+        return _stats_cache
+        
+    try:
+        # 1. Lasketaan lähteiden lukumäärä
+        query_sources = f"""
+            SELECT COUNT(DISTINCT JSON_VALUE(object_json.actor.id)) as cnt
+            FROM `{PROJECT}.{DATASET}.objects`
+            WHERE deleted = FALSE
+        """
+        job_sources = bq_client.query(query_sources)
+        results_sources = list(job_sources.result())
+        sources_count = results_sources[0].cnt if results_sources and results_sources[0].cnt is not None else 150
+        
+        # 2. Lasketaan uutisten lukumäärä viimeisen 24 tunnin ajalta
+        query_articles = f"""
+            SELECT COUNT(*) as cnt
+            FROM `{PROJECT}.{DATASET}.objects`
+            WHERE deleted = FALSE
+              AND published >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR)
+        """
+        job_articles = bq_client.query(query_articles)
+        results_articles = list(job_articles.result())
+        articles_last_24h = results_articles[0].cnt if results_articles and results_articles[0].cnt is not None else 10000
+        
+        # Oletuspäivitysväli on 5 minuuttia
+        stats = {
+            "sources_count": sources_count,
+            "articles_last_24h": articles_last_24h,
+            "update_interval_minutes": 5
+        }
+        
+        # Päivitetään välimuisti
+        _stats_cache = stats
+        _stats_cache_time = now
+        
+        return stats
+    except Exception as e:
+        logger.error(f"Virhe laskettaessa tilastoja: {e}")
+        # Virhetilanteessa palautetaan fallback-oletusarvot
+        return {
+            "sources_count": 150,
+            "articles_last_24h": 10000,
+            "update_interval_minutes": 5
+        }
+
+
+
 @app.get("/healthz")
 def liveness():
     # Cloud Run liveness-probe — vastaa aina 200 OK jos prosessi on elossa
