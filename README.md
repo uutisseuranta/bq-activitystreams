@@ -30,9 +30,10 @@ gcloud run deploy <palvelu> \
 ```
 
 Palvelut ja niiden käynnistyskomennot:
-* `query-api`: `uvicorn query_api:app --host 0.0.0.0 --port 8080`
-* `write-api`: `uvicorn write_api:app --host 0.0.0.0 --port 8080`
+* `query-api`: `uvicorn query_api:app --host 0.0.0.0 --port 8080` (CORS-tuki käytössä selainhakuja varten)
+* `write-api`: `uvicorn write_api:app --host 0.0.0.0 --port 8080` (CORS-tuki käytössä reaktioiden tallentamista varten)
 * `og-scraper`: `uvicorn og_scraper:app --host 0.0.0.0 --port 8080`
+
 
 Bootstrap (ensimmäinen deploy tai WIF-secretien uudelleenasetus):
 katso [`terraform-deploy.md`](./terraform-deploy.md).
