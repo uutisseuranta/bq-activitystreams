@@ -256,6 +256,7 @@ CREATE TABLE activitystreams.objects (
   tags            ARRAY<STRING>      OPTIONS(description='Lemmatisoidut tagit (Voikko #6)'),
   tags_enriched   BOOL      NOT NULL OPTIONS(description='TRUE kun Voikko-job on käsitellyt rivin'),
   like_count      INT64     NOT NULL OPTIONS(description='Tykkäysmäärä, päivitetään likes-and-updated-jobilla'),
+  dislike_count   INT64     NOT NULL OPTIONS(description='Dislike-määrä, päivitetään likes-and-updated-jobilla'),
   deleted         BOOL      NOT NULL OPTIONS(description='Pehmeä poisto'),
   object_json     JSON               OPTIONS(description='Koko AS2-objekti natiivina JSON-tyypinä')
 )
