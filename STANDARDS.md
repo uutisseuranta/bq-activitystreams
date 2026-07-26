@@ -29,7 +29,7 @@ Edustaa uutisartikkelia, blogipostausta tai muuta itsenäistä tekstituotetta.
 
 | Property | Type | Required | Possible values | Deprecated | Default | Description | Examples |
 | -------- | ---- | -------- | --------------- | ---------- | ------- | ----------- | -------- |
-| @context | `string` | ✅ | string |  |  | JSON-LD konteksti, tyypillisesti https://www.w3.org/ns/activitystreams |  |
+| @context | `array` or `string` | ✅ | object and/or string and/or string |  |  | JSON-LD konteksti, tyypillisesti https://www.w3.org/ns/activitystreams ja uutisseuranta-nimiavaruuslaajennus |  |
 | type | `string` | ✅ | string |  |  | Objektin tyyppi, arvon on oltava 'Article' |  |
 | id | `string` | ✅ | string |  |  | Objektin yksikäsitteinen tunniste (IRI/URI) |  |
 | name | `string` | ✅ | string |  |  | Artikkelin otsikko tai nimi |  |
@@ -39,6 +39,13 @@ Edustaa uutisartikkelia, blogipostausta tai muuta itsenäistä tekstituotetta.
 | content | `string` |  | string |  |  | Artikkelin HTML-muotoiltu pääsisältö |  |
 | updated | `string` |  | string |  |  | Viimeisin päivitysajankohta RFC 3339 -muodossa |  |
 | attributedTo | `string` |  | string |  |  | Artikkelin tekijä tai julkaisija (esim. uutislähteen nimi) |  |
+| likes | `object` |  | object |  |  | Artikkelin tykkäysten kokoelma (AS2 Core §5.7) |  |
+| likes.type | `string` | ✅ | `Collection` |  |  |  |  |
+| likes.totalItems | `integer` | ✅ | integer |  |  |  |  |
+| dislikes | `object` |  | object |  |  | Artikkelin dislike-reaktioiden kokoelma (projektikohtainen laajennus) |  |
+| dislikes.type | `string` | ✅ | `Collection` |  |  |  |  |
+| dislikes.totalItems | `integer` | ✅ | integer |  |  |  |  |
+| _uutisseuranta:agreeCount | `integer` |  | integer |  |  | Yhteenlaskettu reaktiomäärä (likes + dislikes) (projektikohtainen laajennus) |  |
 
 
 ---

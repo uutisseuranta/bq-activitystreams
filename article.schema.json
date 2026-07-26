@@ -5,8 +5,19 @@
   "type": "object",
   "properties": {
     "@context": {
-      "type": "string",
-      "description": "JSON-LD konteksti, tyypillisesti https://www.w3.org/ns/activitystreams"
+      "anyOf": [
+        { "type": "string" },
+        {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              { "type": "string" },
+              { "type": "object" }
+            ]
+          }
+        }
+      ],
+      "description": "JSON-LD konteksti, tyypillisesti https://www.w3.org/ns/activitystreams ja uutisseuranta-nimiavaruuslaajennus"
     },
     "type": {
       "type": "string",
@@ -43,6 +54,28 @@
     "attributedTo": {
       "type": "string",
       "description": "Artikkelin tekijä tai julkaisija (esim. uutislähteen nimi)"
+    },
+    "likes": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["Collection"] },
+        "totalItems": { "type": "integer" }
+      },
+      "required": ["type", "totalItems"],
+      "description": "Artikkelin tykkäysten kokoelma (AS2 Core §5.7)"
+    },
+    "dislikes": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["Collection"] },
+        "totalItems": { "type": "integer" }
+      },
+      "required": ["type", "totalItems"],
+      "description": "Artikkelin dislike-reaktioiden kokoelma (projektikohtainen laajennus)"
+    },
+    "_uutisseuranta:agreeCount": {
+      "type": "integer",
+      "description": "Yhteenlaskettu reaktiomäärä (likes + dislikes) (projektikohtainen laajennus)"
     }
   },
   "required": ["@context", "type", "id", "name", "url", "published"]
