@@ -170,3 +170,12 @@ resource "google_project_iam_member" "backend_sa_user" {
   member  = "serviceAccount:${google_service_account.backend.email}"
 }
 
+# Artifact Registry Writer -oikeus deploy-SA:lle, jotta se voi pushata Docker-imageja Artifact Registryyn deploissa
+resource "google_project_iam_member" "backend_artifactregistry_writer" {
+  #checkov:skip=CKV_GCP_34: Deploy-SA vaatii projektitason oikeudet Artifact Registryn kirjoitukseen deploissa
+  project = var.gcp_project
+  role    = "roles/artifactregistry.writer"
+  member  = "serviceAccount:${google_service_account.backend.email}"
+}
+
+
