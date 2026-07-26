@@ -3,6 +3,13 @@ import time
 import unittest
 from unittest.mock import MagicMock, patch
 
+# setdefault ei ylikirjoita CI-ympäristön muuttujia (toisin kuin os.environ[key] = value).
+# Tämä on tärkeää kahdesta syystä:
+# 1. Jos CI asettaa esim. GCP_PROJECT:n oikeaksi projektiarvoksi, se säilyy
+#    eikä testit vahingossa käytä "test-project"-arvoa tuotantoympäristössä.
+# 2. patch.dict(os.environ, {...})-kutsut testeissä toimivat oikein, koska
+#    os.getenv() evaluoidaan dynaamisesti joka kutsukerralla — ei moduulitason
+#    vakiona importin yhteydessä.
 os.environ.setdefault("GCP_PROJECT", "test-project")
 os.environ.setdefault("BQ_DATASET", "test_dataset")
 os.environ.setdefault("BQ_SOCIAL_DATASET", "test_social_dataset")
@@ -11,7 +18,7 @@ os.environ.setdefault("ALLOW_MOCK_AUTH", "true")
 
 with patch("google.cloud.bigquery.Client"):
     from fastapi.testclient import TestClient
-    from write_api.main import app
+    from write_api.main import app, verify_auth_token
 
 import json  # noqa: E402
 
@@ -142,7 +149,6 @@ class TestAuthSecurity(unittest.TestCase):
             # sub puuttuu tarkoituksella
         }
         with patch.dict(os.environ, {"ALLOW_MOCK_AUTH": "false"}):
-            from write_api.main import verify_auth_token
             from fastapi import HTTPException
             with self.assertRaises(HTTPException) as ctx:
                 verify_auth_token("Bearer jokin.oikea.token")

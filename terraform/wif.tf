@@ -46,14 +46,14 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "attribute.workflow"   = "assertion.workflow"
   }
 
-  # KOLMITASOINEN PÄÄSYRAJOITUS (defence-in-depth)
+  # KAKSITASOINEN PÄÄSYRAJOITUS (defence-in-depth)
   #
-  # Taso 1 — GitHub UI:   workflow_dispatch.branches: [main]  → estetään UI-tasolla
-  # Taso 2 — Runtime:     if: github.ref == 'refs/heads/main'  → estetään jobin käynnistyksessä
-  # Taso 3 — GCP (tämä): attribute_condition                  → estetään OIDC-tokenin validoinnissa
+  # Taso 1 — Runtime:     if: github.ref == 'refs/heads/main'  → estetään jobin käynnistyksessä
+  # Taso 2 — GCP (tämä): attribute_condition                  → estetään OIDC-tokenin validoinnissa
   #
-  # Nämä kolme kerrosta ovat itsenäisiä: yksi voi pettää ilman että muut pettävät.
-  # Taso 3 on ainoa kerros joka on organisaation ulkopuolisen hyökkääjän ulottumattomissa,
+  # Huom: workflow_dispatch.branches ei toimi GitHub-triggerissä (GitHub-rajoite) —
+  # kenttä ohitetaan hiljaa. Suoja perustuu tasoihin 1 ja 2, jotka ovat itsenäisiä.
+  # Taso 2 on ainoa kerros joka on organisaation ulkopuolisen hyökkääjän ulottumattomissa,
   # koska se on Terraform-hallittu eikä muutettavissa pelkillä GitHub-oikeuksilla.
   #
   # Hyväksytyt polut:

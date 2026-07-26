@@ -102,6 +102,11 @@ jobs:
           terraform -chdir=terraform plan -no-color 2>&1 | tee -a $GITHUB_STEP_SUMMARY
         env:
           TF_VAR_gcp_project: uutisseuranta-activitystreams
+          # GITHUB_TOKEN: ephemeral, actions:read + contents:read scope.
+          # Riittää github_branch_protection-resurssille (lukee repo-metatietoja).
+          # Jos lisätään kirjoittavia resursseja (github_actions_secret,
+          # github_repository-päivitykset jne.), tarkista permissions-lohkosta
+          # että tarvittavat scopet on määritelty eksplisiittisesti.
           TF_VAR_github_token: ${{ secrets.GITHUB_TOKEN }}
 
   deploy:
@@ -144,7 +149,6 @@ jobs:
           done
 
       - name: Deploy query-api
-        id: deploy_query_api
         run: |
           gcloud run deploy query-api \
             --source src/query_api \
@@ -152,7 +156,6 @@ jobs:
             --project uutisseuranta-activitystreams
 
       - name: Deploy write-api
-        id: deploy_write_api
         run: |
           gcloud run deploy write-api \
             --source src/write_api \
@@ -175,10 +178,6 @@ jobs:
               --project uutisseuranta-activitystreams \
               --format='value(status.url)')
             echo "Healthcheck: $svc → $URL/healthz"
-            # --retry 5 --retry-delay 10: yhteensä ~60s, kattaa Cloud Run cold startin (10-30s).
-            # --retry-connrefused: yritä uudelleen myös jos portti ei vielä vastaa
-            # (container käynnistyy). Alkuperäinen --retry 3 --retry-delay 5 (15s)
-            # laukaisisi rollbackin oikeasta deploysta joka vain käynnistyi hitaasti.
             if ! curl -sf --retry 5 --retry-delay 10 --retry-connrefused "$URL/healthz"; then
               echo "VIRHE: $svc /healthz epäonnistui deployn jälkeen."
               VAR="PREV_${svc//-/_}"
