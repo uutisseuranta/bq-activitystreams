@@ -27,7 +27,7 @@ jobs:
           git diff --exit-code STANDARDS.md
 
   terraform-lint:
-    # TESTISTRATEGIA KERROS 1 — staattinen analyysi (ei GCP-yhteyttä)
+    # TESTISTRATEGIA KERROS 1 — staattinen analyysi (ei GCP-yhteyyttä)
     # Järjestys: tflint → checkov
     #
     # tflint:  provider-skeema, deprecated-resurssit, nimeämiskonventiot
@@ -97,7 +97,7 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
-      - uses: hashicorp/setup-terraform@e6baf59ee5b1f91d0b65f827518c8c40c5df80f6 # v3.1.2
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         with:
           terraform_version: "1.9.8"
       - name: terraform init (no backend)
