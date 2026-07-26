@@ -291,7 +291,7 @@ class TestCheckStatus(unittest.TestCase):
     def test_check_status_alive(self, mock_client_cls):
         mock_response = MagicMock()
         mock_response.status_code = 200
-        
+
         mock_client = MagicMock()
         mock_client.__aenter__.return_value.head.return_value = mock_response
         mock_client_cls.return_value = mock_client
@@ -310,7 +310,7 @@ class TestCheckStatus(unittest.TestCase):
         response = self.client.get("/ap/check-status?url=https://example.com/dead")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"alive": False})
-        
+
         # Verify that background BQ archiver task is queued/called
         mock_update_bq.assert_called_once_with("https://example.com/dead", "https://web.archive.org/web/*/https://example.com/dead")
 
@@ -318,17 +318,17 @@ class TestCheckStatus(unittest.TestCase):
     def test_get_stats_success(self, mock_bq):
         import query_api
         query_api._stats_cache = None
-        
+
         mock_result_sources = MagicMock()
         mock_result_sources.cnt = 164
         mock_result_articles = MagicMock()
         mock_result_articles.cnt = 11842
-        
+
         mock_bq.query.side_effect = [
             MagicMock(result=lambda: [mock_result_sources]),
             MagicMock(result=lambda: [mock_result_articles])
         ]
-        
+
         response = self.client.get("/ap/stats")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {
