@@ -1,6 +1,6 @@
 # STANDARDS.md — Uutisseuranta Backend Standardit ja Datamalli
 
-Tämä dokumentti määrittelee uutisseuranta-projektin backend-kerroksen (`bq-activitystreams`) noudattamat standardit sekä API- ja tietokantatason datamallit.
+Tämä dokumentti määrittelee uutisseuranta-projektin backend-kerroksen (`gcs-activitystreams`) noudattamat standardit sekä API- ja tietokantatason datamallit.
 
 ---
 
@@ -33,22 +33,39 @@ Edustaa uutisartikkelia, blogipostausta tai muuta itsenäistä tekstituotetta.
 | -------- | ---- | -------- | --------------- | ---------- | ------- | ----------- | -------- |
 | @context | `array` or `string` | ✅ | object and/or string and/or string |  |  | JSON-LD konteksti, tyypillisesti https://www.w3.org/ns/activitystreams ja uutisseuranta-nimiavaruuslaajennus |  |
 | type | `string` | ✅ | string |  |  | Objektin tyyppi, arvon on oltava 'Article' |  |
-| id | `string` | ✅ | string |  |  | Objektin yksikäsitteinen tunniste (IRI/URI) |  |
+| id | `string` | ✅ | string |  |  | Objektin yksikäsitteinen pysyvä tunniste (persistent IRI: https://uutisseuranta.net/ap/objects/{hash}) |  |
 | name | `string` | ✅ | string |  |  | Artikkelin otsikko tai nimi |  |
 | url | `string` | ✅ | string |  |  | Alkuperäisen artikkelin verkko-osoite (URL) |  |
 | published | `string` | ✅ | string |  |  | Julkaisuajankohta RFC 3339 -muodossa |  |
 | summary | `string` |  | string |  |  | Artikkelin yhteenveto tai lyhyt katkelma |  |
 | content | `string` |  | string |  |  | Artikkelin HTML-muotoiltu pääsisältö |  |
 | updated | `string` |  | string |  |  | Viimeisin päivitysajankohta RFC 3339 -muodossa |  |
-| attributedTo | `string` |  | string |  |  | Artikkelin tekijä tai julkaisija (esim. uutislähteen nimi) |  |
+| attributedTo | `string` |  | string |  |  | Artikkelin tekijä tai julkaisija (esim. uutislähteen nimi) |  |
 | likes | `object` |  | object |  |  | Artikkelin tykkäysten kokoelma (AS2 Core §5.7) |  |
 | likes.type | `string` | ✅ | `Collection` |  |  |  |  |
 | likes.totalItems | `integer` | ✅ | integer |  |  |  |  |
 | dislikes | `object` |  | object |  |  | Artikkelin dislike-reaktioiden kokoelma (projektikohtainen laajennus) |  |
 | dislikes.type | `string` | ✅ | `Collection` |  |  |  |  |
 | dislikes.totalItems | `integer` | ✅ | integer |  |  |  |  |
-| _uutisseuranta:reactionCount | `integer` |  | integer |  |  | Yhteenlaskettu reaktiomäärä (likes + dislikes). Neutraali nimitys: sisältää sekä Agree (Like) että Disagree (Dislike) -reaktiot. |  |
-| tag | `array` |  | object |  |  | Artikkeliin liittyvät AS2 Hashtag-objektit (Voikko-jobin tuottamat morfologiset tagit) |  |
+| _uutisseuranta:reactionCount | `integer` |  | integer |  |  | Yhteenlaskettu reaktiomäärä (likes.totalItems + dislikes.totalItems). Neutraali nimitys: sisältää sekä Agree (Like) että Disagree (Dislike) -reaktiot. |  |
+| tag | `array` |  | [hashtag](#hashtag) |  |  | Artikkeliin liittyvät AS2 Hashtag-objektit (Voikko-jobin tuottamat morfologiset tagit) |  |
+
+
+---
+
+# Definitions
+
+## hashtag
+
+Edustaa artikkelille tai Note-objektille annettua aihetunnistetta tai avainsanaa.
+
+#### Type: `object`
+
+| Property | Type | Required | Possible values | Deprecated | Default | Description | Examples |
+| -------- | ---- | -------- | --------------- | ---------- | ------- | ----------- | -------- |
+| type | `string` | ✅ | string |  |  | Objektin tyyppi, arvon on oltava 'Hashtag' |  |
+| name | `string` | ✅ | [`^#`](https://regex101.com/?regex=%5E%23) |  |  | Aihetunnisteen teksti #-etuliitteellä (esim. '#politiikka'). Arvon on aina alettava #-merkillä. |  |
+| href | `string` |  | string |  |  | Tunnisteeseen liittyvä haku- tai suodatuslinkki (URL) |  |
 
 
 ---
@@ -113,7 +130,7 @@ Edustaa artikkelille tai Note-objektille annettua aihetunnistetta tai avainsanaa
 | Property | Type | Required | Possible values | Deprecated | Default | Description | Examples |
 | -------- | ---- | -------- | --------------- | ---------- | ------- | ----------- | -------- |
 | type | `string` | ✅ | string |  |  | Objektin tyyppi, arvon on oltava 'Hashtag' |  |
-| name | `string` | ✅ | string |  |  | Aihetunnisteen teksti #-etuliitteellä (esim. '#politiikka'). Arvon on aina alettava #-merkillä (pattern: ^#). |  |
+| name | `string` | ✅ | [`^#`](https://regex101.com/?regex=%5E%23) |  |  | Aihetunnisteen teksti #-etuliitteellä (esim. '#politiikka'). Arvon on aina alettava #-merkillä. |  |
 | href | `string` |  | string |  |  | Tunnisteeseen liittyvä haku- tai suodatuslinkki (URL) |  |
 
 

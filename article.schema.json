@@ -80,10 +80,33 @@
     "tag": {
       "type": "array",
       "items": {
-        "$ref": "hashtag.schema.json"
+        "$ref": "#/$defs/hashtag"
       },
       "description": "Artikkeliin liittyvät AS2 Hashtag-objektit (Voikko-jobin tuottamat morfologiset tagit)"
     }
   },
-  "required": ["@context", "type", "id", "name", "url", "published"]
+  "required": ["@context", "type", "id", "name", "url", "published"],
+  "$defs": {
+    "hashtag": {
+      "title": "ActivityStreams 2.0 Hashtag",
+      "description": "Edustaa artikkelille tai Note-objektille annettua aihetunnistetta tai avainsanaa.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Objektin tyyppi, arvon on oltava 'Hashtag'"
+        },
+        "href": {
+          "type": "string",
+          "description": "Tunnisteeseen liittyvä haku- tai suodatuslinkki (URL)"
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^#",
+          "description": "Aihetunnisteen teksti #-etuliitteellä (esim. '#politiikka'). Arvon on aina alettava #-merkillä."
+        }
+      },
+      "required": ["type", "name"]
+    }
+  }
 }
