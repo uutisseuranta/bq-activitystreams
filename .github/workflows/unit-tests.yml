@@ -52,10 +52,10 @@ jobs:
           python-version: "3.11"
       - name: Install checkov
         run: pip install checkov==3.2.348
-      - uses: actions/setup-go@d60b41a563a30eb0a0f8c768e0d4c1fbc3b56b56 # v5.5.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.22"
-      - uses: terraform-linters/setup-tflint@90f302a83f2b5ef4b8e51f50a5db5ec6e1f11827 # v4.1.1
+      - uses: terraform-linters/setup-tflint@6e1e0642c0289bd619021bf6b34e3c08ed1e005a # v6.3.0
         with:
           tflint_version: "v0.55.0"
       - name: tflint init (google plugin)
