@@ -15,9 +15,9 @@ variable "region" {
 }
 
 variable "scheduler_region" {
-  description = "Cloud Scheduler -alue (ei tue europe-north1, käytetään europe-west3)"
+  description = "Cloud Scheduler -alue (ei tue europe-north1, käytetään europe-west1)"
   type        = string
-  default     = "europe-west3"
+  default     = "europe-west1"
 }
 
 variable "bq_dataset" {
