@@ -60,11 +60,11 @@ Tästä filosofiasta seuraa tietoisesti rajalliset aktiviteettityypit. `Like` to
 
 Järjestelmä tuottaa kolmea objektityyppiä:
 
-**Article** edustaa uutisartikkelia tai blogipostausta. Pakollisia kenttiä ovat `@context`, `type` (arvo `"Article"`), `id`, `name`, `url` ja `published`. Objektin `id` on pysyvä IRI muodossa `https://uutisseuranta.net/ap/objects/{hash}` — se erotetaan artikkelin operatiivisesta `url`-osoitteesta, jotta toimitukselliset URL-rakenteen muutokset eivät riko olemassa olevia linkityksiä. Valinnaisia kenttiä ovat `summary`, `content`, `updated`, `attributedTo`, `likes`-kokoelma, `dislikes`-kokoelma, projektikohtainen `_uutisseuranta:agreeCount` sekä `tag`-kenttä Voikko-jobin tuottamille morfologisille tageille AS2 Hashtag-objekteina.
+**Article** edustaa uutisartikkelia tai blogipostausta. Pakollisia kenttiä ovat `@context`, `type` (arvo `"Article"`), `id`, `name`, `url` ja `published`. Objektin `id` on pysyvä IRI muodossa `https://uutisseuranta.net/ap/objects/{hash}` — se erotetaan artikkelin operatiivisesta `url`-osoitteesta, jotta toimitukselliset URL-rakenteen muutokset eivät riko olemassa olevia linkityksiä. Valinnaisia kenttiä ovat `summary`, `content`, `updated`, `attributedTo`, `likes`-kokoelma, `dislikes`-kokoelma, projektikohtainen `_uutisseuranta:reactionCount` sekä `tag`-kenttä Voikko-jobin tuottamille morfologisille tageille AS2 Hashtag-objekteina.
 
 **Note** edustaa lyhyttä tekstikommenttia tai artikkelin vastausviestiä. Se vaatii `content`-, `attributedTo`- ja `inReplyTo`-kentät, joista viimeksi mainittu sitoo kommentin pääartikkeliin tai ylempään kommenttiin. Kommenttiketjun syvyys on rajoitettu kahteen tasoon — vastaukseen ei voi vastata.
 
-**OrderedCollection** on järjestetty lista objekteista ja kuvaa esimerkiksi uutisvirta tai outbox-endpointin vastausta. Järjestelmä käyttää yksinkertaista kyselyparametreihin perustuvaa paginaatiota (`?page=`) eikä AS2:n `OrderedCollectionPage` + `next`/`prev` -linkkikenttiä, koska järjestelmä ei federoidu ulkoisiin ActivityPub-palvelimiin (päätös L-009).
+**OrderedCollection** on järjestetty lista objekteista ja kuvaa esimerkiksi uutisvirta tai outbox-endpointin vastausta. Järjestelmä käyttää inkrementaalista `?n=`-parametripohjaista hakumallia eikä AS2:n `OrderedCollectionPage` + `next`/`prev` -linkkikenttiä, koska järjestelmä ei federoidu ulkoisiin ActivityPub-palvelimiin (päätös L-009). Client pyytää aina top-N relevantinta artikkelia alusta alkaen (n=5/50/500) — ei kursoreja eikä sivunumeroita.
 
 ---
 
