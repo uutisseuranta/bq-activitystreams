@@ -25,7 +25,7 @@
     },
     "id": {
       "type": "string",
-      "description": "Objektin yksikäsitteinen tunniste (IRI/URI)"
+      "description": "Objektin yksikäsitteinen pysyvä tunniste (persistent IRI: https://uutisseuranta.net/ap/objects/{hash})"
     },
     "name": {
       "type": "string",
@@ -76,6 +76,13 @@
     "_uutisseuranta:agreeCount": {
       "type": "integer",
       "description": "Yhteenlaskettu reaktiomäärä (likes + dislikes) (projektikohtainen laajennus)"
+    },
+    "tag": {
+      "type": "array",
+      "items": {
+        "$ref": "hashtag.schema.json"
+      },
+      "description": "Artikkeliin liittyvät AS2 Hashtag-objektit (Voikko-jobin tuottamat morfologiset tagit)"
     }
   },
   "required": ["@context", "type", "id", "name", "url", "published"]

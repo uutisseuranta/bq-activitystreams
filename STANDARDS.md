@@ -11,6 +11,8 @@ Tämä dokumentti määrittelee uutisseuranta-projektin backend-kerroksen (`gcs-
 | Datamalli | **ActivityStreams 2.0** (JSON-LD) | [W3C ActivityStreams 2.0](https://www.w3.org/TR/activitystreams-core/) |
 | Aikaleimat | **RFC 3339** (ISO 8601 -profiili) | [RFC 3339](https://tools.ietf.org/html/rfc3339) |
 | Merkistö | **UTF-8** | [Unicode Standard](https://www.unicode.org/) |
+| Tiedonsiirtovapaus | **W3C Data on the Web Best Practices (DWBP)** | [W3C DWBP BP7: Use persistent URIs](https://www.w3.org/TR/dwbp/#persistentUris) |
+| Web Scraping | **Robots Exclusion Protocol (REP)** | [RFC 9309](https://www.rfc-editor.org/rfc/rfc9309) (Robots.txt, 2022) |
 
 ---
 
@@ -46,6 +48,7 @@ Edustaa uutisartikkelia, blogipostausta tai muuta itsenäistä tekstituotetta.
 | dislikes.type | `string` | ✅ | `Collection` |  |  |  |  |
 | dislikes.totalItems | `integer` | ✅ | integer |  |  |  |  |
 | _uutisseuranta:agreeCount | `integer` |  | integer |  |  | Yhteenlaskettu reaktiomäärä (likes + dislikes) (projektikohtainen laajennus) |  |
+| tag | `array` |  | object |  |  | Artikkeliin liittyvät AS2 Hashtag-objektit (Voikko-jobin tuottamat morfologiset tagit) |  |
 
 
 ---
@@ -127,3 +130,26 @@ Tietokanta- ja rajapintatasolla noudatetaan seuraavia GDPR-standardeja:
   - **BigQuery** (`bq-activitystreams`): kommentit poistetaan tai niiden sisältö korvataan merkkijonolla `[kommentti poistettu]` ketjurakenteen säilyttämiseksi, ja tykkäykset anonymisoidaan poistamalla käyttäjätunnisteet.
   - **Firestore** (`uutisseuranta.github.io` / frontend): käyttäjän preferenssit ja asetukset poistetaan. Firestore toimii tässä järjestelmässä yksinomaan frontend-preferenssien monilaitesynkronointiin (ks. [uutisseuranta.github.io DECISION_LOG.csv L-006](https://github.com/uutisseuranta/uutisseuranta.github.io/blob/main/DECISION_LOG.csv)) — ei backend-tietovarastona.
   - **Lokijärjestelmät**: henkilötiedot anonymisoidaan pysyvästi.
+
+---
+
+## 4. Kenttämääpäys: OpenGraph / Schema.org / AS2
+Tämä taulukko määrittelee, miten sisällön rikastusprosessissa eri metadatastandardien kentät vastaavat toisiaan ja miten ne mäpätään W3C ActivityStreams 2.0 (AS2) -datamalliin.
+
+| AS2-kenttä | OpenGraph (og:) | Schema.org (JSON-LD) | Huomiot ja prioriteetti |
+|---|---|---|---|
+| `name` | `og:title` | `headline` / `name` | Pidempi otsikko voittaa vertailussa (`longer(rss, og)`). |
+| `summary` | `og:description` | `description` | `og:description` täydentää, jos RSS-syötteen kuvaus puuttuu. |
+| `image` | `og:image` | `image` / `thumbnailUrl` | Ensimmäinen resolvoitava kuva käytetään. |
+| `published` | `article:published_time` | `datePublished` | Prioriteetti: **JSON-LD `datePublished` → OG `article:published_time` → HTTP `Last-Modified`** |
+| `updated` | `article:modified_time` | `dateModified` | Valinnainen kenttä. |
+| `url` | `og:url` | `url` | Ensisijaisena lähteenä käytetään RSS-syötteen ``-linkkiä. |
+| `attributedTo` | `article:author` | `author.name` | Sisällöntuottajan tai median nimi. |
+| `type` | `og:type` (`article`) | `@type` (`NewsArticle`) | Validoidaan tyypin vastaavuus (`og:type = article`). |
+| `tag` | — | `keywords` | Voikko-morfologiset tagit muunnetaan AS2 `Hashtag`-objekteiksi. |
+
+---
+
+## 5. Paginaatio ja identiteettien pysyvyys
+- **Paginaatiostrategia (Päätös L-009)**: Järjestelmä käyttää yksinkertaista kyselyparametreihin perustuvaa paginaatiota (`?page=`) suorituskyvyn takaamiseksi, eikä ActivityPubin monimutkaisempaa `OrderedCollectionPage` + `next`/`prev` -linkkikenttäontologiaa.
+- **Pysyvät tunnisteet (W3C DWBP BP7 / Päätös L-010)**: AS2-objektin `id` on pysyvä, muuttumaton IRI muodossa `https://uutisseuranta.net/ap/objects/{hash}`. Se erotetaan artikkelin operatiivisesta `url`-osoitteesta, jotta toimitukselliset URL-rakenteen muutokset eivät riko olemassa olevia linkityksiä ja sosiaalisia reaktioita. Hash lasketaan kaavalla `sha256(source + url)[:16]`.
