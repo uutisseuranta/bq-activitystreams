@@ -358,10 +358,12 @@ async def check_status(url: str, background_tasks: BackgroundTasks):
     """Tarkistaa onko artikkelilinkki tavoitettavissa ja tallentaa virhetilanteessa arkistolinkin BigQueryyn."""
     try:
         parsed = urllib.parse.urlparse(url)
-        if parsed.scheme not in ("http", "https") or not parsed.netloc:
-            raise HTTPException(status_code=400, detail="Invalid URL scheme.")
+        is_invalid_scheme = parsed.scheme not in ("http", "https") or not parsed.netloc
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid URL.")
+
+    if is_invalid_scheme:
+        raise HTTPException(status_code=400, detail="Invalid URL scheme.")
 
     alive = False
     try:
