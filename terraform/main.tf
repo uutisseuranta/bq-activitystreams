@@ -19,7 +19,7 @@ terraform {
 
   required_providers {
     google = {
-      source = "hashicorp/google"
+      source  = "hashicorp/google"
       # ~> 5.40 sallii patch-päivitykset 5.40.x+ mutta estää 6.x-hyppäyksen.
       # Google Provider 5.x sisältää breaking changeja eri minor-versioissa —
       # minor-pinned (5.0) on liian löysä. Nosta tätä harkiten ja tarkista
@@ -27,26 +27,29 @@ terraform {
       version = "~> 5.40"
     }
     github = {
-      source = "integrations/github"
+      source  = "integrations/github"
       # ~> 6.0 — GitHub provider on stabiilimpi kuin Google; minor-pinned riittää.
       version = "~> 6.0"
     }
   }
 
-  # GCS-backend on toistaiseksi poissa käytöstä — state tallennetaan paikallisesti.
+  # GCS remote backend — state tallennetaan GCS-bucketiin paikallisen
+  # terraform.tfstate-tiedoston sijaan.
   #
-  # HUOM: Backendin aktivointi on state migration -operaatio joka vaatii:
-  #   1. GCS-bucketin olemassaolon (uutisseuranta-activitystreams-tfstate)
-  #   2. Paikallisen state-tiedoston siirtämisen: terraform state push
-  #   3. Oman PR:n jossa ei ole muita inframuutoksia
+  # BOOTSTRAP-JÄRJESTYS (kertaluonteinen, ks. terraform/DEPLOY.md Vaihe 0–2):
+  #   1. Luo GCS-bucket:  gsutil mb -l europe-north1 gs://uutisseuranta-activitystreams-tfstate
+  #   2. Versioning:      gsutil versioning set on gs://uutisseuranta-activitystreams-tfstate
+  #   3. Aja WIF ensin:   terraform init -backend=false && terraform apply -target=...
+  #   4. Aktivoi backend: terraform init -migrate-state
+  #   5. Täysi apply:     terraform apply
   #
-  # Aktivoi poistamalla kommentit ja ajamalla:
-  #   terraform init -migrate-state
-  #
-  # backend "gcs" {
-  #   bucket = "uutisseuranta-activitystreams-tfstate"
-  #   prefix = "terraform/state"
-  # }
+  # Remote backend mahdollistaa CI:n terraform plan/apply ilman paikallista
+  # state-tiedostoa — CI autentikoi GCP:hen WIF:llä (I-001) ja lukee/kirjoittaa
+  # staten suoraan GCS:stä.
+  backend "gcs" {
+    bucket = "uutisseuranta-activitystreams-tfstate"
+    prefix = "terraform/state"
+  }
 }
 
 provider "google" {
