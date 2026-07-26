@@ -1,0 +1,78 @@
+{
+  "name": "Sääntö 14: Uusi Jira kommentti → Lisää GitHub issue comment",
+  "state": "DISABLED",
+  "canOtherRuleTrigger": false,
+  "notifyOnError": "FIRSTERROR",
+  "_comment": "Tila: Suunniteltu (TODO). Silmukkaesto: skipataan jos kommentti alkaa Git: — se on Sääntö 8:n kirjoittama.",
+  "trigger": {
+    "component": "TRIGGER",
+    "type": "jira.comment.added",
+    "value": {}
+  },
+  "components": [
+    {
+      "component": "CONDITION",
+      "type": "jira.condition.container.block",
+      "value": null,
+      "children": [
+        {
+          "component": "CONDITION_BLOCK",
+          "type": "jira.condition.if.block",
+          "value": {
+            "conditionMatchType": "ALL"
+          },
+          "children": [
+            {
+              "component": "CONDITION",
+              "type": "jira.comparator.condition",
+              "value": {
+                "first": "{{issue.customfield_10072}}",
+                "operator": "IS_NOT_EMPTY"
+              }
+            },
+            {
+              "component": "CONDITION",
+              "type": "jira.condition.container.block",
+              "value": null,
+              "children": [
+                {
+                  "component": "CONDITION_BLOCK",
+                  "type": "jira.condition.if.block",
+                  "value": {
+                    "conditionMatchType": "ALL"
+                  },
+                  "children": [
+                    {
+                      "component": "CONDITION",
+                      "type": "jira.comparator.condition",
+                      "value": {
+                        "first": "{{comment.body}}",
+                        "operator": "REGEX_NOT_MATCHES",
+                        "second": "^Git:"
+                      }
+                    },
+                    {
+                      "component": "ACTION",
+                      "type": "jira.web.request",
+                      "value": {
+                        "method": "POST",
+                        "url": "https://api.github.com/repos/uutisseuranta/{{issue.customfield_10071}}/issues/{{issue.customfield_10072}}/comments",
+                        "headers": {
+                          "Authorization": "Bearer {{secrets.GITHUB_TOKEN}}",
+                          "Content-Type": "application/json"
+                        },
+                        "body": {
+                          "body": "Jira: {{comment.author.displayName}}: {{comment.body}}"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

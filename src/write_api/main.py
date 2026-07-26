@@ -80,6 +80,18 @@ if not PROJECT or not DATASET:
 bq_client = bigquery.Client(project=PROJECT)
 
 
+def verify_google_token(token: str, audience: str) -> Optional[Dict[str, Any]]:
+    """Validoi Google OIDC-tokenin annetulle audiencelle."""
+    try:
+        return id_token.verify_oauth2_token(
+            token,
+            google_requests.Request(),
+            audience=audience
+        )
+    except Exception:
+        return None
+
+
 def verify_auth_token(auth_header: Optional[str]) -> str:
     """Validoi Google OIDC JWT-tokenin ja palauttaa käyttäjän sub-tunnisteen.
 
@@ -119,11 +131,10 @@ def verify_auth_token(auth_header: Optional[str]) -> str:
     last_error = None
     for audience in ALLOWED_AUDIENCES:
         try:
-            id_info = id_token.verify_oauth2_token(
-                token,
-                google_requests.Request(),
-                audience=audience
-            )
+            id_info = verify_google_token(token, audience)
+            if not id_info:
+                raise ValueError("Token verification failed")
+
             if not id_info.get("email_verified"):
                 logger.warning(f"Autentikaatio hylätty: email_verified=false, sub={id_info.get('sub')}")
                 raise HTTPException(status_code=403, detail="Email domain must be verified.")

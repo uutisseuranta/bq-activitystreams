@@ -79,14 +79,14 @@ class TestAuthSecurity(unittest.TestCase):
         """
         Epäkelpo JWT-merkkijono (ei pisteitä, ei Base64) → 401, ei 500.
 
-        ALLOW_MOCK_AUTH=true-ympäristössä "TÄMÄEIOLEJWT" ei matchaa "mock-test",
+        ALLOW_MOCK_AUTH=true-ympäristössä "THISISNOTAJWT" ei matchaa "mock-test",
         joten koodi menee Google-verifiointihaaraan → verify_google_token
         palauttaa None → 401. Tulos on deterministinen: 403 ei ole mahdollinen
         tässä koodipolussa.
         """
         response = self.client.post(
             "/ap/activities",
-            headers={"Authorization": "Bearer TÄMÄEIOLEJWT"},
+            headers={"Authorization": "Bearer THISISNOTAJWT"},
             json=self.valid_payload
         )
         self.assertEqual(response.status_code, 401,
@@ -167,6 +167,7 @@ class TestAuthSecurity(unittest.TestCase):
         mock_verify.return_value = {
             "sub": "test-user-sub-12345",
             "email": "test@example.com",
+            "email_verified": True,
             "aud": "test-client-id",
             "exp": int(time.time()) + 3600,
             "iss": "https://accounts.google.com",
@@ -397,10 +398,11 @@ class TestLikeActivity(unittest.TestCase):
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 201)
         mock_remove.assert_called_once()
-        mock_bq.insert_rows_json.assert_called_once()
-        args = mock_bq.insert_rows_json.call_args[0]
-        rows = args[1]
-        self.assertEqual(rows[0]["type"], "Like")
+        self.assertEqual(mock_bq.insert_rows_json.call_count, 2)
+        call_args_list = mock_bq.insert_rows_json.call_args_list
+        args0 = call_args_list[0][0]
+        rows0 = args0[1]
+        self.assertEqual(rows0[0]["type"], "Like")
 
 
 class TestCreateActivity(unittest.TestCase):

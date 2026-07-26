@@ -78,19 +78,4 @@ resource "google_bigquery_table" "social_likes" {
   schema              = jsonencode([])
 }
 
-# ---------------------------------------------------------------------------
-# IAM – palvelutilille lukuoikeus molempiin datasetteihin
-# (kirjoitusoikeus tulee projekti-tason bigquery.dataEditor-roolista iam.tf:ssä)
-# ---------------------------------------------------------------------------
 
-resource "google_bigquery_dataset_iam_member" "main_reader" {
-  dataset_id = google_bigquery_dataset.main.dataset_id
-  role       = "roles/bigquery.dataViewer"
-  member     = "serviceAccount:${google_service_account.backend.email}"
-}
-
-resource "google_bigquery_dataset_iam_member" "social_reader" {
-  dataset_id = google_bigquery_dataset.social.dataset_id
-  role       = "roles/bigquery.dataViewer"
-  member     = "serviceAccount:${google_service_account.backend.email}"
-}

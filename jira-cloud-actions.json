@@ -1,0 +1,440 @@
+[
+  {
+    "action_name": "Assign work item",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Attach forms",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Attach forms with values",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Change form status",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Clone work item",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Comment on work item",
+    "json_type": "jira.issue.comment",
+    "verified_cloud_compatible": true,
+    "notes": "Verified via import into Jira Cloud."
+  },
+  {
+    "action_name": "Copy forms",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Create branch in (product name)",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Create Confluence page",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Create work item",
+    "json_type": "jira.issue.create",
+    "verified_cloud_compatible": true,
+    "notes": "Verified via import into Jira Cloud."
+  },
+  {
+    "action_name": "Create lookup table",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Create dynamic lookup table",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Create sub-tasks",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Create sprint",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Create variable",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Create object",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Delete comment",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Delete work item",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Delete work item links",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Edit comment",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Edit Assets field attributes",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Edit work item",
+    "json_type": "jira.issue.edit",
+    "verified_cloud_compatible": true,
+    "notes": "Verified via import into Jira Cloud."
+  },
+  {
+    "action_name": "Edit object",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Edit request type",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Link work items",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Link work item to focus area",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Link vulnerability to work item",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Log work",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Lookup work items",
+    "json_type": "jira.lookup.issues",
+    "verified_cloud_compatible": true,
+    "notes": "Verified via import into Jira Cloud. Flat keys (first, second, operator) are supported."
+  },
+  {
+    "action_name": "Lookup objects",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Manage watchers",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Send email",
+    "json_type": "jira.email.send",
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "<br>Send customized email",
+    "json_type": "jira.email.send",
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Send Microsoft Teams message",
+    "json_type": "jira.teams.message",
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Send Slack message",
+    "json_type": "jira.slack.message",
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Send Twilio (SMS) message",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Send web request",
+    "json_type": "jira.web.request",
+    "verified_cloud_compatible": true,
+    "notes": "Verified via import into Jira Cloud. Old type 'jira.util.send.web.request' is obsolete."
+  },
+  {
+    "action_name": "Transition work item",
+    "json_type": "jira.issue.transition",
+    "verified_cloud_compatible": true,
+    "notes": "Verified via import into Jira Cloud."
+  },
+  {
+    "action_name": "Use Rovo agent",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Add service space customer",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Approve/Decline request",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Create incident",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Create version",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Create work item with a request type",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Release version",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Delete attachments",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Log action",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Re-fetch work item data",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Set entity property",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Unrelease version",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Send message to Amazon SNS topic",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Run AWS SSM document",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Restart Virtual Machine in Azure",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "<br><br>Start runbook in Azure",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Add stakeholders to incident",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Send update to Statuspage",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Create post-incident review",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Create Zoom meeting for incident",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Create Slack channel for incident",
+    "json_type": "jira.slack.message",
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Set channel topic for incident Slack channel",
+    "json_type": "jira.slack.message",
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Add apps to Slack channel",
+    "json_type": "jira.slack.message",
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Send direct message on Slack",
+    "json_type": "jira.slack.message",
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Send message on Slack channel",
+    "json_type": "jira.slack.message",
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Add members to Slack channel",
+    "json_type": "jira.slack.message",
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Add bookmarks to Slack channel",
+    "json_type": "jira.slack.message",
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Create Microsoft Teams chat or meeting for incident",
+    "json_type": "jira.teams.message",
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Run script using Jira Edge Connector",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Change alert status",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Launch job template in Ansible",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Run a query in New Relic",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Delay",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Delay until an alert event occurs",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  },
+  {
+    "action_name": "Re-fetch alert data",
+    "json_type": null,
+    "verified_cloud_compatible": false,
+    "notes": "Not tested or used in the current integration rules."
+  }
+]

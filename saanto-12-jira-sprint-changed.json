@@ -1,0 +1,59 @@
+{
+  "name": "Sääntö 12: Jira sprint muuttuu → Päivitä GitHub label",
+  "state": "DISABLED",
+  "canOtherRuleTrigger": false,
+  "notifyOnError": "FIRSTERROR",
+  "_comment": "Tila: Suunniteltu (TODO). Label-poistologiikka poistettu (L-006).",
+  "trigger": {
+    "component": "TRIGGER",
+    "type": "jira.field.changed",
+    "value": {
+      "fields": [
+        "sprint"
+      ]
+    }
+  },
+  "components": [
+    {
+      "component": "CONDITION",
+      "type": "jira.condition.container.block",
+      "value": null,
+      "children": [
+        {
+          "component": "CONDITION_BLOCK",
+          "type": "jira.condition.if.block",
+          "value": {
+            "conditionMatchType": "ALL"
+          },
+          "children": [
+            {
+              "component": "CONDITION",
+              "type": "jira.comparator.condition",
+              "value": {
+                "first": "{{issue.customfield_10072}}",
+                "operator": "IS_NOT_EMPTY"
+              }
+            },
+            {
+              "component": "ACTION",
+              "type": "jira.web.request",
+              "value": {
+                "method": "POST",
+                "url": "https://api.github.com/repos/uutisseuranta/{{issue.customfield_10071}}/issues/{{issue.customfield_10072}}/labels",
+                "headers": {
+                  "Authorization": "Bearer {{secrets.GITHUB_TOKEN}}",
+                  "Content-Type": "application/json"
+                },
+                "body": {
+                  "labels": [
+                    "sprint:{{issue.sprint.name}}"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

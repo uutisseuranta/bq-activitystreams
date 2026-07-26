@@ -1,0 +1,111 @@
+{
+  "name": "Sääntö 2: GitHub issue edited → Päivitä Jira work item",
+  "state": "ENABLED",
+  "canOtherRuleTrigger": false,
+  "notifyOnError": "FIRSTERROR",
+  "trigger": {
+    "component": "TRIGGER",
+    "type": "jira.incoming.webhook",
+    "value": {
+      "webhookType": "NO_ISSUES"
+    }
+  },
+  "components": [
+    {
+      "component": "CONDITION",
+      "type": "jira.condition.container.block",
+      "value": null,
+      "children": [
+        {
+          "component": "CONDITION_BLOCK",
+          "type": "jira.condition.if.block",
+          "value": {
+            "conditionMatchType": "ALL"
+          },
+          "children": [
+            {
+              "component": "CONDITION",
+              "type": "jira.comparator.condition",
+              "value": {
+                "first": "{{webhookData.action}}",
+                "operator": "EQUALS",
+                "second": "edited"
+              }
+            },
+            {
+              "component": "CONDITION",
+              "type": "jira.condition.container.block",
+              "value": null,
+              "children": [
+                {
+                  "component": "CONDITION_BLOCK",
+                  "type": "jira.condition.if.block",
+                  "value": {
+                    "conditionMatchType": "ALL"
+                  },
+                  "children": [
+                    {
+                      "component": "CONDITION",
+                      "type": "jira.comparator.condition",
+                      "value": {
+                        "first": "{{webhookData.issue.title}}",
+                        "operator": "REGEX_NOT_MATCHES",
+                        "second": "^Jira:"
+                      }
+                    },
+                    {
+                      "component": "ACTION",
+                      "type": "jira.lookup.issues",
+                      "value": {
+                        "query": {
+                          "jql": "project = US AND cf[10072] = {{webhookData.issue.number}} AND cf[10071] = \"{{webhookData.repository.name}}\""
+                        },
+                        "variableName": "lookupIssues"
+                      }
+                    },
+                    {
+                      "component": "CONDITION",
+                      "type": "jira.condition.container.block",
+                      "value": null,
+                      "children": [
+                        {
+                          "component": "CONDITION_BLOCK",
+                          "type": "jira.condition.if.block",
+                          "value": {
+                            "conditionMatchType": "ALL"
+                          },
+                          "children": [
+                            {
+                              "component": "CONDITION",
+                              "type": "jira.comparator.condition",
+                              "value": {
+                                "first": "{{lookupIssues.size}}",
+                                "operator": "GREATER_THAN",
+                                "second": "0"
+                              }
+                            },
+                            {
+                              "component": "ACTION",
+                              "type": "jira.issue.edit",
+                              "value": {
+                                "issueKey": "{{lookupIssues.first.key}}",
+                                "fields": {
+                                  "summary": "Git: {{webhookData.issue.title}}",
+                                  "description": "{{webhookData.issue.body}}"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
