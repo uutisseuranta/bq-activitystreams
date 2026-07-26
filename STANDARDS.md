@@ -40,7 +40,7 @@ Edustaa uutisartikkelia, blogipostausta tai muuta itsenäistä tekstituotetta.
 | summary | `string` |  | string |  |  | Artikkelin yhteenveto tai lyhyt katkelma |  |
 | content | `string` |  | string |  |  | Artikkelin HTML-muotoiltu pääsisältö |  |
 | updated | `string` |  | string |  |  | Viimeisin päivitysajankohta RFC 3339 -muodossa |  |
-| attributedTo | `string` |  | string |  |  | Artikkelin tekijä tai julkaisija (esim. uutislähteen nimi) |  |
+| attributedTo | `string` |  | string |  |  | Artikkelin tekijä tai julkaisija (esim. uutislähteen nimi) |  |
 | likes | `object` |  | object |  |  | Artikkelin tykkäysten kokoelma (AS2 Core §5.7) |  |
 | likes.type | `string` | ✅ | `Collection` |  |  |  |  |
 | likes.totalItems | `integer` | ✅ | integer |  |  |  |  |
@@ -162,3 +162,41 @@ Tämä taulukko määrittelee, miten sisällön rikastusprosessissa eri metadata
   Client suodattaa duplikaatit selaimen muistissa `id`-kentän perusteella. Kun käyttäjä on selannnut kaiken, esitetään tagipilvi uutta hakua varten (n palautuu 5:een). Tämä pitkää BigQuery-kustannukset ennustettavina: kukin käyttäjäsessio tuottaa korkeintaan kolme kyselytasoa per tagi.
 
 - **Pysyvät tunnisteet (W3C DWBP BP7 / Päätös L-010)**: AS2-objektin `id` on pysyvä, muuttumaton IRI muodossa `https://uutisseuranta.net/ap/objects/{hash}`. Se erotetaan artikkelin operatiivisesta `url`-osoitteesta, jotta toimitukselliset URL-rakenteen muutokset eivät riko olemassa olevia linkityksiä ja sosiaalisia reaktioita. Hash lasketaan kaavalla `sha256(source + url)[:16]`.
+
+---
+
+## 6. Hashtag-standardi ja Voikko-normalisointi
+
+W3C ActivityStreams 2.0 ei itse määrittele `Hashtag`-tyyppiä — se on lisätty myöhemmin `as:`-nimiavaruuteen epävirallisena laajennuksena. `Hashtag` on Mastodonin vakiinnuttama de facto -standardi koko Fediverse-ekosysteemissä. Mastodonin virallinen dokumentaatio määrittelee asian eksplisiittisesti: **"`Hashtag` has a name containing the `#hashtag` microsyntax — a `#` followed by a string sequence representing a topic."** DSNP-spesifikaatio vahvistaa saman käytännön: `"name": "#dsnp"`. Tästä seuraa, että `hashtag.schema.json`-skeeman sääntö `pattern: "^#"` on **oikea ja standardin mukainen valinta** — se pakottaa täsmälleen sen muodon, jota kaikki AS2/AP-ekosysteemin toteutukset käyttävät.
+
+### Voikko-normalisoinnin vastuu
+
+Voikko tuottaa morfologisia hakutermejä pelkkänä sanana ilman `#`-merkkiä: `politiikka`, `eurooppa`, `ilmastonmuutos`. Voikko on suomen kielen morfologinen analysaattori, ei sosiaalisen median hashtag-generaattori — se ei tiedä eikä välitä `#`-konventiosta.
+
+Tämä tarkoittaa, että `pattern: "^#"` paljastaa tärkeän **normalisointivastuun**: koodipolun täytyy eksplisiittisesti lisätä `#`-etuliite Voikon tuottamiin termeihin ennen kuin ne kirjoitetaan `object_json['tag']`-kenttään. Jos muunnosta ei tehdä, skeemavalidaatio hylkää koko artikkelin tallennuksen — mikä on tarkoituksellista, koska se pakottaa korjaamaan ongelman aikaisessa vaiheessa.
+
+Voikko-job tarvitsee siis normalisointiaskeleen:
+
+```python
+# Voikko palauttaa: ["politiikka", "eurooppa"]
+# Tallennetaan AS2 Hashtag -muodossa:
+tags = [
+    {
+        "type": "Hashtag",
+        "name": f"#{word}",          # <-- normalisointi: lisätään #-etuliite
+        "href": f"https://uutisseuranta.net/ap/outbox?tag=%23{word}"
+    }
+    for word in voikko_terms
+]
+```
+
+### href-kentän URL-enkoodaus
+
+`href`-kentässä `#` täytyy enkoodata muotoon `%23`, koska `#` on URL:ssa fragmentin aloitusmerkki. Oikea muoto on `?tag=%23politiikka`, ei `?tag=#politiikka`. Tämä on erillinen johdonmukaisuusvaatimus `name`-kentän muodosta: molemmat viittaavat samaan tagiin, mutta eri konteksteissa `#`-merkki käyttäytyy eri tavalla.
+
+| Kenttä | Muoto | Esimerkki |
+|---|---|---|
+| `name` | `#`-etuliite, sellaisenaan | `"#politiikka"` |
+| `href` | `#` URL-enkoodattuna `%23`:ksi | `"...?tag=%23politiikka"` |
+
+Viitteet: [W3C AS2 extensions wiki](https://www.w3.org/wiki/Activity_Streams_extensions) · [Mastodon ActivityPub spec](https://docs.joinmastodon.org/spec/activitypub/) · [DSNP Tag spec](https://spec.dsnp.org/ActivityContent/Associated/Tag.html)
