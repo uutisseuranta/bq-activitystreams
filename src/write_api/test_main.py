@@ -75,15 +75,19 @@ class TestAuthSecurity(unittest.TestCase):
 
     def test_random_string_as_token_returns_401_not_500(self):
         """
-        Epäkelpo JWT-merkkijono (ei pisteitä, ei Base64) → 401 tai 403, ei 500.
-        Varmistaa ettei verify_auth_token kaadu poikkeukseen ilman käsittelijää.
+        Epäkelpo JWT-merkkijono (ei pisteitä, ei Base64) → 401, ei 500.
+
+        ALLOW_MOCK_AUTH=true-ympäristössä "TÄMÄEIOLEJWT" ei matchaa "mock-test",
+        joten koodi menee Google-verifiointihaaraan → verify_google_token
+        palauttaa None → 401. Tulos on deterministinen: 403 ei ole mahdollinen
+        tässä koodipolussa.
         """
         response = self.client.post(
             "/ap/activities",
             headers={"Authorization": "Bearer TÄMÄEIOLEJWT"},
             json=self.valid_payload
         )
-        self.assertIn(response.status_code, [401, 403],
+        self.assertEqual(response.status_code, 401,
             f"Epäkelpo token sai väärän statuksen: {response.status_code}")
 
     @patch("write_api.main.verify_google_token")
