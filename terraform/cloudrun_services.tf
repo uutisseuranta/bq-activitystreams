@@ -42,7 +42,7 @@
 # Issue-viittaukset:
 #   #28  Security Hardening – CORS, autentikointi
 
-# ── query-api ──────────────────────────────────────────────────────────────
+# ── query-api ───────────────────────────────────────────────────────────────────────
 resource "google_cloud_run_v2_service" "query_api" {
   name     = "query-api"
   location = var.region
@@ -102,7 +102,7 @@ resource "google_cloud_run_v2_service_iam_member" "query_api_public" {
   member   = "allUsers"
 }
 
-# ── write-api ──────────────────────────────────────────────────────────────
+# ── write-api ───────────────────────────────────────────────────────────────────────
 resource "google_cloud_run_v2_service" "write_api" {
   name     = "write-api"
   location = var.region
@@ -144,10 +144,6 @@ resource "google_cloud_run_v2_service" "write_api" {
         name  = "GOOGLE_CLIENT_ID"
         value = var.google_client_id
       }
-      env {
-        name  = "CLOUD_RUN_SERVICE_URL"
-        value = var.write_api_url
-      }
       # ALLOW_MOCK_AUTH ei ole env-lohkossa — ks. tiedoston yläosan kommentti (G-009).
       # Puuttuva muuttuja == os.getenv('ALLOW_MOCK_AUTH', 'false') palauttaa 'false'.
       # Muuttujaa ei voi muuttaa 'true':ksi Cloud Consolesta tai gcloud:ista
@@ -186,7 +182,7 @@ resource "google_cloud_run_v2_service" "write_api" {
   ]
 }
 
-# ── og-scraper ─────────────────────────────────────────────────────────────
+# ── og-scraper ─────────────────────────────────────────────────────────────────────
 resource "google_cloud_run_v2_service" "og_scraper" {
   name     = "og-scraper"
   location = var.region
