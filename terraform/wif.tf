@@ -51,11 +51,12 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   }
 
   attribute_mapping = {
-    "google.subject"              = "assertion.sub"
-    "attribute.repository"        = "assertion.repository"
-    "attribute.repository_owner"  = "assertion.repository_owner"
-    "attribute.ref"               = "assertion.ref"
-    "attribute.job_workflow_ref"  = "assertion.job_workflow_ref"
+    "google.subject"             = "assertion.sub"
+    "attribute.repository"       = "assertion.repository"
+    "attribute.repository_owner" = "assertion.repository_owner"
+    "attribute.ref"              = "assertion.ref"
+    "attribute.job_workflow_ref" = "assertion.job_workflow_ref"
+    "attribute.actor"            = "assertion.actor"
   }
 
   # KAKSITASOINEN PÄÄSYRAJOITUS (defence-in-depth)
