@@ -97,7 +97,7 @@ def send_ops_notification(job_name: str, status: str, details: str = None) -> No
     )
 
     try:
-        with urllib.request.urlopen(req, timeout=10) as response:
+        with urllib.request.urlopen(req, timeout=10) as response:  # noqa: S310
             response.read()
     except Exception as e:
         logging.getLogger(job_name).warning(f"Ops-ilmoituksen lähetys epäonnistui: {e}")

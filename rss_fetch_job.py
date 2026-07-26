@@ -224,7 +224,7 @@ def fetch_rss_feed(feed_url: str, timeout: int) -> List[Dict[str, Any]]:
 
 def build_as2_article(item: Dict[str, Any], source: str, domain: str) -> Dict[str, Any]:
     """Muodostaa standardin W3C Activity Streams 2.0 Article -rakenteen."""
-    input_str = f"{source}{url}"
+    input_str = f"{source}{item['url']}"
     url_hash = hashlib.sha256(input_str.encode("utf-8")).hexdigest()[:16]
     as2_id = f"https://uutisseuranta.net/ap/objects/{url_hash}"
 
@@ -258,7 +258,7 @@ def build_as2_article(item: Dict[str, Any], source: str, domain: str) -> Dict[st
         "@context": "https://www.w3.org/ns/activitystreams",
         "type": "Article",
         "id": as2_id,
-        "url": url,
+        "url": item["url"],
         "name": item["title"],
         "summary": item["summary"],
         "published": published_str,
