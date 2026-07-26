@@ -1,13 +1,13 @@
 # src/lib/test_gcp_logging.py
+import io
 import json
 import logging
 import os
 import sys
-import io
 import unittest
 from unittest.mock import patch
 
-from lib.gcp_logging import StructuredFormatter, get_logger
+from gcp_logging import StructuredFormatter, get_logger
 
 
 class TestStructuredFormatter(unittest.TestCase):

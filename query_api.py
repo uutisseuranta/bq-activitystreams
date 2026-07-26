@@ -1,23 +1,22 @@
+import base64
+import contextvars
 import datetime
 import json
 import os
 import time
-import base64
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, Query, Response, Request, Header
-from google.cloud import bigquery
+from fastapi import FastAPI, Header, HTTPException, Query, Request, Response
+from gcp_logging import get_logger
 from google.auth.transport import requests as google_requests
+from google.cloud import bigquery
 from google.oauth2 import id_token
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
-
-from lib.gcp_logging import get_logger
+from slowapi.util import get_remote_address
 
 logger = get_logger("query-api")
 
-import contextvars
 current_request = contextvars.ContextVar("current_request")
 
 def get_query_user_or_ip(request: Request) -> str:
@@ -83,7 +82,7 @@ def verify_auth_token_optional(auth_header: Optional[str]) -> Optional[str]:
     if not auth_header.startswith("Bearer "):
         logger.warning("Autentikaatio hylätty: Virheellinen Authorization-formaatti")
         raise HTTPException(status_code=401, detail="Invalid Authorization header format.")
-    
+
     token = auth_header.split(" ")[1]
     allow_mock = os.getenv("ALLOW_MOCK_AUTH", "false").lower() == "true"
     if allow_mock and token == "mock-test":

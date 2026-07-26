@@ -2,7 +2,7 @@
 import unittest
 from unittest.mock import patch
 
-from shared import og_parser
+import og_parser
 
 
 class TestOgParser(unittest.TestCase):
@@ -67,7 +67,7 @@ class TestOgParser(unittest.TestCase):
         self.assertEqual(metadata["description"], "Meta Description")
         self.assertEqual(metadata["image"], None)
 
-    @patch("shared.og_parser.fetch_url_stream")
+    @patch("og_parser.fetch_url_stream")
     def test_robots_check_allow(self, mock_fetch):
         # robots.txt sallii kaiken
         mock_fetch.return_value = b"User-agent: *\nAllow: /"
@@ -83,7 +83,7 @@ class TestOgParser(unittest.TestCase):
         self.assertTrue(allowed_again)
         mock_fetch.assert_called_once()
 
-    @patch("shared.og_parser.fetch_url_stream")
+    @patch("og_parser.fetch_url_stream")
     def test_robots_check_disallow(self, mock_fetch):
         # robots.txt kieltää
         mock_fetch.return_value = b"User-agent: *\nDisallow: /"

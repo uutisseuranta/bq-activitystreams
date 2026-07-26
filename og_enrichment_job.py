@@ -1,39 +1,14 @@
-import datetime
 import json
-import logging
 import os
 import sys
 import uuid
 
+# Käytetään jaettua OG-parseria
+import og_parser
+from gcp_logging import get_logger
 from google.cloud import bigquery
 
-# Käytetään jaettua OG-parseria
-from shared import og_parser
-
-
-# JsonFormatter toistuu identtisenä og_enrichment_job-, og_scraper- ja query_api-palveluissa.
-# Tämä on tietoinen arkkitehtuuripäätös: Cloud Run -palvelut ovat toisistaan riippumattomia
-# deployable-yksikköjä. Jakaminen shared/-moduuliin lisäisi build-riippuvuuden ilman selvää hyötyä,
-# koska formatter on yksinkertainen (~10 riviä) eikä muutu usein.
-# Päätös kirjattu: TECHNICAL_DESIGN.md §4 "Suunnittelu- ja kehityskäytännöt".
-class JsonFormatter(logging.Formatter):
-    def format(self, record):
-        # Cloud Logging tunnistaa 'severity'-kentän automaattisesti logtasoksi
-        log_entry = {
-            "severity": record.levelname,
-            "message": record.getMessage(),
-            "logger": record.name,
-            # ISO 8601 UTC — Cloud Logging edellyttää Z-päätettä (ei +00:00)
-            "time": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
-        }
-        if record.exc_info:
-            log_entry["exception"] = self.formatException(record.exc_info)
-        return json.dumps(log_entry, ensure_ascii=False)
-
-handler = logging.StreamHandler()
-handler.setFormatter(JsonFormatter())
-logging.basicConfig(level=logging.INFO, handlers=[handler], force=True)
-logger = logging.getLogger("og-enrichment-job")
+logger = get_logger("og-enrichment-job")
 
 
 def main() -> None:

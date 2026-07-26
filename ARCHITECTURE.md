@@ -490,7 +490,7 @@ GROUP BY root_url
 
 ### Jaettu structured logging -moduuli (#60)
 
-Kaikki Cloud Run -palvelut ja -jobit käyttävät yhtenäistä structured logging -moduulia (`src/lib/gcp_logging.py`), joka muuntaa lokit JSON-muotoisiksi.
+Kaikki Cloud Run -palvelut ja -jobit käyttävät yhtenäistä structured logging -moduulia (`gcp_logging.py`), joka muuntaa lokit JSON-muotoisiksi.
 - **Severity-kenttä:** GCP Cloud Logging tunnistaa automaattisesti logitason (`INFO`, `WARNING`, `ERROR`, `CRITICAL`) lokirivistä.
 - **Trace-korrelaatio:** Jos `CLOUD_TRACE_CONTEXT`-ympäristömuuttuja on saatavilla, lokiriveihin injektoidaan `"logging.googleapis.com/trace"`-kenttä Cloud Trace -integraatiota varten.
 

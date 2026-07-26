@@ -26,22 +26,21 @@
 #
 # Muutoshistoria:
 #   #33/#48 – Lisätty Dislike-käsittelijä ja toggle-logiikka (Like ↔ Dislike)
+import base64
 import datetime
 import json
 import os
-import base64
 from typing import Any, Dict, Optional
 
 import ulid
-from fastapi import FastAPI, Header, HTTPException, Response, Request
+from fastapi import FastAPI, Header, HTTPException, Request, Response
+from gcp_logging import get_logger
 from google.auth.transport import requests as google_requests
 from google.cloud import bigquery
 from google.oauth2 import id_token
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-
-from lib.gcp_logging import get_logger
+from slowapi.util import get_remote_address
 
 logger = get_logger("write-api")
 
