@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Query, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from gcp_logging import get_logger
 from google.auth.transport import requests as google_requests
 from google.cloud import bigquery
@@ -51,6 +52,15 @@ def get_outbox_limit() -> str:
 limiter = Limiter(key_func=get_query_user_or_ip)
 app = FastAPI(title="ActivityStreams Query API", version="1.0.0")
 app.state.limiter = limiter
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 @app.middleware("http")
 async def add_request_context_middleware(request: Request, call_next):

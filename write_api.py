@@ -36,6 +36,7 @@ from typing import Any, Dict, Optional
 
 import ulid
 from fastapi import FastAPI, Header, HTTPException, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from gcp_logging import get_logger
 from google.auth.transport import requests as google_requests
 from google.cloud import bigquery
@@ -70,6 +71,15 @@ def get_user_id(request: Request) -> str:
 limiter = Limiter(key_func=get_user_id)
 app = FastAPI(title="ActivityStreams Write API", version="1.0.0")
 app.state.limiter = limiter
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 @app.exception_handler(RateLimitExceeded)
 async def custom_rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
