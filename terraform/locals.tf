@@ -10,9 +10,7 @@
 #   - Välttää sirkulariteettiongelmat jos locals viittaa resursseihin eri
 #     tiedostoissa
 #
-# Siirretty:
-#   image_base  ← artifact_registry.tf
-#   sa_email    ← iam.tf
+# G-010: yhteinen sa_email poistettu — palvelukohtaiset SA:t (ks. iam.tf)
 
 locals {
   # Artifact Registry -imagen peruspolku.
@@ -20,8 +18,10 @@ locals {
   # Käyttö: "${local.image_base}/palvelu:latest"
   image_base = "${var.region}-docker.pkg.dev/${var.gcp_project}/jobs"
 
-  # Backend-palvelutilin sähköpostiosoite lyhytmuodossa.
-  # Viittaa google_service_account.backend -resurssiin (iam.tf).
-  # Käytetään Cloud Run -palveluissa, IAM-sidoksissa ja WIF:ssä.
-  sa_email = google_service_account.backend.email
+  # Palvelukohtaiset SA-emailit (G-010, iam.tf).
+  # deploy-SA (backend) käytetään vain CI/CD:ssä + WIF-bindingissä.
+  query_api_sa_email  = google_service_account.query_api.email
+  write_api_sa_email  = google_service_account.write_api.email
+  og_scraper_sa_email = google_service_account.og_scraper.email
+  deploy_sa_email     = google_service_account.backend.email
 }

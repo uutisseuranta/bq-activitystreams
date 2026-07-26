@@ -13,6 +13,10 @@
 #                            joka ei saa koskaan näkyä lokeissa tai
 #                            ympäristömuuttujissa selkokielisenä.
 #
+# G-010: secretAccessor-oikeus on vain sa-write-api SA:lle.
+# Aiempi binding google_service_account.backend:ille on poistettu.
+# query-api ja og-scraper eivät tarvitse Google OAuth -salaisuutta.
+#
 # Cloud Run -palvelut viittaavat salaisuuksiin muodossa:
 #   env { name = "GOOGLE_CLIENT_SECRET"
 #         value_source { secret_key_ref { secret = google_secret_manager_secret.google_client_secret.secret_id
@@ -31,16 +35,9 @@ resource "google_secret_manager_secret" "google_client_secret" {
   }
 }
 
-# Palvelutilille oikeus lukea salaisuus
-resource "google_secret_manager_secret_iam_member" "backend_can_read" {
+# Vain write-api SA:lla on oikeus lukea OAuth-salaisuus (G-010)
+resource "google_secret_manager_secret_iam_member" "write_api_can_read_secret" {
   secret_id = google_secret_manager_secret.google_client_secret.secret_id
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.backend.email}"
+  member    = "serviceAccount:${google_service_account.write_api.email}"
 }
-
-# ---------------------------------------------------------------------------
-# outputs.tf:iin voi lisätä tarvittaessa:
-#   output "client_secret_name" {
-#     value = google_secret_manager_secret.google_client_secret.name
-#   }
-# ---------------------------------------------------------------------------
