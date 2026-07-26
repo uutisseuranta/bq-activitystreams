@@ -69,7 +69,7 @@ class TestAS2Contract(unittest.TestCase):
 
         import jsonschema
 
-        # Etsitään juurikansiosta *.schema.json tiedostot
+        # Etsitaan juurikansiosta *.schema.json tiedostot
         # Koska testit saatetaan ajaa alikansiosta, haetaan suhteellinen polku oikein
         base_dir = os.path.dirname(os.path.abspath(__file__))
         collection_schema_path = os.path.join(base_dir, "collection.schema.json")
@@ -99,5 +99,6 @@ class TestAS2Contract(unittest.TestCase):
         self.assertEqual(item["dislikes"]["type"], "Collection")
         self.assertEqual(item["dislikes"]["totalItems"], 2)
 
-        self.assertIn("_uutisseuranta:agreeCount", item)
-        self.assertEqual(item["_uutisseuranta:agreeCount"], 12)
+        # reactionCount = likes + dislikes (kaikki reaktiot yhteensa, neutraali nimitys)
+        self.assertIn("_uutisseuranta:reactionCount", item)
+        self.assertEqual(item["_uutisseuranta:reactionCount"], 12)

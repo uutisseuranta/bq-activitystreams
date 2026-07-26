@@ -53,7 +53,7 @@
     },
     "attributedTo": {
       "type": "string",
-      "description": "Artikkelin tekijä tai julkaisija (esim. uutislähteen nimi)"
+      "description": "Artikkelin tekijä tai julkaisija (esim. uutislähteen nimi)"
     },
     "likes": {
       "type": "object",
@@ -73,9 +73,9 @@
       "required": ["type", "totalItems"],
       "description": "Artikkelin dislike-reaktioiden kokoelma (projektikohtainen laajennus)"
     },
-    "_uutisseuranta:agreeCount": {
+    "_uutisseuranta:reactionCount": {
       "type": "integer",
-      "description": "Yhteenlaskettu reaktiomäärä (likes + dislikes) (projektikohtainen laajennus)"
+      "description": "Yhteenlaskettu reaktiomäärä (likes.totalItems + dislikes.totalItems). Neutraali nimitys: sisältää sekä Agree (Like) että Disagree (Dislike) -reaktiot."
     },
     "tag": {
       "type": "array",

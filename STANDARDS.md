@@ -35,7 +35,7 @@ Edustaa uutisartikkelia, blogipostausta tai muuta itsenäistä tekstituotetta.
 | type | `string` | ✅ | string |  |  | Objektin tyyppi, arvon on oltava 'Article' |  |
 | id | `string` | ✅ | string |  |  | Objektin yksikäsitteinen tunniste (IRI/URI) |  |
 | name | `string` | ✅ | string |  |  | Artikkelin otsikko tai nimi |  |
-| url | `string` | ✅ | string |  |  | Alkuperäisen artikkelin verkko-osoite (URL) |  |
+| url | `string` | ✅ | string |  |  | Alkuperäisen artikkelin verkko-osoite (URL) |
 | published | `string` | ✅ | string |  |  | Julkaisuajankohta RFC 3339 -muodossa |  |
 | summary | `string` |  | string |  |  | Artikkelin yhteenveto tai lyhyt katkelma |  |
 | content | `string` |  | string |  |  | Artikkelin HTML-muotoiltu pääsisältö |  |
@@ -47,7 +47,7 @@ Edustaa uutisartikkelia, blogipostausta tai muuta itsenäistä tekstituotetta.
 | dislikes | `object` |  | object |  |  | Artikkelin dislike-reaktioiden kokoelma (projektikohtainen laajennus) |  |
 | dislikes.type | `string` | ✅ | `Collection` |  |  |  |  |
 | dislikes.totalItems | `integer` | ✅ | integer |  |  |  |  |
-| _uutisseuranta:agreeCount | `integer` |  | integer |  |  | Yhteenlaskettu reaktiomäärä (likes + dislikes) (projektikohtainen laajennus) |  |
+| _uutisseuranta:reactionCount | `integer` |  | integer |  |  | Yhteenlaskettu reaktiomäärä (likes + dislikes). Neutraali nimitys: sisältää sekä Agree (Like) että Disagree (Dislike) -reaktiot. |  |
 | tag | `array` |  | object |  |  | Artikkeliin liittyvät AS2 Hashtag-objektit (Voikko-jobin tuottamat morfologiset tagit) |  |
 
 
@@ -56,11 +56,11 @@ Edustaa uutisartikkelia, blogipostausta tai muuta itsenäistä tekstituotetta.
 Markdown generated with [jsonschema-markdown](https://github.com/elisiariocouto/jsonschema-markdown).
 
 ### Note Schema
-Edustaa lyhyttä tekstikommenttia tai uutisartikkelin vastausviestiä.
+Edustaa lyhyttä tekstikommenttia tai uutisartikkelin vastausviestin.
 
 # ActivityStreams 2.0 Note
 
-Edustaa lyhyttä tekstikommenttia tai uutisartikkelin vastausviestiä.
+Edustaa lyhyttä tekstikommenttia tai uutisartikkelin vastausviestin.
 
 ### Type: `object`
 
@@ -72,7 +72,7 @@ Edustaa lyhyttä tekstikommenttia tai uutisartikkelin vastausviestiä.
 | content | `string` | ✅ | string |  |  | Kommentin leipäteksti HTML- tai plain text -muodossa |  |
 | published | `string` | ✅ | string |  |  | Julkaisuajankohta RFC 3339 -muodossa |  |
 | attributedTo | `string` | ✅ | string |  |  | Kommentin kirjoittajan tunniste (esim. käyttäjän sub-id) |  |
-| inReplyTo | `string` | ✅ | string |  |  | Pääartikkelin tai ylemmän kommentin tunniste (id/IRI), johon tämä viesti vastaa |  |
+| inReplyTo | `string` | ✅ | string |  |  | Pääartikkelin tai ylemmiseen kommentin tunniste (id/IRI), johon tämä viesti vastaa |  |
 
 
 ---
@@ -113,7 +113,7 @@ Edustaa artikkelille tai Note-objektille annettua aihetunnistetta tai avainsanaa
 | Property | Type | Required | Possible values | Deprecated | Default | Description | Examples |
 | -------- | ---- | -------- | --------------- | ---------- | ------- | ----------- | -------- |
 | type | `string` | ✅ | string |  |  | Objektin tyyppi, arvon on oltava 'Hashtag' |  |
-| name | `string` | ✅ | string |  |  | Aihetunnisteen teksti (esim. '#politiikka' tai 'tekoäly') |  |
+| name | `string` | ✅ | string |  |  | Aihetunnisteen teksti #-etuliitteellä (esim. '#politiikka'). Arvon on aina alettava #-merkillä (pattern: ^#). |  |
 | href | `string` |  | string |  |  | Tunnisteeseen liittyvä haku- tai suodatuslinkki (URL) |  |
 
 
@@ -127,7 +127,7 @@ Markdown generated with [jsonschema-markdown](https://github.com/elisiariocouto/
 Tietokanta- ja rajapintatasolla noudatetaan seuraavia GDPR-standardeja:
 - **Oikeus siirtää tiedot järjestelmästä toiseen (Data Portability)**: Järjestelmän tulee tarjota rajapinta (`GET /ap/outbox?actor={actor_id}`), jonka kautta käyttäjä voi viedä omat tuottamansa kommentit (`Note`-objektit) ja tykkäykset standardissa JSON-LD/ActivityStreams 2.0 -muodossa.
 - **Oikeus tulla unohdetuksi (Right to be Forgotten)**: Profiilin poiston yhteydessä Firebase Auth -tunnisteeseen liittyvät henkilötiedot poistetaan tai anonymisoidaan pysyvästi seuraavista tallennuspaikoista:
-  - **BigQuery** (`bq-activitystreams`): kommentit poistetaan tai niiden sisältö korvataan merkkijonolla `[kommentti poistettu]` ketjurakenteen säilyttämiseksi, ja tykkäykset anonymisoidaan poistamalla käyttäjätunnisteet.
+  - **BigQuery** (`bq-activitystreams`): kommentit poistetaan tai niiden sisältö korvataan merkijonolla `[kommentti poistettu]` ketjurakenteen säilyttämiseksi, ja tykkäykset anonymisoidaan poistamalla käyttäjätunnisteet.
   - **Firestore** (`uutisseuranta.github.io` / frontend): käyttäjän preferenssit ja asetukset poistetaan. Firestore toimii tässä järjestelmässä yksinomaan frontend-preferenssien monilaitesynkronointiin (ks. [uutisseuranta.github.io DECISION_LOG.csv L-006](https://github.com/uutisseuranta/uutisseuranta.github.io/blob/main/DECISION_LOG.csv)) — ei backend-tietovarastona.
   - **Lokijärjestelmät**: henkilötiedot anonymisoidaan pysyvästi.
 
@@ -143,7 +143,7 @@ Tämä taulukko määrittelee, miten sisällön rikastusprosessissa eri metadata
 | `image` | `og:image` | `image` / `thumbnailUrl` | Ensimmäinen resolvoitava kuva käytetään. |
 | `published` | `article:published_time` | `datePublished` | Prioriteetti: **JSON-LD `datePublished` → OG `article:published_time` → HTTP `Last-Modified`** |
 | `updated` | `article:modified_time` | `dateModified` | Valinnainen kenttä. |
-| `url` | `og:url` | `url` | Ensisijaisena lähteenä käytetään RSS-syötteen ``-linkkiä. |
+| `url` | `og:url` | `url` | Ensisijaisena lähteenä käytetään RSS-syötteen `<link>`-linkkiä. |
 | `attributedTo` | `article:author` | `author.name` | Sisällöntuottajan tai median nimi. |
 | `type` | `og:type` (`article`) | `@type` (`NewsArticle`) | Validoidaan tyypin vastaavuus (`og:type = article`). |
 | `tag` | — | `keywords` | Voikko-morfologiset tagit muunnetaan AS2 `Hashtag`-objekteiksi. |
@@ -151,5 +151,52 @@ Tämä taulukko määrittelee, miten sisällön rikastusprosessissa eri metadata
 ---
 
 ## 5. Paginaatio ja identiteettien pysyvyys
-- **Paginaatiostrategia (Päätös L-009)**: Järjestelmä käyttää yksinkertaista kyselyparametreihin perustuvaa paginaatiota (`?page=`) suorituskyvyn takaamiseksi, eikä ActivityPubin monimutkaisempaa `OrderedCollectionPage` + `next`/`prev` -linkkikenttäontologiaa.
+- **Paginaatiostrategia (Päätös L-009)**: Järjestelmä käyttää inkrementaalista `?n=`-parametriin perustuvaa hakumallia eikä ActivityPubin `OrderedCollectionPage` + `next`/`prev` -linkkikentäontologiaa. Client pyytää aina top-N relevantinta artikkelia alusta alkaen — ei kursoreja eikä sivunumeroita:
+
+  ```
+  GET /ap/outbox?tag=politiikka&n=5    → top-5 (pikakatselu, sivun avaus)
+  GET /ap/outbox?tag=politiikka&n=50   → top-50 (scroll-to-load)
+  GET /ap/outbox?tag=politiikka&n=500  → top-500 (maksimierä, kustannustehok. ylär.)
+  ```
+
+  Client suodattaa duplikaatit selaimen muistissa `id`-kentän perusteella. Kun käyttäjä on selannnut kaiken, esitetään tagipilvi uutta hakua varten (n palautuu 5:een). Tämä pitkää BigQuery-kustannukset ennustettavina: kukin käyttäjäsessio tuottaa korkeintaan kolme kyselytasoa per tagi.
+
 - **Pysyvät tunnisteet (W3C DWBP BP7 / Päätös L-010)**: AS2-objektin `id` on pysyvä, muuttumaton IRI muodossa `https://uutisseuranta.net/ap/objects/{hash}`. Se erotetaan artikkelin operatiivisesta `url`-osoitteesta, jotta toimitukselliset URL-rakenteen muutokset eivät riko olemassa olevia linkityksiä ja sosiaalisia reaktioita. Hash lasketaan kaavalla `sha256(source + url)[:16]`.
+
+---
+
+## 6. Hashtag-standardi ja Voikko-normalisointi
+
+W3C ActivityStreams 2.0 ei itse määrittele `Hashtag`-tyyppiä — se on lisätty myöhemmin `as:`-nimiavaruuteen epävirallisena laajennuksena. `Hashtag` on Mastodonin vakiinnuttama de facto -standardi koko Fediverse-ekosysteemissä. Mastodonin virallinen dokumentaatio määrittelee asian eksplisiittisesti: **"`Hashtag` has a name containing the `#hashtag` microsyntax — a `#` followed by a string sequence representing a topic."** DSNP-spesifikaatio vahvistaa saman käytännön: `"name": "#dsnp"`. Tästä seuraa, että `hashtag.schema.json`-skeeman sääntö `pattern: "^#"` on **oikea ja standardin mukainen valinta** — se pakottaa täsmälleen sen muodon, jota kaikki AS2/AP-ekosysteemin toteutukset käyttävät.
+
+### Voikko-normalisoinnin vastuu
+
+Voikko tuottaa morfologisia hakutermejä pelkkänä sanana ilman `#`-merkkiä: `politiikka`, `eurooppa`, `ilmastonmuutos`. Voikko on suomen kielen morfologinen analysaattori, ei sosiaalisen median hashtag-generaattori — se ei tiedä eikä välitä `#`-konventiosta.
+
+Tämä tarkoittaa, että `pattern: "^#"` paljastaa tärkeän **normalisointivastuun**: koodipolun täytyy eksplisiittisesti lisätä `#`-etuliite Voikon tuottamiin termeihin ennen kuin ne kirjoitetaan `object_json['tag']`-kenttään. Jos muunnosta ei tehdä, skeemavalidaatio hylkää koko artikkelin tallennuksen — mikä on tarkoituksellista, koska se pakottaa korjaamaan ongelman aikaisessa vaiheessa.
+
+Voikko-job tarvitsee siis normalisointiaskeleen:
+
+```python
+# Voikko palauttaa: ["politiikka", "eurooppa"]
+# Tallennetaan AS2 Hashtag -muodossa:
+tags = [
+    {
+        "type": "Hashtag",
+        "name": f"#{word}",          # <-- normalisointi: lisätään #-etuliite
+        "href": f"https://uutisseuranta.net/ap/outbox?tag=%23{word}"
+    }
+    for word in voikko_terms
+]
+```
+
+### href-kentän URL-enkoodaus
+
+`href`-kentässä `#` täytyy enkoodata muotoon `%23`, koska `#` on URL:ssa fragmentin aloitusmerkki. Oikea muoto on `?tag=%23politiikka`, ei `?tag=#politiikka`. Tämä on erillinen johdonmukaisuusvaatimus `name`-kentän muodosta: molemmat viittaavat samaan tagiin, mutta eri konteksteissa `#`-merkki käyttäytyy eri tavalla.
+
+| Kenttä | Muoto | Esimerkki |
+|---|---|---|
+| `name` | `#`-etuliite, sellaisenaan | `"#politiikka"` |
+| `href` | `#` URL-enkoodattuna `%23`:ksi | `"...?tag=%23politiikka"` |
+
+Viitteet: [W3C AS2 extensions wiki](https://www.w3.org/wiki/Activity_Streams_extensions) · [Mastodon ActivityPub spec](https://docs.joinmastodon.org/spec/activitypub/) · [DSNP Tag spec](https://spec.dsnp.org/ActivityContent/Associated/Tag.html)
