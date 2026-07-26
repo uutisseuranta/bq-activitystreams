@@ -252,4 +252,16 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    from gcp_logging import send_ops_notification
+    try:
+        main()
+        send_ops_notification("voikko-job", "success")
+    except SystemExit as se:
+        if se.code == 0:
+            send_ops_notification("voikko-job", "success")
+        else:
+            send_ops_notification("voikko-job", "failure", f"SystemExit: {se.code}")
+        raise se
+    except BaseException as e:
+        send_ops_notification("voikko-job", "failure", str(e))
+        raise e

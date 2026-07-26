@@ -51,6 +51,15 @@ resource "google_cloud_run_v2_job" "rss_fetch" {
           name  = "RSS_FEEDS"
           value = var.rss_feeds
         }
+        env {
+          name = "OPS_DISPATCH_TOKEN"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.ops_dispatch_token.secret_id
+              version = "latest"
+            }
+          }
+        }
       }
     }
   }
@@ -90,6 +99,15 @@ resource "google_cloud_run_v2_job" "voikko" {
         env {
           name  = "BATCH_SIZE"
           value = var.voikko_batch_size
+        }
+        env {
+          name = "OPS_DISPATCH_TOKEN"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.ops_dispatch_token.secret_id
+              version = "latest"
+            }
+          }
         }
       }
     }
@@ -135,6 +153,15 @@ resource "google_cloud_run_v2_job" "og_enrichment" {
           name  = "HTTP_TIMEOUT_S"
           value = var.og_http_timeout
         }
+        env {
+          name = "OPS_DISPATCH_TOKEN"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.ops_dispatch_token.secret_id
+              version = "latest"
+            }
+          }
+        }
       }
     }
   }
@@ -174,6 +201,15 @@ resource "google_cloud_run_v2_job" "likes_and_updated" {
         env {
           name  = "SERVICE_ACCOUNT_EMAIL"
           value = local.write_api_sa_email
+        }
+        env {
+          name = "OPS_DISPATCH_TOKEN"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.ops_dispatch_token.secret_id
+              version = "latest"
+            }
+          }
         }
       }
     }
