@@ -21,15 +21,23 @@ Kontekstimäärittely `@context` on oltava rajapinnan palauttamissa Article-obje
    - Tyyppi: `Collection`
    - Kuvaus: Artikkelin saamat dislike-reaktiot (vastine likes-kentälle).
    - Esimerkki: `{"type": "Collection", "totalItems": 5}`
+   - *Huomio (review-löydös):* Kenttä ei käytä nimiavaruutta (kuten `_uutisseuranta:dislikes`), mikä poikkeaa puhtaasta JSON-LD-spesifikaatiosta. Tämä on tehty tietoisesti frontend-yhteensopivuuden helpottamiseksi.
 2. **`_uutisseuranta:agreeCount`**:
    - Tyyppi: `Integer`
    - Kuvaus: Yhteenlaskettu tykkäys- ja dislike-määrä (`likes.totalItems + dislikes.totalItems`).
 
-## 3. Tuetut ActivityStreams-objektityypit
-- **Article**: Uutisartikkelit ja postaukset.
-- **Note**: Kommentit ja vastaukset uutisiin.
-- **OrderedCollection**: Outbox-syötteet ja uutisvirrat.
-- **Hashtag**: Aihetunnisteet.
+## 3. Minimikenttäjoukot (v0.5.0)
+
+### Article (Uutisartikkeli)
+- **Pakolliset kentät:** `@context`, `type` (Article), `id`, `name`, `url`, `published`
+- **Valinnaiset kentät:** `summary`, `content`, `updated`, `attributedTo`, `likes`, `dislikes`, `_uutisseuranta:agreeCount`
+
+### Note (Kommentti)
+- **Pakolliset kentät:** `@context`, `type` (Note), `id`, `content`, `published`, `attributedTo`, `inReplyTo`
+- **Valinnaiset kentät:** `updated`, `thread_root`
+
+### OrderedCollection (Outbox)
+- **Pakolliset kentät:** `@context`, `type` (OrderedCollection), `id`, `totalItems`, `orderedItems`
 
 ## 4. Hallitut poikkeamat standardista
-- **Undo Like -poikkeama**: Järjestelmä toteuttaa toggle-reaktiologiikan (Like ↔ Dislike) poistamalla vanhan reaktion tietokannasta ja lisäämällä uuden. Tästä ei luoda erillistä AS2 `Undo`-aktiviteettia lokiin historiatiedon anonymisoinnin säilyttämiseksi.
+- **Undo Like -poikkeama:** Järjestelmä toteuttaa toggle-reaktiologiikan (Like ↔ Dislike) poistamalla vanhan reaktion tietokannasta ja lisäämällä uuden. Tästä ei luoda erillistä AS2 `Undo`-aktiviteettia lokiin historiatiedon anonymisoinnin säilyttämiseksi.

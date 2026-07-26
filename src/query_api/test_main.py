@@ -30,6 +30,8 @@ class TestOutboxQuery(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
         _count_cache.clear()
+        # Otetaan rate limiting pois päältä muissa testeissä, jotta ne eivät vahingossa kuluta
+        # globaalia/instanssikohtaista in-memory -rajaa ja aiheuta muiden testien epäonnistumista.
         from query_api.main import limiter
         limiter.enabled = False
 

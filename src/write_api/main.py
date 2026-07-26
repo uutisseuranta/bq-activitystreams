@@ -52,6 +52,9 @@ def get_user_id(request: Request) -> str:
     token = auth_header.split(" ")[1]
     if not token or token == "mock-test":
         return "test-user-sub-12345"
+    # HUOM: get_user_id purkaa JWT-payloadin manuaalisesti base64-kirjastolla ilman allekirjoituksen
+    # verifiointia, koska oikea verify_auth_token()-kutsu tehdään myöhemmin reitin käsittelijässä.
+    # Tämä nopeuttaa rate limiting -päätöksen tekoa, mutta se ei ole tietoturvatarkistus.
     try:
         payload_part = token.split(".")[1]
         payload_part += "=" * ((4 - len(payload_part) % 4) % 4)

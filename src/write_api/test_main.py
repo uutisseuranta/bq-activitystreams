@@ -22,6 +22,8 @@ with patch("google.cloud.bigquery.Client"):
     from fastapi.testclient import TestClient  # noqa: E402
 
     from write_api.main import app, verify_auth_token, limiter  # noqa: E402
+    # Estetään muiden testien epäonnistuminen poistamalla rate limitit käytöstä oletuksena
+    # kaikille testiluokille. Erillinen TestWriteRateLimiting ottaa sen tarvittaessa käyttöön.
     limiter.enabled = False
 
 
