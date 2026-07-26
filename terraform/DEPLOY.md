@@ -3,6 +3,12 @@
 Tämä ohje kattaa toimenpiteet jotka täytyy tehdä paikallisesti ennen kuin
 PR #68 (`feat/infra-ci-deploy-wif-branch-protection-terraform`) voidaan mergata.
 
+> **Miksi paikallinen ajo?**
+> `wif.tf` on uusi tiedosto — WIF-infrastruktuuria ei ole vielä olemassa GCP:ssä.
+> Terraform täytyy ajaa kerran paikallisesti jotta resurssit luodaan ja niiden
+> arvot saadaan kopioitua GitHub Secretseihin. Vasta sen jälkeen CI pystyy
+> autentikoimaan GCP:hen ja `terraform-plan`- sekä `deploy`-jobit onnistuvat.
+
 ---
 
 ## Vaatimukset
@@ -12,6 +18,22 @@ PR #68 (`feat/infra-ci-deploy-wif-branch-protection-terraform`) voidaan mergata.
 - `gh` CLI asennettu (GitHub CLI)
 - Oikeudet GCP-projektiin `uutisseuranta-activitystreams`
 - Oikeudet GitHub-repositorioon `uutisseuranta/bq-activitystreams`
+
+---
+
+## Vaihe 0 — Hae PR-branchi lokaalisti
+
+```bash
+git fetch origin
+git checkout feat/infra-ci-deploy-wif-branch-protection-terraform
+```
+
+Varmista että olet oikealla branchilla:
+
+```bash
+git branch --show-current
+# → feat/infra-ci-deploy-wif-branch-protection-terraform
+```
 
 ---
 
@@ -39,7 +61,7 @@ terraform init
 terraform plan
 ```
 
-Tarkista planista että muutokset ovat vain nämä neljä:
+Tarkista planista että muutokset ovat **vain nämä neljä** — ei enemmän:
 
 | Resurssi | Operaatio |
 |---|---|
@@ -66,8 +88,8 @@ terraform output wif_service_account
 Outputit ovat muotoa:
 
 ```
-wif_provider         = "projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-pool/providers/github-provider"
-wif_service_account  = "backend-sa@uutisseuranta-activitystreams.iam.gserviceaccount.com"
+wif_provider        = "projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github-pool/providers/github-provider"
+wif_service_account = "backend-sa@uutisseuranta-activitystreams.iam.gserviceaccount.com"
 ```
 
 ---
