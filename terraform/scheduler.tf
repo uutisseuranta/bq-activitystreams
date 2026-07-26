@@ -11,6 +11,10 @@
 #
 # Huom: Cloud Scheduler ei tue europe-north1-regioonia.
 # Käytetään var.scheduler_region (default: europe-west3).
+#
+# oauth_token käyttää write_api_sa_email:ia (G-010):
+#   deploy_sa:lla ei ole run.invoker-oikeutta jobeihin.
+#   write_api-SA:lla on run.invoker kaikille neljälle jobille (iam.tf).
 
 resource "google_cloud_scheduler_job" "rss_fetch" {
   name             = "rss-fetch-job-trigger"
@@ -30,7 +34,7 @@ resource "google_cloud_scheduler_job" "rss_fetch" {
     uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.gcp_project}/jobs/${google_cloud_run_v2_job.rss_fetch.name}:run"
 
     oauth_token {
-      service_account_email = local.sa_email
+      service_account_email = local.write_api_sa_email
     }
   }
 }
@@ -53,7 +57,7 @@ resource "google_cloud_scheduler_job" "og_enrichment" {
     uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.gcp_project}/jobs/${google_cloud_run_v2_job.og_enrichment.name}:run"
 
     oauth_token {
-      service_account_email = local.sa_email
+      service_account_email = local.write_api_sa_email
     }
   }
 }
@@ -76,7 +80,7 @@ resource "google_cloud_scheduler_job" "voikko" {
     uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.gcp_project}/jobs/${google_cloud_run_v2_job.voikko.name}:run"
 
     oauth_token {
-      service_account_email = local.sa_email
+      service_account_email = local.write_api_sa_email
     }
   }
 }
@@ -99,7 +103,7 @@ resource "google_cloud_scheduler_job" "likes_and_updated" {
     uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.gcp_project}/jobs/${google_cloud_run_v2_job.likes_and_updated.name}:run"
 
     oauth_token {
-      service_account_email = local.sa_email
+      service_account_email = local.write_api_sa_email
     }
   }
 }

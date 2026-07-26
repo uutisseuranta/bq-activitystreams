@@ -35,12 +35,18 @@
 #   write-api   → IAM-suojattu (--no-allow-unauthenticated)
 #   og-scraper  → IAM-suojattu (--no-allow-unauthenticated)
 #
+# SA-jako (G-010, iam.tf):
+#   query-api   → local.query_api_sa_email  (read-only)
+#   write-api   → local.write_api_sa_email  (kirjoitus + secret)
+#   og-scraper  → local.og_scraper_sa_email (og_cache-kirjoitus)
+#
 # max_instance_count = var.max_instance_count (default 10):
 #   Estää odottamattoman kustannusräjähdyksen bot-liikenteen tai
 #   sovelluksen bugin sattuessa. Nosta terraform.tfvars:ssa jos tarve kasvaa.
 #
 # Issue-viittaukset:
 #   #28  Security Hardening – CORS, autentikointi
+#   #71  IAM: palvelukohtaiset SA:t (G-010)
 
 # ── query-api ───────────────────────────────────────────────────────────────────────
 resource "google_cloud_run_v2_service" "query_api" {
@@ -51,7 +57,7 @@ resource "google_cloud_run_v2_service" "query_api" {
   ingress = "INGRESS_TRAFFIC_ALL"
 
   template {
-    service_account = local.sa_email
+    service_account = local.query_api_sa_email
 
     scaling {
       max_instance_count = var.max_instance_count
@@ -74,7 +80,7 @@ resource "google_cloud_run_v2_service" "query_api" {
       }
       env {
         name  = "SERVICE_ACCOUNT_EMAIL"
-        value = local.sa_email
+        value = local.query_api_sa_email
       }
 
       liveness_probe {
@@ -111,7 +117,7 @@ resource "google_cloud_run_v2_service" "write_api" {
   ingress = "INGRESS_TRAFFIC_ALL"
 
   template {
-    service_account = local.sa_email
+    service_account = local.write_api_sa_email
 
     scaling {
       max_instance_count = var.max_instance_count
@@ -138,21 +144,14 @@ resource "google_cloud_run_v2_service" "write_api" {
       }
       env {
         name  = "SERVICE_ACCOUNT_EMAIL"
-        value = local.sa_email
+        value = local.write_api_sa_email
       }
       env {
         name  = "GOOGLE_CLIENT_ID"
         value = var.google_client_id
       }
       # ALLOW_MOCK_AUTH ei ole env-lohkossa — ks. tiedoston yläosan kommentti (G-009).
-      # Puuttuva muuttuja == os.getenv('ALLOW_MOCK_AUTH', 'false') palauttaa 'false'.
-      # Muuttujaa ei voi muuttaa 'true':ksi Cloud Consolesta tai gcloud:ista
-      # koska sitä ei ole Cloud Run -palvelun ympäristössä.
 
-      # GOOGLE_CLIENT_SECRET luetaan Secret Managerista, ei plain-text env:stä.
-      # Secret Manager -resurssi on määritelty terraform/secrets.tf:ssä.
-      # Arvo syötetään käsin tai CI:ssä:
-      #   echo -n "$SECRET" | gcloud secrets versions add google-client-secret --data-file=-
       env {
         name = "GOOGLE_CLIENT_SECRET"
         value_source {
@@ -191,7 +190,7 @@ resource "google_cloud_run_v2_service" "og_scraper" {
   ingress = "INGRESS_TRAFFIC_ALL"
 
   template {
-    service_account = local.sa_email
+    service_account = local.og_scraper_sa_email
 
     scaling {
       max_instance_count = var.max_instance_count
@@ -214,7 +213,7 @@ resource "google_cloud_run_v2_service" "og_scraper" {
       }
       env {
         name  = "SERVICE_ACCOUNT_EMAIL"
-        value = local.sa_email
+        value = local.og_scraper_sa_email
       }
 
       liveness_probe {

@@ -51,10 +51,12 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   }
 
   attribute_mapping = {
-    "google.subject"              = "assertion.sub"
-    "attribute.repository"        = "assertion.repository"
-    "attribute.ref"               = "assertion.ref"
-    "attribute.job_workflow_ref"  = "assertion.job_workflow_ref"
+    "google.subject"             = "assertion.sub"
+    "attribute.repository"       = "assertion.repository"
+    "attribute.repository_owner" = "assertion.repository_owner"
+    "attribute.ref"              = "assertion.ref"
+    "attribute.job_workflow_ref" = "assertion.job_workflow_ref"
+    "attribute.actor"            = "assertion.actor"
   }
 
   # KAKSITASOINEN PÄÄSYRAJOITUS (defence-in-depth)
@@ -78,6 +80,7 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   #   2. workflow_dispatch smoke-test.yml:stä main-haarassa
   #      → manuaalinen live-testi, ei feature-branch-tokenia
   attribute_condition = <<-EOT
+    assertion.repository_owner == 'uutisseuranta' &&
     assertion.repository == 'uutisseuranta/bq-activitystreams' &&
     (
       (assertion.ref == 'refs/heads/main' && (

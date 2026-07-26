@@ -18,7 +18,7 @@ resource "google_cloud_run_v2_job" "rss_fetch" {
 
   template {
     template {
-      service_account = local.sa_email
+      service_account = local.write_api_sa_email
 
       containers {
         image = "${local.image_base}/rss-fetch-job:latest"
@@ -41,7 +41,7 @@ resource "google_cloud_run_v2_job" "rss_fetch" {
         }
         env {
           name  = "SERVICE_ACCOUNT_EMAIL"
-          value = local.sa_email
+          value = local.write_api_sa_email
         }
         env {
           name  = "REQUEST_TIMEOUT"
@@ -66,7 +66,7 @@ resource "google_cloud_run_v2_job" "voikko" {
 
   template {
     template {
-      service_account = local.sa_email
+      service_account = local.write_api_sa_email
 
       containers {
         image = "${local.image_base}/voikko-job:latest"
@@ -85,7 +85,7 @@ resource "google_cloud_run_v2_job" "voikko" {
         }
         env {
           name  = "SERVICE_ACCOUNT_EMAIL"
-          value = local.sa_email
+          value = local.write_api_sa_email
         }
         env {
           name  = "BATCH_SIZE"
@@ -106,7 +106,7 @@ resource "google_cloud_run_v2_job" "og_enrichment" {
 
   template {
     template {
-      service_account = local.sa_email
+      service_account = local.write_api_sa_email
 
       containers {
         image = "${local.image_base}/og-enrichment-job:latest"
@@ -125,7 +125,7 @@ resource "google_cloud_run_v2_job" "og_enrichment" {
         }
         env {
           name  = "SERVICE_ACCOUNT_EMAIL"
-          value = local.sa_email
+          value = local.write_api_sa_email
         }
         env {
           name  = "BATCH_SIZE"
@@ -150,7 +150,7 @@ resource "google_cloud_run_v2_job" "likes_and_updated" {
 
   template {
     template {
-      service_account = local.sa_email
+      service_account = local.write_api_sa_email
 
       containers {
         image = "${local.image_base}/likes-and-updated-job:latest"
@@ -173,7 +173,7 @@ resource "google_cloud_run_v2_job" "likes_and_updated" {
         }
         env {
           name  = "SERVICE_ACCOUNT_EMAIL"
-          value = local.sa_email
+          value = local.write_api_sa_email
         }
       }
     }

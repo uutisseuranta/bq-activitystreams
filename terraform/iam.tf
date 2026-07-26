@@ -1,71 +1,155 @@
 # terraform/iam.tf
-# Korvaa deploy/init-sa.sh:n kokonaan.
+# Palvelukohtaiset service accountit ja IAM-bindinkit.
 #
-# TESTISTRATEGIA — ks. TERRAFORM_TESTING.md, Kerros 2
+# ARKKITEHTUURIPÄÄTÖS (kaanonpäätös G-010):
+#   Aiempi yhden SA:n malli ("backend") on korvattu neljällä palvelukohtaisella SA:lla.
+#   Perustelu: blast radius pienenee merkittävästi — query-api-kompromissi ei anna
+#   kirjoitusoikeutta BigQueryyn eikä pääsyä Secret Manageriin.
 #
-#   terraform plan (CI, PR) validoi IAM-roolit GCP-provider-skeemaa vasten.
-#   Checkov (terraform-lint job) tarkistaa vähimmäisoikeus-periaatteen:
-#   CKV_GCP_34 (project-level roles) on skipattu perustellusti koska
-#   bigquery.dataEditor ja bigquery.user ovat projekti-tason rooleja —
-#   BQ-datasetti-tason IAM ei ole mahdollinen näillä rooleilla.
+#   SA-jako:
+#     sa-query-api   → bigquery.dataViewer (datasetti-taso) + bigquery.user
+#     sa-write-api   → bigquery.dataEditor (datasetti-taso) + bigquery.user + secretAccessor
+#                      + run.invoker Cloud Run -jobeille (scheduler-kutsu)
+#     sa-og-scraper  → bigquery.dataEditor (og_cache-datasetti, datasetti-taso)
+#                      + run.invoker (write-api kutsuoikeus)
+#     backend        → deploy-SA: cloudbuild.builds.editor + storage.objectCreator + WIF-binding
 #
-# VÄHIMMÄISOIKEUSPERIAATE (kaanonpäätös G-009):
-#   Projekti-tason secretAccessor on POISTETTU. Secret Manager -oikeus on
-#   annettu palvelukohtaisesti secrets.tf:ssä (secret_id-tason binding).
-#   Tämä rajoittaa kompromissin vaikutuksen: kompromissoitu SA ei pääse
-#   kaikkiin projektissa oleviin secreteihin.
-#
-# sa_email local on siirretty locals.tf:ään — ks. sieltä.
-#
-# Resurssit:
-#   - IAM-palvelutili "backend"
-#   - roles/bigquery.dataEditor  (taulujen luku + kirjoitus)
-#   - roles/bigquery.user        (kyselyjobien ajaminen)
-#   - roles/run.invoker          (write-api ja og-scraper: Cloud Run IAM -kutsu)
+# VÄHIMMÄISOIKEUSPERIAATE:
+#   - Projekti-tason bigquery.dataEditor POISTETTU. Korvattu datasetti-tason bindingillä.
+#   - bigquery.user säilyy projekti-tasolla (pakollinen kyselyjobien ajamiseen — ei datasetti-tason vaihtoehto).
+#   - Secret Manager -oikeus vain write-api SA:lle (secrets.tf).
+#   - deploy-SA:lla ei ole run.invoker-oikeutta — se ei koskaan kutsu runtime-resursseja.
 #
 # Issue-viittaukset:
 #   #28  Security Hardening – service account vähimmäisoikeudet
+#   #71  IAM: Cloud Build -roolit + palvelukohtaiset SA:t
+#   #72  BQ lifecycle + datasetti-tason IAM
 
-resource "google_service_account" "backend" {
-  account_id   = var.sa_name
-  display_name = "backend"
-  description  = "ActivityStreams backend service account"
+# ---------------------------------------------------------------------------
+# SA: query-api (julkinen read-only endpoint)
+# ---------------------------------------------------------------------------
+
+resource "google_service_account" "query_api" {
+  account_id   = "sa-query-api"
+  display_name = "query-api"
+  description  = "ActivityStreams query-api: read-only BigQuery"
   project      = var.gcp_project
 }
 
-resource "google_project_iam_member" "bq_data_editor" {
-  #checkov:skip=CKV_GCP_34: bigquery.dataEditor on pakollinen projekti-tason rooli —
-  # BQ-datasetti-tason IAM ei ole mahdollinen tällä roolilla. Projekti-tason
-  # secretAccessor ON poistettu (G-009). Kompensaatio: secret-oikeudet annettu
-  # palvelukohtaisesti secrets.tf:ssä (secret_id-tason binding).
-  project = var.gcp_project
-  role    = "roles/bigquery.dataEditor"
-  member  = "serviceAccount:${local.sa_email}"
-}
-
-resource "google_project_iam_member" "bq_user" {
-  #checkov:skip=CKV_GCP_34: bigquery.user on pakollinen projekti-tason rooli —
-  # kyselyjobien ajaminen vaatii projekti-tason oikeuden, datasetti-tason
-  # IAM ei riitä. Ks. bq_data_editor -annotaatio lisäperusteluille.
+# bigquery.user: pakollinen projekti-tasolla kyselyjobien ajamiseen
+resource "google_project_iam_member" "query_api_bq_user" {
+  #checkov:skip=CKV_GCP_34: bigquery.user on pakollinen projekti-tason rooli — kyselyjobien ajaminen vaatii sen
   project = var.gcp_project
   role    = "roles/bigquery.user"
-  member  = "serviceAccount:${local.sa_email}"
+  member  = "serviceAccount:${google_service_account.query_api.email}"
 }
 
-# Cloud Run Invoker write-api:lle (IAM-suojattu, ei julkinen)
-resource "google_cloud_run_v2_service_iam_member" "write_api_invoker" {
+# ---------------------------------------------------------------------------
+# SA: write-api (IAM-suojattu kirjoitusendpoint + Cloud Run Jobs -ajaja)
+# ---------------------------------------------------------------------------
+
+resource "google_service_account" "write_api" {
+  account_id   = "sa-write-api"
+  display_name = "write-api"
+  description  = "ActivityStreams write-api: BQ-kirjoitus + Secret Manager + Cloud Run Jobs -ajaja"
+  project      = var.gcp_project
+}
+
+# bigquery.user: pakollinen projekti-tasolla
+resource "google_project_iam_member" "write_api_bq_user" {
+  #checkov:skip=CKV_GCP_34: bigquery.user on pakollinen projekti-tason rooli
+  project = var.gcp_project
+  role    = "roles/bigquery.user"
+  member  = "serviceAccount:${google_service_account.write_api.email}"
+}
+
+# og-scraper kutsuu write-apita Cloud Run IAM:n kautta
+resource "google_cloud_run_v2_service_iam_member" "og_scraper_can_invoke_write_api" {
   project  = var.gcp_project
   location = var.region
   name     = google_cloud_run_v2_service.write_api.name
   role     = "roles/run.invoker"
-  member   = "serviceAccount:${local.sa_email}"
+  member   = "serviceAccount:${google_service_account.og_scraper.email}"
 }
 
-# Cloud Run Invoker og-scraperille (IAM-suojattu, ei julkinen)
-resource "google_cloud_run_v2_service_iam_member" "og_scraper_invoker" {
+# Cloud Scheduler kutsuu Cloud Run -jobeja write_api-SA:n tokenilla.
+# Jokaiselle jobille tarvitaan erillinen resource-tason binding.
+resource "google_cloud_run_v2_job_iam_member" "write_api_invoke_rss_fetch" {
   project  = var.gcp_project
   location = var.region
-  name     = google_cloud_run_v2_service.og_scraper.name
+  name     = google_cloud_run_v2_job.rss_fetch.name
   role     = "roles/run.invoker"
-  member   = "serviceAccount:${local.sa_email}"
+  member   = "serviceAccount:${google_service_account.write_api.email}"
+}
+
+resource "google_cloud_run_v2_job_iam_member" "write_api_invoke_og_enrichment" {
+  project  = var.gcp_project
+  location = var.region
+  name     = google_cloud_run_v2_job.og_enrichment.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.write_api.email}"
+}
+
+resource "google_cloud_run_v2_job_iam_member" "write_api_invoke_voikko" {
+  project  = var.gcp_project
+  location = var.region
+  name     = google_cloud_run_v2_job.voikko.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.write_api.email}"
+}
+
+resource "google_cloud_run_v2_job_iam_member" "write_api_invoke_likes_and_updated" {
+  project  = var.gcp_project
+  location = var.region
+  name     = google_cloud_run_v2_job.likes_and_updated.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.write_api.email}"
+}
+
+# ---------------------------------------------------------------------------
+# SA: og-scraper (IAM-suojattu scraper)
+# ---------------------------------------------------------------------------
+
+resource "google_service_account" "og_scraper" {
+  account_id   = "sa-og-scraper"
+  display_name = "og-scraper"
+  description  = "ActivityStreams og-scraper: OG-metatiedot + og_cache-kirjoitus"
+  project      = var.gcp_project
+}
+
+# bigquery.user: pakollinen projekti-tasolla
+resource "google_project_iam_member" "og_scraper_bq_user" {
+  #checkov:skip=CKV_GCP_34: bigquery.user on pakollinen projekti-tason rooli
+  project = var.gcp_project
+  role    = "roles/bigquery.user"
+  member  = "serviceAccount:${google_service_account.og_scraper.email}"
+}
+
+# ---------------------------------------------------------------------------
+# SA: backend (deploy-SA — käytetään vain CI/CD-deployssa, ei runtime)
+# ---------------------------------------------------------------------------
+
+resource "google_service_account" "backend" {
+  account_id   = var.sa_name
+  display_name = "backend"
+  description  = "ActivityStreams deploy-SA: Cloud Build + WIF. Ei runtime-käyttöä."
+  project      = var.gcp_project
+}
+
+# Cloud Build source deploy
+resource "google_project_iam_member" "backend_cloudbuild" {
+  #checkov:skip=CKV_GCP_34: Cloud Build source deploy vaatii projekti-tason roolin
+  project = var.gcp_project
+  role    = "roles/cloudbuild.builds.editor"
+  member  = "serviceAccount:${google_service_account.backend.email}"
+}
+
+# GCS-kirjoitusoikeus Cloud Build source uploadille
+resource "google_project_iam_member" "backend_storage_source" {
+  #checkov:skip=CKV_GCP_34: Cloud Build source upload vaatii GCS-kirjoitusoikeuden
+  # Huom: roles/storage.objectCreator antaa oikeuden kaikkiin projektin GCS-bucketeihin.
+  # Rajaus Cloud Build -bucketille resurssitasolla ei ole mahdollinen gcloud run deploy --source -polulla.
+  project = var.gcp_project
+  role    = "roles/storage.objectCreator"
+  member  = "serviceAccount:${google_service_account.backend.email}"
 }
