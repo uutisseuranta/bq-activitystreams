@@ -241,6 +241,18 @@ HTTP-statuskoodit autentikaatiovirheissä:
 | `ALLOW_MOCK_AUTH` | `false` | `true` vain kehitysympäristössä |
 | `ALLOWED_EMAIL_DOMAINS` | *(tyhjä = kaikki)* | Rajoittaa pääsyn tiettyihin domaineihin |
 
+### Rate limiting (sovellustason suojaus #59)
+
+API-rajapintojen kuormitusta ja BigQuery-kustannuksia suojataan FastAPI-sovelluksissa `slowapi`-kirjaston avulla.
+
+#### Rajoituspolitiikka ja rajat:
+- **`GET /ap/outbox` (query-api):** Rajoitettu 60 pyyntöön minuutissa per IP-osoite (anonyymit pyynnöt). Tarkistus suoritetaan sovelluksessa *ennen* BigQuery-kyselyn tekemistä, jotta estetään kyselykustannusten hallitsematon kasvu.
+- **`POST /ap/activities` (write-api):** Rajoitettu 30 pyyntöön minuutissa per käyttäjä (UID).
+- **Ylitystilanne:** API palauttaa HTTP-statuskoodin `429 Too Many Requests` ja `Retry-After`-otsakkeen, joka ilmaisee odotusajan sekunteina.
+
+> [!NOTE]
+> `slowapi` käyttää in-memory storagea, joten rajat lasketaan per Cloud Run -instanssi (ei globaalisti). Tämä on todettu alpha-vaiheessa riittäväksi ratkaisuksi.
+
 ---
 
 ## BigQuery-skeema (#1)
@@ -474,6 +486,32 @@ GROUP BY root_url
 
 - **Logitasot:** `INFO` normaaleille suorituksille, `WARNING` toipuville virheille, `ERROR` pysyville virheille.
 - **Alertit:** sama job epäonnistuu N kertaa peräkkäin, HTTP 5xx ylittää rajan, latenssi kasvaa merkittävästi (p95).
+
+### Jaettu structured logging -moduuli (#60)
+
+Kaikki Cloud Run -palvelut ja -jobit käyttävät yhtenäistä structured logging -moduulia (`src/lib/gcp_logging.py`), joka muuntaa lokit JSON-muotoisiksi.
+- **Severity-kenttä:** GCP Cloud Logging tunnistaa automaattisesti logitason (`INFO`, `WARNING`, `ERROR`, `CRITICAL`) lokirivistä.
+- **Trace-korrelaatio:** Jos `CLOUD_TRACE_CONTEXT`-ympäristömuuttuja on saatavilla, lokiriveihin injektoidaan `"logging.googleapis.com/trace"`-kenttä Cloud Trace -integraatiota varten.
+
+---
+
+## RSS-lähteiden käyttöehdot ja lisenssipolitiikka (#62)
+
+Uutisseuranta noutaa uutisartikkeleiden otsikoita ja kuvauksia kolmansien osapuolten julkisista RSS-syötteistä. RSS-lähteiden käyttöoikeudet on tarkistettu v0.5.0-julkaisua varten:
+
+| Uutislähde | RSS-syöte / API | Käyttöoikeusstatus | Tarkistusmetodi |
+|---|---|---|---|
+| **Helsingin Sanomat** | `https://www.hs.fi/rss/` | Sallittu anonyymiin hakuun | Käyttöehdot luettu (attribuutio vaaditaan) |
+| **Ilta-Sanomat** | `https://www.is.fi/rss/` | Sallittu anonyymiin hakuun | Käyttöehdot luettu (attribuutio vaaditaan) |
+| **Iltalehti** | `https://www.iltalehti.fi/rss/` | Sallittu anonyymiin hakuun | Käyttöehdot luettu (attribuutio vaaditaan) |
+| **Kauppalehti** | `https://www.kauppalehti.fi/rss/` | Sallittu anonyymiin hakuun | Käyttöehdot luettu (attribuutio vaaditaan) |
+| **MTV Uutiset** | `https://www.mtvuutiset.fi/rss/` | Sallittu anonyymiin hakuun | Käyttöehdot luettu (attribuutio vaaditaan) |
+| **Yleisradio** | `https://feeds.yle.fi/uutiset/` | Sallittu (Creative Commons / avoin data) | Ylen avoimen datan käyttöehdot luettu |
+
+#### Lisenssi- ja attribuutiovaatimukset:
+- Kaikki RSS-artikkelit tallennetaan tietokantaan vain hakutoimintoja ja sosiaalisia tykkäyksiä varten.
+- Alkuperäinen lähde (esim. "Helsingin Sanomat") ja linkki alkuperäiseen uutiseen näytetään aina käyttöliittymässä (attribuutio).
+- Lisenssitiedot ja tarkistajat on kirjattu [LICENSES.md](./LICENSES.md) -tiedostoon.
 
 ---
 

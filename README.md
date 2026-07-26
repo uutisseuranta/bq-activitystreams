@@ -11,6 +11,11 @@ Ei täyttä ActivityPub-implementaatiota — tavoitteena AS2-yhteensopivuus.
 - [DESIGN_GUIDELINES.md](./DESIGN_GUIDELINES.md) — backend-spesifiset poikkeamat
 - [LICENSES.md](./LICENSES.md) — lisenssit ja attribuutiot
 
+## Infrastruktuuri
+
+GCP-infrastruktuuri ja resurssit (Cloud Run -palvelut ja -jobit, Cloud Scheduler, IAM-oikeudet, BigQuery-taulut sekä Secret Manager) hallitaan koodina Terraformin avulla.
+Terraform-määrittelyt sijaitsevat kansiossa [`terraform/`](./terraform/).
+
 ## Deploy
 
 Tuotantodeploy tapahtuu automaattisesti CI:ssä (`unit-tests.yml` `deploy`-job)
