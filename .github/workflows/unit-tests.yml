@@ -144,7 +144,7 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
-      - uses: google-github-actions/setup-gcloud@817b83d791af8a1f089ef2143eb5d630d403aa0d # v2.1.4
+      - uses: google-github-actions/setup-gcloud@f099058a968600d3d5267a14e9f905c8651c510b # v2.1.1
 
       - name: Tallenna nykyiset revisiot rollbackia varten
         run: |
