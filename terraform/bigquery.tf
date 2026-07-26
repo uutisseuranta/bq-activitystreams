@@ -37,6 +37,10 @@ resource "google_bigquery_table" "articles" {
   # olemassa olevan taulun sarakkeita. Lisää schema-lohko vain jos taulua
   # ei ole vielä olemassa ja haluat Terraformin luoda sen oikealla skeemalla.
   schema = jsonencode([])
+
+  lifecycle {
+    ignore_changes = [schema]
+  }
 }
 
 # Syötetaulu – seurattavat RSS-syötteet
@@ -45,6 +49,10 @@ resource "google_bigquery_table" "feeds" {
   table_id            = "feeds"
   deletion_protection = true
   schema              = jsonencode([])
+
+  lifecycle {
+    ignore_changes = [schema]
+  }
 }
 
 # OG-välimuisti – Open Graph -metatiedot artikkeleille
@@ -53,6 +61,10 @@ resource "google_bigquery_table" "og_cache" {
   table_id            = "og_cache"
   deletion_protection = true
   schema              = jsonencode([])
+
+  lifecycle {
+    ignore_changes = [schema]
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -76,6 +88,10 @@ resource "google_bigquery_table" "social_likes" {
   table_id            = "social_likes"
   deletion_protection = true
   schema              = jsonencode([])
+
+  lifecycle {
+    ignore_changes = [schema]
+  }
 }
 
 

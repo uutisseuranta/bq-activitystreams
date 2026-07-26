@@ -69,3 +69,18 @@ resource "google_cloud_run_v2_service_iam_member" "og_scraper_invoker" {
   role     = "roles/run.invoker"
   member   = "serviceAccount:${local.sa_email}"
 }
+
+# Cloud Build ja Storage -oikeudet backend-SA:lle lähdekoodipohjaista deployta varten (gcloud run deploy --source)
+resource "google_project_iam_member" "backend_cloudbuild" {
+  #checkov:skip=CKV_GCP_34: Cloud Build source deploy vaatii projekti-tason roolin
+  project = var.gcp_project
+  role    = "roles/cloudbuild.builds.editor"
+  member  = "serviceAccount:${local.sa_email}"
+}
+
+resource "google_project_iam_member" "backend_storage_source" {
+  #checkov:skip=CKV_GCP_34: Cloud Build source upload vaatii GCS-kirjoitusoikeuden (projekti-taso vaaditaan)
+  project = var.gcp_project
+  role    = "roles/storage.objectCreator"
+  member  = "serviceAccount:${local.sa_email}"
+}
