@@ -324,18 +324,26 @@ class TestCheckStatus(unittest.TestCase):
         mock_result_articles = MagicMock()
         mock_result_articles.cnt = 11842
 
+        mock_result_active = MagicMock()
+        mock_result_active.name = "Testi Uutiset"
+        mock_result_active.cnt = 50
+
         mock_bq.query.side_effect = [
             MagicMock(result=lambda: [mock_result_sources]),
-            MagicMock(result=lambda: [mock_result_articles])
+            MagicMock(result=lambda: [mock_result_articles]),
+            MagicMock(result=lambda: [mock_result_active])
         ]
 
         response = self.client.get("/ap/stats")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {
-            "sources_count": 164,
-            "articles_last_24h": 11842,
-            "update_interval_minutes": 5
-        })
+        
+        resp_json = response.json()
+        self.assertEqual(resp_json["sources_count"], 164)
+        self.assertEqual(resp_json["articles_last_24h"], 11842)
+        self.assertEqual(resp_json["update_interval_minutes"], 5)
+        self.assertEqual(len(resp_json["active_sources"]), 6)
+        self.assertEqual(resp_json["active_sources"][0], {"name": "Testi Uutiset", "cnt": 50})
+        self.assertEqual(resp_json["active_sources"][1]["name"], "Yle Uutiset")
 
 
 class TestQueryApiRegressions(unittest.TestCase):
