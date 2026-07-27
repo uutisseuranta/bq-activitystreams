@@ -37,6 +37,8 @@ Tämä osio määrittelee uutisseurannan taustajärjestelmän keskeiset käyttö
 | UC-6 | Tykkäykset ja reaktiot | `write_api.py` | #33 | Käsittelee käyttäjien Like- ja Dislike-reaktiot ja tallentaa ne BQ-kantaan. |
 | UC-7 | GDPR: käyttäjätietojen poisto | `write_api.py` | #37 | Anonymisoi kommentit ja poistaa tykkäykset tilin poiston yhteydessä. |
 | UC-8 | OG-scraper API-endpoint | `og_scraper.py` | #23 | Tarjoaa `POST /ap/scrape` -endpointin uutislinkin reaaliaikaiseen parsimiseen. |
+| UC-9 | Kommentit ja vastausketjut | `query_api.py` | #11 | Tarjoaa `/ap/replies` -endpointin kommenttien ja vastauksien hakemiseen AS2-formaatissa. |
+| UC-10 | Outbox-haku parametreilla | `query_api.py` | #10 | Tukee sivutuspyyntöjä uutisvirralle `?n=5/50/500` -parametrilla. |
 
 ## Scraping-etiikka ja REP-standardi
 
