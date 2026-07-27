@@ -159,33 +159,33 @@ jobs:
 
       - name: Deploy query-api
         run: |
-          gcloud builds submit --pack image=europe-north1-docker.pkg.dev/uutisseuranta-activitystreams/jobs/query-api:latest \
+          gcloud builds submit --tag europe-north1-docker.pkg.dev/uutisseuranta-activitystreams/jobs/query-api:latest \
             --project uutisseuranta-activitystreams
           gcloud run deploy query-api \
             --image europe-north1-docker.pkg.dev/uutisseuranta-activitystreams/jobs/query-api:latest \
             --region europe-north1 \
             --project uutisseuranta-activitystreams \
-            --command python --args="-m,uvicorn,query_api:app,--host,0.0.0.0,--port,8080"
+            --command uvicorn --args="query_api:app,--host,0.0.0.0,--port,8080"
 
       - name: Deploy write-api
         run: |
-          gcloud builds submit --pack image=europe-north1-docker.pkg.dev/uutisseuranta-activitystreams/jobs/write-api:latest \
+          gcloud builds submit --tag europe-north1-docker.pkg.dev/uutisseuranta-activitystreams/jobs/write-api:latest \
             --project uutisseuranta-activitystreams
           gcloud run deploy write-api \
             --image europe-north1-docker.pkg.dev/uutisseuranta-activitystreams/jobs/write-api:latest \
             --region europe-north1 \
             --project uutisseuranta-activitystreams \
-            --command python --args="-m,uvicorn,write_api:app,--host,0.0.0.0,--port,8080"
+            --command uvicorn --args="write_api:app,--host,0.0.0.0,--port,8080"
 
       - name: Deploy og-scraper
         run: |
-          gcloud builds submit --pack image=europe-north1-docker.pkg.dev/uutisseuranta-activitystreams/jobs/og-scraper:latest \
+          gcloud builds submit --tag europe-north1-docker.pkg.dev/uutisseuranta-activitystreams/jobs/og-scraper:latest \
             --project uutisseuranta-activitystreams
           gcloud run deploy og-scraper \
             --image europe-north1-docker.pkg.dev/uutisseuranta-activitystreams/jobs/og-scraper:latest \
             --region europe-north1 \
             --project uutisseuranta-activitystreams \
-            --command python --args="-m,uvicorn,og_scraper:app,--host,0.0.0.0,--port,8080"
+            --command uvicorn --args="og_scraper:app,--host,0.0.0.0,--port,8080"
 
 
 
