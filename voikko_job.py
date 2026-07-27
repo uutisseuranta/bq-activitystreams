@@ -96,12 +96,12 @@ def analyze_tags(text: str, v: libvoikko.Voikko) -> List[str]:
 
         # Voikko järjestää tulokset todennäköisimmän mukaan – otetaan ensimmäinen tulos
         r = results[0]
-        cls = r.get("class", "")
+        cls = r.get("CLASS", "")
 
         if cls in REJECTED_CLASSES:
             continue
 
-        baseform = r.get("baseform", token).lower()
+        baseform = r.get("BASEFORM", token).lower()
 
         # Suodatetaan yhdysviivalliset erikseen, jos perusmuoto päättyy viivaan
         baseform = baseform.strip("-")
