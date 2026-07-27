@@ -89,42 +89,53 @@ async def custom_rate_limit_exceeded_handler(request: Request, exc: RateLimitExc
     return response
 
 
-# Google OIDC tokenin vahvistusfunktiot
+# Google OIDC / Firebase ID tokenin vahvistusfunktiot
 def verify_google_token(token: str, audience: str) -> Optional[Dict[str, Any]]:
     try:
+        # Kokeillaan ensin standardia Google OIDC tokenia
         return id_token.verify_oauth2_token(token, google_requests.Request(), audience=audience)
     except Exception:
-        return None
+        try:
+            # Fallback: Kokeillaan Firebase ID tokenia (käyttäjän selainautentikointi)
+            return id_token.verify_firebase_token(token, google_requests.Request(), audience=audience)
+        except Exception:
+            return None
 
 
 def verify_auth_token_optional(auth_header: Optional[str]) -> Optional[str]:
     if not auth_header:
         return None
     if not auth_header.startswith("Bearer "):
-        logger.warning("Autentikaatio hylätty: virheellinen Authorization-formaatti")
-        raise HTTPException(status_code=401, detail="Invalid Authorization header format.")
+        logger.warning("Autentikaatio hylätty: virheellinen Authorization-formaatti (ohitetaan julkisessa rajapinnassa)")
+        return None
 
     token = auth_header.split(" ")[1]
+    if not token:
+        logger.warning("Autentikaatio hylätty: tyhjä Bearer-token (ohitetaan julkisessa rajapinnassa)")
+        return None
+
     allow_mock = os.getenv("ALLOW_MOCK_AUTH", "false").lower() == "true"
     if allow_mock and token == "mock-test":
-        # ALLOW_MOCK_AUTH=true sallitaan vain kehitys- ja testiympäristöissä
         logger.warning("Mock-autentikaatio käytössä — vain kehitysympäristöön")
         return "test-user-sub-12345"
 
     project_id = os.getenv("GCP_PROJECT", "uutisseuranta-activitystreams")
     svc_url = os.getenv("CLOUD_RUN_SERVICE_URL", "")
-    allowed_audiences = [a for a in [project_id, svc_url] if a]
+    allowed_audiences = [a for a in [project_id, svc_url, "uutisseuranta-net"] if a]
 
     for aud in allowed_audiences:
-        payload = verify_google_token(token, aud)
-        if payload:
-            sub = payload.get("sub")
-            if not sub:
-                raise HTTPException(status_code=401, detail="Token lacks 'sub' claim.")
-            return sub
+        try:
+            payload = verify_google_token(token, aud)
+            if payload:
+                sub = payload.get("sub")
+                if sub:
+                    return sub
+        except Exception as e:
+            logger.warning(f"Token verification warning for aud={aud}: {e}")
+            continue
 
-    logger.warning("Autentikaatio hylätty: OIDC-tokenia ei voitu vahvistaa")
-    raise HTTPException(status_code=401, detail="Invalid OIDC token.")
+    logger.warning("Autentikaatio hylätty julkisessa rajapinnassa (jatketaan anonyyminä): tokenia ei voitu vahvistaa")
+    return None
 
 
 # Globaalit ympäristömuuttujat — luetaan kerran käynnistyksen yhteydessä
@@ -353,6 +364,11 @@ def update_archive_url_in_bq(url: str, archive_url: str):
         logger.error(f"Virhe päivitettäessä arkistolinkkiä uutiselle {url}: {e}")
 
 
+# Globaalit muuttujat status-tarkistusten välimuistille
+_status_cache = {}  # key: url, value: {"alive": bool, "time": float}
+STATUS_CACHE_TTL = 300.0  # 5 minuuttia välimuisti uutisten ping-tarkistuksille
+
+
 @app.get("/ap/check-status")
 async def check_status(url: str, background_tasks: BackgroundTasks):
     """Tarkistaa onko artikkelilinkki tavoitettavissa ja tallentaa virhetilanteessa arkistolinkin BigQueryyn."""
@@ -364,6 +380,14 @@ async def check_status(url: str, background_tasks: BackgroundTasks):
 
     if is_invalid_scheme:
         raise HTTPException(status_code=400, detail="Invalid URL scheme.")
+
+    # 1. Tarkistetaan välimuisti
+    now = time.time()
+    if url in _status_cache:
+        cached = _status_cache[url]
+        if now - cached["time"] < STATUS_CACHE_TTL:
+            logger.info(f"Palautetaan status-tarkistus välimuistista linkille: {url}")
+            return {"alive": cached["alive"]}
 
     alive = False
     try:
@@ -377,9 +401,26 @@ async def check_status(url: str, background_tasks: BackgroundTasks):
         logger.warning(f"Uutissivun {url} ping-tarkistus epäonnistui: {e}")
         alive = False
 
-    # Jos sivu on alhaalla, päivitetään BigQueryyn arkisto-URL taustatehtävänä
+    # Päivitetään välimuisti
+    _status_cache[url] = {"alive": alive, "time": now}
+
+    # Jos sivu on alhaalla, selvitetään suora arkistolinkki ja päivitetään se BigQueryyn
     if not alive:
+        # Oletuksena kalenterinäkymän villikortti-URL
         archive_url = f"https://web.archive.org/web/*/{url}"
+        try:
+            # Kysytään Internet Archiven Availability API:lta suoraa arkistoitua sivua
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                avail_res = await client.get(f"https://archive.org/wayback/available?url={urllib.parse.quote(url)}")
+                if avail_res.status_code == 200:
+                    avail_data = avail_res.json()
+                    closest = avail_data.get("archived_snapshots", {}).get("closest", {})
+                    if closest.get("available") and closest.get("url"):
+                        archive_url = closest["url"]
+                        logger.info(f"Löydetty suora Wayback Machine -linkki artikkelille {url}: {archive_url}")
+        except Exception as e:
+            logger.warning(f"Wayback Machine Availability API kysely epäonnistui uutiselle {url}: {e}")
+
         background_tasks.add_task(update_archive_url_in_bq, url, archive_url)
 
     return {"alive": alive}

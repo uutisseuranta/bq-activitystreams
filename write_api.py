@@ -113,7 +113,7 @@ CLOUD_RUN_SERVICE_URL = os.getenv("CLOUD_RUN_SERVICE_URL", "")
 # jokaisen HTTP-pyynnön yhteydessä uudelleen, joten ympäristö voidaan
 # vaihtaa testissä dynaamisesti.
 
-ALLOWED_AUDIENCES = [a for a in [GOOGLE_CLIENT_ID, CLOUD_RUN_SERVICE_URL] if a]
+ALLOWED_AUDIENCES = [a for a in [GOOGLE_CLIENT_ID, CLOUD_RUN_SERVICE_URL, "uutisseuranta-net"] if a]
 
 if not PROJECT or not DATASET:
     logger.critical("Virhe: GCP_PROJECT ja BQ_DATASET ovat pakollisia ympäristömuuttujia.")
@@ -122,11 +122,16 @@ bq_client = bigquery.Client(project=PROJECT)
 
 
 def verify_google_token(token: str, audience: str) -> Optional[Dict[str, Any]]:
-    """Validoi Google OIDC-tokenin annetulle audiencelle."""
+    """Validoi Google OIDC-tokenin tai Firebase ID -tokenin annetulle audiencelle."""
     try:
+        # Kokeillaan ensin standardia Google OIDC tokenia
         return id_token.verify_oauth2_token(token, google_requests.Request(), audience=audience)
     except Exception:
-        return None
+        try:
+            # Fallback: Kokeillaan Firebase ID tokenia (käyttäjän selainautentikointi)
+            return id_token.verify_firebase_token(token, google_requests.Request(), audience=audience)
+        except Exception:
+            return None
 
 
 def verify_auth_token(auth_header: Optional[str]) -> str:
