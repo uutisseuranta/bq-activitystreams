@@ -198,8 +198,15 @@ jobs:
               --project uutisseuranta-activitystreams \
               --format='value(metadata.annotations["run.googleapis.com/urls"])' | grep -o 'https://[^"]*europe-north1.run.app' | head -n 1)
             echo "Healthcheck: $svc → $URL/healthz"
-            TOKEN=$(gcloud auth print-identity-token)
-            if ! curl -sf --retry 5 --retry-delay 10 --retry-connrefused -H "Authorization: Bearer $TOKEN" "$URL/healthz"; then
+            TOKEN=$(gcloud auth print-identity-token 2>/dev/null || echo "")
+            HEALTH_OK=0
+            if [ -n "$TOKEN" ]; then
+              curl -sf --retry 5 --retry-delay 10 --retry-connrefused -H "Authorization: Bearer $TOKEN" "$URL/healthz" && HEALTH_OK=1
+            else
+              curl -sf --retry 5 --retry-delay 10 --retry-connrefused "$URL/healthz" && HEALTH_OK=1
+            fi
+            
+            if [ "$HEALTH_OK" -ne 1 ]; then
               echo "VIRHE: $svc /healthz epäonnistui deployn jälkeen."
               VAR="PREV_${svc//-/_}"
               PREV_REV="${!VAR}"
