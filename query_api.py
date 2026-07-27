@@ -118,7 +118,7 @@ def verify_auth_token_optional(auth_header: Optional[str]) -> Optional[str]:
 
     project_id = os.getenv("GCP_PROJECT", "uutisseuranta-activitystreams")
     svc_url = os.getenv("CLOUD_RUN_SERVICE_URL", "")
-    allowed_audiences = [a for a in [project_id, svc_url] if a]
+    allowed_audiences = [a for a in [project_id, svc_url, "uutisseuranta-net"] if a]
 
     for aud in allowed_audiences:
         payload = verify_google_token(token, aud)
