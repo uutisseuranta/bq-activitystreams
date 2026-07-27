@@ -196,7 +196,7 @@ jobs:
             URL=$(gcloud run services describe $svc \
               --region europe-north1 \
               --project uutisseuranta-activitystreams \
-              --format='value(status.url)')
+              --format='value(metadata.annotations["run.googleapis.com/urls"])' | grep -o 'https://[^"]*europe-north1.run.app' | head -n 1)
             echo "Healthcheck: $svc → $URL/healthz"
             if ! curl -sf --retry 5 --retry-delay 10 --retry-connrefused "$URL/healthz"; then
               echo "VIRHE: $svc /healthz epäonnistui deployn jälkeen."
