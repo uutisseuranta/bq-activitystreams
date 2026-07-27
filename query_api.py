@@ -106,13 +106,16 @@ def verify_auth_token_optional(auth_header: Optional[str]) -> Optional[str]:
     if not auth_header:
         return None
     if not auth_header.startswith("Bearer "):
-        logger.warning("Autentikaatio hylätty: virheellinen Authorization-formaatti")
-        raise HTTPException(status_code=401, detail="Invalid Authorization header format.")
+        logger.warning("Autentikaatio hylätty: virheellinen Authorization-formaatti (ohitetaan julkisessa rajapinnassa)")
+        return None
 
     token = auth_header.split(" ")[1]
+    if not token:
+        logger.warning("Autentikaatio hylätty: tyhjä Bearer-token (ohitetaan julkisessa rajapinnassa)")
+        return None
+
     allow_mock = os.getenv("ALLOW_MOCK_AUTH", "false").lower() == "true"
     if allow_mock and token == "mock-test":
-        # ALLOW_MOCK_AUTH=true sallitaan vain kehitys- ja testiympäristöissä
         logger.warning("Mock-autentikaatio käytössä — vain kehitysympäristöön")
         return "test-user-sub-12345"
 
@@ -121,15 +124,18 @@ def verify_auth_token_optional(auth_header: Optional[str]) -> Optional[str]:
     allowed_audiences = [a for a in [project_id, svc_url, "uutisseuranta-net"] if a]
 
     for aud in allowed_audiences:
-        payload = verify_google_token(token, aud)
-        if payload:
-            sub = payload.get("sub")
-            if not sub:
-                raise HTTPException(status_code=401, detail="Token lacks 'sub' claim.")
-            return sub
+        try:
+            payload = verify_google_token(token, aud)
+            if payload:
+                sub = payload.get("sub")
+                if sub:
+                    return sub
+        except Exception as e:
+            logger.warning(f"Token verification warning for aud={aud}: {e}")
+            continue
 
-    logger.warning("Autentikaatio hylätty: OIDC-tokenia ei voitu vahvistaa")
-    raise HTTPException(status_code=401, detail="Invalid OIDC token.")
+    logger.warning("Autentikaatio hylätty julkisessa rajapinnassa (jatketaan anonyyminä): tokenia ei voitu vahvistaa")
+    return None
 
 
 # Globaalit ympäristömuuttujat — luetaan kerran käynnistyksen yhteydessä

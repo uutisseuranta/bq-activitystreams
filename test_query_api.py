@@ -273,12 +273,11 @@ class TestRateLimiting(unittest.TestCase):
             self.assertEqual(response.status_code, 429)
 
     @patch("query_api.bq_client")
-    def test_invalid_token_returns_401(self, mock_bq):
-        # Virheellinen tai vanhentunut token antaa 401 Unauthorized
+    def test_invalid_token_returns_200(self, mock_bq):
+        # Virheellinen tai vanhentunut token ohitetaan julkisessa rajapinnassa (200 OK)
         headers = {"Authorization": "Bearer invalid-or-expired-token"}
         response = self.client.get("/ap/outbox?tag=politiikka", headers=headers)
-        self.assertEqual(response.status_code, 401)
-        self.assertIn("Invalid OIDC token", response.json()["detail"])
+        self.assertEqual(response.status_code, 200)
 
 
 class TestCheckStatus(unittest.TestCase):
@@ -454,7 +453,7 @@ class TestQueryApiRegressions(unittest.TestCase):
     def test_outbox_with_auth_header_invalid(self, mock_bq, mock_verify):
         mock_verify.return_value = None # Epäonnistunut Google & Firebase -tunniste
         response = self.client.get("/ap/outbox?tag=politiikka", headers={"Authorization": "Bearer invalid-token"})
-        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.status_code, 200)
 
     @patch("query_api.verify_google_token")
     @patch("query_api.bq_client")
