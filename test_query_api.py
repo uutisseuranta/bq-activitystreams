@@ -459,12 +459,12 @@ class TestQueryApiRegressions(unittest.TestCase):
     @patch("query_api.bq_client")
     def test_outbox_with_auth_header_valid(self, mock_bq, mock_verify):
         mock_verify.return_value = {"sub": "user-123", "email_verified": True}
-        
+
         def query_side_effect(sql, job_config=None):
             if "COUNT(*) AS c" in sql:
                 return create_mock_query_job([{"c": 1}])
             return create_mock_query_job([])
-            
+
         mock_bq.query.side_effect = query_side_effect
         response = self.client.get("/ap/outbox?tag=politiikka", headers={"Authorization": "Bearer valid-token"})
         self.assertEqual(response.status_code, 200)
