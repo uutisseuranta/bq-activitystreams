@@ -338,3 +338,58 @@ class TestCheckStatus(unittest.TestCase):
         })
 
 
+class TestQueryApiRegressions(unittest.TestCase):
+    def setUp(self):
+        self.client = TestClient(app)
+        from query_api import limiter
+        limiter.enabled = False
+
+    @patch("query_api.bq_client")
+    def test_outbox_cors_headers(self, mock_bq):
+        mock_bq.query.return_value = create_mock_query_job([])
+        
+        # Testataan, että CORS-otsikot asetetaan pyynnön Origin-otsikon perusteella
+        headers = {"Origin": "https://uutisseuranta.net"}
+        response = self.client.get("/ap/outbox?tag=politiikka", headers=headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers.get("access-control-allow-origin"), "https://uutisseuranta.net")
+        self.assertEqual(response.headers.get("access-control-allow-credentials"), "true")
+
+    @patch("query_api.bq_client")
+    def test_outbox_none_values_regression(self, mock_bq):
+        # Simuloidaan tilannetta, jossa uudet tai päivitettävät rivit sisältävät NULL/None-arvoja
+        mock_row_with_nones = {
+            "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/none-test",
+            "source": "rss",
+            "published": datetime.datetime(2026, 7, 3, 10, 0, tzinfo=datetime.timezone.utc),
+            "updated": None,       # updated on NULL
+            "like_count": None,    # like_count on NULL
+            "dislike_count": None, # dislike_count on NULL
+            "object_json": (
+                '{"id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/none-test", '
+                '"type": "Article", "name": "None Testiuutinen"}'
+            )
+        }
+
+        def query_side_effect(sql, job_config=None):
+            if "COUNT(*) AS c" in sql:
+                return create_mock_query_job([{"c": 1}])
+            return create_mock_query_job([mock_row_with_nones])
+
+        mock_bq.query.side_effect = query_side_effect
+
+        # Tämä kutsui aiemmin kaatui NoneType-yhteenlaskussa uutista parsiessa
+        response = self.client.get("/ap/outbox?tag=politiikka")
+        self.assertEqual(response.status_code, 200)
+        
+        resp_data = response.json()
+        items = resp_data["orderedItems"]
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["likes"], {"type": "Collection", "totalItems": 0})
+        self.assertEqual(items[0]["dislikes"], {"type": "Collection", "totalItems": 0})
+        self.assertEqual(items[0]["_uutisseuranta:reactionCount"], 0)
+        # updated pitäisi puuttua JSON-vastauksesta, jos se on None
+        self.assertNotIn("updated", items[0])
+
+
+
