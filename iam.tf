@@ -178,4 +178,22 @@ resource "google_project_iam_member" "backend_artifactregistry_writer" {
   member  = "serviceAccount:${google_service_account.backend.email}"
 }
 
+# Salli kaikkien kirjautuneiden Google-käyttäjien kutsua write-apita (G-009, G-010)
+resource "google_cloud_run_v2_service_iam_member" "write_api_all_authenticated_users" {
+  project  = var.gcp_project
+  location = var.region
+  name     = google_cloud_run_v2_service.write_api.name
+  role     = "roles/run.invoker"
+  member   = "allAuthenticatedUsers"
+}
+
+# Salli julkinen liikenne og-scraperille (avoin data)
+resource "google_cloud_run_v2_service_iam_member" "og_scraper_public" {
+  project  = var.gcp_project
+  location = var.region
+  name     = google_cloud_run_v2_service.og_scraper.name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
 
