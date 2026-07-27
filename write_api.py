@@ -36,6 +36,7 @@ from typing import Any, Dict, Optional
 
 import ulid
 from fastapi import FastAPI, Header, HTTPException, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from gcp_logging import get_logger
 from google.auth.transport import requests as google_requests
 from google.cloud import bigquery
@@ -85,7 +86,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 @app.exception_handler(RateLimitExceeded)
 async def custom_rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
     response = Response(

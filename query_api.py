@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Query, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from gcp_logging import get_logger
 from google.auth.transport import requests as google_requests
 from google.cloud import bigquery
@@ -66,6 +67,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.middleware("http")
 async def add_request_context_middleware(request: Request, call_next):
