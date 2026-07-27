@@ -89,12 +89,17 @@ async def custom_rate_limit_exceeded_handler(request: Request, exc: RateLimitExc
     return response
 
 
-# Google OIDC tokenin vahvistusfunktiot
+# Google OIDC / Firebase ID tokenin vahvistusfunktiot
 def verify_google_token(token: str, audience: str) -> Optional[Dict[str, Any]]:
     try:
+        # Kokeillaan ensin standardia Google OIDC tokenia
         return id_token.verify_oauth2_token(token, google_requests.Request(), audience=audience)
     except Exception:
-        return None
+        try:
+            # Fallback: Kokeillaan Firebase ID tokenia (käyttäjän selainautentikointi)
+            return id_token.verify_firebase_token(token, google_requests.Request(), audience=audience)
+        except Exception:
+            return None
 
 
 def verify_auth_token_optional(auth_header: Optional[str]) -> Optional[str]:
