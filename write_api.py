@@ -68,8 +68,23 @@ def get_user_id(request: Request) -> str:
     return get_remote_address(request)
 
 limiter = Limiter(key_func=get_user_id)
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="ActivityStreams Write API", version="1.0.0")
 app.state.limiter = limiter
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://uutisseuranta.net",
+        "https://uutisseuranta.github.io",
+        "http://localhost:5173",
+        "http://localhost:4173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.exception_handler(RateLimitExceeded)
 async def custom_rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):

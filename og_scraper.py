@@ -17,8 +17,23 @@ from slowapi.util import get_remote_address
 logger = get_logger("og-scraper")
 
 limiter = Limiter(key_func=get_remote_address)
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="ActivityStreams OG Scraper", version="1.0.0")
 app.state.limiter = limiter
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://uutisseuranta.net",
+        "https://uutisseuranta.github.io",
+        "http://localhost:5173",
+        "http://localhost:4173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.exception_handler(RateLimitExceeded)
 async def custom_rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):

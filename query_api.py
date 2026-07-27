@@ -49,8 +49,23 @@ def get_outbox_limit() -> str:
     return "60/minute"
 
 limiter = Limiter(key_func=get_query_user_or_ip)
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="ActivityStreams Query API", version="1.0.0")
 app.state.limiter = limiter
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://uutisseuranta.net",
+        "https://uutisseuranta.github.io",
+        "http://localhost:5173",
+        "http://localhost:4173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.middleware("http")
 async def add_request_context_middleware(request: Request, call_next):
@@ -273,9 +288,12 @@ def get_outbox(
 
             # likes: AS2 Core §5.7 -kenttä, palautetaan Collection-muodossa (ei kokonaisluku).
             # totalItems riittää — koko aktiviteettilistan palauttaminen olisi liian raskas.
+            like_cnt = row["like_count"] or 0
+            dislike_cnt = row["dislike_count"] or 0
+
             obj["likes"] = {
                 "type": "Collection",
-                "totalItems": row["like_count"]
+                "totalItems": like_cnt
             }
 
             # dislikes: projektikohtainen laajennus — ei AS2 Core -kenttä (toisin kuin 'likes').
@@ -283,7 +301,7 @@ def get_outbox(
             # Collection-rakenne on yhdenmukainen AS2 Core §5.7 'likes'-käytännön kanssa.
             obj["dislikes"] = {
                 "type": "Collection",
-                "totalItems": row["dislike_count"]
+                "totalItems": dislike_cnt
             }
 
             # reactionCount = likes + dislikes (kaikki reaktiot yhteensä).
@@ -292,7 +310,7 @@ def get_outbox(
             # Invariantti: arvo on oikein vain jos write-api estää duplikaattiäänet per käyttäjä.
             # Toggle-logiikka ja duplikaattiesto on ratkaistu write-apissa (poistetaan vanha, lisätään uusi).
             # Hallittu AS2-poikkeama: toggle ei kirjaa 'Undo Like' -aktiviteettia — ks. AS2_CONTRACT.md §4.
-            obj["_uutisseuranta:reactionCount"] = row["like_count"] + row["dislike_count"]
+            obj["_uutisseuranta:reactionCount"] = like_cnt + dislike_cnt
 
             if row["updated"]:
                 updated_dt = row["updated"]
