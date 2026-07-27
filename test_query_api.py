@@ -33,6 +33,7 @@ class TestOutboxQuery(unittest.TestCase):
         # Otetaan rate limiting pois päältä muissa testeissä, jotta ne eivät vahingossa kuluta
         # globaalia/instanssikohtaista in-memory -rajaa ja aiheuta muiden testien epäonnistumista.
         from query_api import limiter
+
         limiter.enabled = False
 
     @patch("query_api.bq_client")
@@ -47,7 +48,7 @@ class TestOutboxQuery(unittest.TestCase):
             "object_json": (
                 '{"id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y", '
                 '"type": "Article", "name": "Testiuutinen"}'
-            )
+            ),
         }
 
         # bq_client.query kutsutaan kahdesti per endpoint-kutsu:
@@ -101,6 +102,7 @@ class TestCacheBehavior(unittest.TestCase):
         self.client = TestClient(app)
         _count_cache.clear()
         from query_api import limiter
+
         limiter.enabled = False
 
     @patch("query_api.bq_client")
@@ -112,7 +114,7 @@ class TestCacheBehavior(unittest.TestCase):
             "updated": datetime.datetime(2026, 7, 3, 11, 0, tzinfo=datetime.timezone.utc),
             "like_count": 0,
             "dislike_count": 0,
-            "object_json": '{"id": "some-id", "type": "Article"}'
+            "object_json": '{"id": "some-id", "type": "Article"}',
         }
 
         def query_side_effect(sql, job_config=None):
@@ -162,6 +164,7 @@ class TestReactionAggregationPrep(unittest.TestCase):
         self.client = TestClient(app)
         _count_cache.clear()
         from query_api import limiter
+
         limiter.enabled = False
 
     @patch("query_api.bq_client")
@@ -175,9 +178,8 @@ class TestReactionAggregationPrep(unittest.TestCase):
             "like_count": 12,
             "dislike_count": 4,
             "object_json": (
-                '{"id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y", '
-                '"type": "Article"}'
-            )
+                '{"id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y", "type": "Article"}'
+            ),
         }
 
         def query_side_effect(sql, job_config=None):
@@ -201,12 +203,14 @@ class TestRateLimiting(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
         from query_api import limiter
+
         limiter.enabled = True
 
     @patch("query_api.bq_client")
     def test_rate_limit_outbox(self, mock_bq):
         # Nollataan limiitit jokaiselle testille (instanssikohtainen in-memory)
         from query_api import limiter
+
         limiter.reset()
         mock_row = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
@@ -215,12 +219,14 @@ class TestRateLimiting(unittest.TestCase):
             "updated": None,
             "like_count": 0,
             "dislike_count": 0,
-            "object_json": '{"id": "some-id", "type": "Article"}'
+            "object_json": '{"id": "some-id", "type": "Article"}',
         }
+
         def query_side_effect(sql, job_config=None):
             if "COUNT(*) AS c" in sql:
                 return create_mock_query_job([{"c": 1}])
             return create_mock_query_job([mock_row])
+
         mock_bq.query.side_effect = query_side_effect
 
         # Suoritetaan 60 pyyntöä
@@ -236,6 +242,7 @@ class TestRateLimiting(unittest.TestCase):
     @patch("query_api.bq_client")
     def test_dynamic_rate_limiting_authenticated(self, mock_bq):
         from query_api import limiter
+
         limiter.reset()
         mock_row = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
@@ -244,12 +251,14 @@ class TestRateLimiting(unittest.TestCase):
             "updated": None,
             "like_count": 0,
             "dislike_count": 0,
-            "object_json": '{"id": "some-id", "type": "Article"}'
+            "object_json": '{"id": "some-id", "type": "Article"}',
         }
+
         def query_side_effect(sql, job_config=None):
             if "COUNT(*) AS c" in sql:
                 return create_mock_query_job([{"c": 1}])
             return create_mock_query_job([mock_row])
+
         mock_bq.query.side_effect = query_side_effect
 
         # Autentikoitu käyttäjä ("mock-test") saa tehdä 120 pyyntöä
@@ -276,6 +285,7 @@ class TestCheckStatus(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
         from query_api import limiter
+
         limiter.enabled = False
 
     def test_check_status_invalid_url(self):
@@ -312,11 +322,14 @@ class TestCheckStatus(unittest.TestCase):
         self.assertEqual(response.json(), {"alive": False})
 
         # Verify that background BQ archiver task is queued/called
-        mock_update_bq.assert_called_once_with("https://example.com/dead", "https://web.archive.org/web/*/https://example.com/dead")
+        mock_update_bq.assert_called_once_with(
+            "https://example.com/dead", "https://web.archive.org/web/*/https://example.com/dead"
+        )
 
     @patch("query_api.bq_client")
     def test_get_stats_success(self, mock_bq):
         import query_api
+
         query_api._stats_cache = None
 
         mock_result_sources = MagicMock()
@@ -324,17 +337,114 @@ class TestCheckStatus(unittest.TestCase):
         mock_result_articles = MagicMock()
         mock_result_articles.cnt = 11842
 
+        mock_result_active = MagicMock()
+        mock_result_active.name = "Testi Uutiset"
+        mock_result_active.cnt = 50
+
         mock_bq.query.side_effect = [
             MagicMock(result=lambda: [mock_result_sources]),
-            MagicMock(result=lambda: [mock_result_articles])
+            MagicMock(result=lambda: [mock_result_articles]),
+            MagicMock(result=lambda: [mock_result_active]),
         ]
 
         response = self.client.get("/ap/stats")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {
-            "sources_count": 164,
-            "articles_last_24h": 11842,
-            "update_interval_minutes": 5
-        })
+
+        resp_json = response.json()
+        self.assertEqual(resp_json["sources_count"], 164)
+        self.assertEqual(resp_json["articles_last_24h"], 11842)
+        self.assertEqual(resp_json["update_interval_minutes"], 5)
+        self.assertEqual(len(resp_json["active_sources"]), 6)
+        self.assertEqual(resp_json["active_sources"][0], {"name": "Testi Uutiset", "cnt": 50})
+        self.assertEqual(resp_json["active_sources"][1]["name"], "Yle Uutiset")
 
 
+class TestQueryApiRegressions(unittest.TestCase):
+    def setUp(self):
+        self.client = TestClient(app)
+        from query_api import limiter
+
+        limiter.enabled = False
+
+    @patch("query_api.bq_client")
+    def test_outbox_cors_headers(self, mock_bq):
+        mock_bq.query.return_value = create_mock_query_job([])
+
+        # Testataan, että CORS-otsikot asetetaan pyynnön Origin-otsikon perusteella
+        headers = {"Origin": "https://uutisseuranta.net"}
+        response = self.client.get("/ap/outbox?tag=politiikka", headers=headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers.get("access-control-allow-origin"), "https://uutisseuranta.net")
+        self.assertEqual(response.headers.get("access-control-allow-credentials"), "true")
+
+    @patch("query_api.bq_client")
+    def test_outbox_none_values_regression(self, mock_bq):
+        # Simuloidaan tilannetta, jossa uudet tai päivitettävät rivit sisältävät NULL/None-arvoja
+        mock_row_with_nones = {
+            "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/none-test",
+            "source": "rss",
+            "published": datetime.datetime(2026, 7, 3, 10, 0, tzinfo=datetime.timezone.utc),
+            "updated": None,  # updated on NULL
+            "like_count": None,  # like_count on NULL
+            "dislike_count": None,  # dislike_count on NULL
+            "object_json": (
+                '{"id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/none-test", '
+                '"type": "Article", "name": "None Testiuutinen"}'
+            ),
+        }
+
+        def query_side_effect(sql, job_config=None):
+            if "COUNT(*) AS c" in sql:
+                return create_mock_query_job([{"c": 1}])
+            return create_mock_query_job([mock_row_with_nones])
+
+        mock_bq.query.side_effect = query_side_effect
+
+        # Tämä kutsui aiemmin kaatui NoneType-yhteenlaskussa uutista parsiessa
+        response = self.client.get("/ap/outbox?tag=politiikka")
+        self.assertEqual(response.status_code, 200)
+
+        resp_data = response.json()
+        items = resp_data["orderedItems"]
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["likes"], {"type": "Collection", "totalItems": 0})
+        self.assertEqual(items[0]["dislikes"], {"type": "Collection", "totalItems": 0})
+        self.assertEqual(items[0]["_uutisseuranta:reactionCount"], 0)
+        # updated pitäisi puuttua JSON-vastauksesta, jos se on None
+        self.assertNotIn("updated", items[0])
+
+    @patch("query_api.bq_client")
+    def test_get_replies_success(self, mock_bq):
+        mock_comment_row = {
+            "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/comment-1",
+            "published": datetime.datetime(2026, 7, 4, 12, 0, tzinfo=datetime.timezone.utc),
+            "object_json": (
+                '{"type": "Create", "actor": "https://uutisseuranta.net/users/user1", '
+                '"object": {"type": "Note", "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/comment-1", '
+                '"inReplyTo": "target-id", "content": "Kommentti 1"}}'
+            ),
+            "like_count": 5,
+            "dislike_count": 2,
+            "in_reply_to": "target-id",
+            "thread_root": "target-id",
+        }
+        mock_bq.query.return_value = create_mock_query_job([mock_comment_row])
+
+        response = self.client.get("/ap/replies?id=target-id")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["type"], "Collection")
+        self.assertEqual(data["totalItems"], 1)
+        self.assertEqual(data["orderedItems"][0]["object"]["content"], "Kommentti 1")
+        self.assertEqual(data["orderedItems"][0]["object"]["like_count"], 5)
+        self.assertEqual(data["orderedItems"][0]["object"]["dislike_count"], 2)
+
+    def test_get_replies_missing_id(self):
+        response = self.client.get("/ap/replies")
+        self.assertEqual(response.status_code, 400)
+
+    @patch("query_api.bq_client")
+    def test_get_replies_database_error(self, mock_bq):
+        mock_bq.query.side_effect = Exception("BigQuery failure")
+        response = self.client.get("/ap/replies?id=target-id")
+        self.assertEqual(response.status_code, 500)

@@ -30,7 +30,7 @@ class TestAS2Contract(unittest.TestCase):
                 '"type": "Article", "name": "Sopimustesti uutinen", '
                 '"url": "https://example.com/sopimustesti", '
                 '"published": "2026-07-03T10:00:00Z"}'
-            )
+            ),
         }
 
         def query_side_effect(sql, job_config=None):
@@ -50,10 +50,7 @@ class TestAS2Contract(unittest.TestCase):
 
         # 2. Tarkistetaan HTTP-status ja oikea MIME-tyyppi
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            response.headers.get("content-type"),
-            "application/activity+json; charset=utf-8"
-        )
+        self.assertEqual(response.headers.get("content-type"), "application/activity+json; charset=utf-8")
 
         resp_data = response.json()
 
@@ -88,10 +85,9 @@ class TestAS2Contract(unittest.TestCase):
         context = item["@context"]
         self.assertTrue(isinstance(context, list))
         self.assertEqual(context[0], "https://www.w3.org/ns/activitystreams")
-        self.assertEqual(context[1], {
-            "_uutisseuranta": "https://uutisseuranta.net/ns#",
-            "dislikes": "_uutisseuranta:dislikes"
-        })
+        self.assertEqual(
+            context[1], {"_uutisseuranta": "https://uutisseuranta.net/ns#", "dislikes": "_uutisseuranta:dislikes"}
+        )
 
         # 5. Tarkistetaan reaktiolaajennukset
         self.assertIn("likes", item)

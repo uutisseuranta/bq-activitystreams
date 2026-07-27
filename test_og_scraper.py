@@ -21,6 +21,7 @@ class TestOgScraper(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
         from og_scraper import limiter
+
         limiter.enabled = False
 
     @patch("og_scraper.bq_client")
@@ -32,7 +33,7 @@ class TestOgScraper(unittest.TestCase):
             "title": "Uutinen otsikolla",
             "description": "Artikkelin hieno tiivistelmä",
             "image": "https://example.com/kuva.jpg",
-            "site_name": "Testimedia"
+            "site_name": "Testimedia",
         }
         mock_parser.longer = lambda x, y: x or y
 
@@ -105,6 +106,7 @@ class TestScraperRateLimiting(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
         from og_scraper import limiter
+
         limiter.enabled = True
         limiter.reset()
 
@@ -117,7 +119,7 @@ class TestScraperRateLimiting(unittest.TestCase):
             "title": "Uutinen otsikolla",
             "description": "Artikkelin hieno tiivistelmä",
             "image": "https://example.com/kuva.jpg",
-            "site_name": "Testimedia"
+            "site_name": "Testimedia",
         }
         mock_parser.longer = lambda x, y: x or y
         mock_bq.query.return_value = MagicMock()

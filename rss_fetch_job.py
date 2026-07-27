@@ -24,11 +24,12 @@ class JsonFormatter(logging.Formatter):
             "severity": record.levelname,
             "message": record.getMessage(),
             "logger": record.name,
-            "time": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+            "time": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
         }
         if record.exc_info:
             log_entry["exception"] = self.formatException(record.exc_info)
         return json.dumps(log_entry, ensure_ascii=False)
+
 
 handler = logging.StreamHandler()
 handler.setFormatter(JsonFormatter())
@@ -44,6 +45,7 @@ def clean_text(raw: str) -> str:
     # Korjataan ylimääräiset välilyönnit
     stripped = re.sub(r"\s+", " ", stripped)
     import html as html_lib
+
     return html_lib.unescape(stripped).strip()
 
 
@@ -67,6 +69,7 @@ def discover_feed_url(page_url: str, timeout: int) -> Optional[str]:
         # Erikoistapaus: valtioneuvosto.fi etusivulla ei ole RSS-linkkejä, mutta /rss-syotteet on
         if "valtioneuvosto.fi" in page_url and not page_url.endswith("/rss-syotteet"):
             from urllib.parse import urljoin
+
             target_url = urljoin(page_url, "/rss-syotteet")
             logger.info(f"Ohjataan autodiscovery erikoissivulle: {target_url}")
 
@@ -82,6 +85,7 @@ def discover_feed_url(page_url: str, timeout: int) -> Optional[str]:
             discovered_url = link["href"]
             if discovered_url.startswith("/"):
                 from urllib.parse import urljoin
+
                 discovered_url = urljoin(target_url, discovered_url)
             logger.info(f"Löydettiin dynaaminen feed-URL: {discovered_url}")
             return discovered_url
@@ -93,6 +97,7 @@ def discover_feed_url(page_url: str, timeout: int) -> Optional[str]:
             if "/rss" in href or href.endswith("/rss"):
                 if href.startswith("/"):
                     from urllib.parse import urljoin
+
                     href = urljoin(target_url, href)
                 logger.info(f"Löydettiin a-tagista dynaaminen feed-URL: {href}")
                 return href
@@ -102,7 +107,9 @@ def discover_feed_url(page_url: str, timeout: int) -> Optional[str]:
     return None
 
 
-def get_or_discover_feed(bq_client: bigquery.Client, project: str, dataset: str, feed: Dict[str, Any], timeout: int) -> Optional[str]:
+def get_or_discover_feed(
+    bq_client: bigquery.Client, project: str, dataset: str, feed: Dict[str, Any], timeout: int
+) -> Optional[str]:
     """Hakee dynaamisen feedin osoitteen config-taulusta tai ajaa autodiscoveryn."""
     feed_name = feed["name"]
     config_key = "valtioneuvosto.rss_url" if feed_name == "valtioneuvosto" else f"rss.{feed_name}.rss_url"
@@ -114,9 +121,7 @@ def get_or_discover_feed(bq_client: bigquery.Client, project: str, dataset: str,
         WHERE key = @key
         LIMIT 1
     """
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[bigquery.ScalarQueryParameter("key", "STRING", config_key)]
-    )
+    job_config = bigquery.QueryJobConfig(query_parameters=[bigquery.ScalarQueryParameter("key", "STRING", config_key)])
     try:
         rows = bq_client.query(query, job_config=job_config).result()
         for row in rows:
@@ -143,7 +148,7 @@ def get_or_discover_feed(bq_client: bigquery.Client, project: str, dataset: str,
     merge_job_config = bigquery.QueryJobConfig(
         query_parameters=[
             bigquery.ScalarQueryParameter("key", "STRING", config_key),
-            bigquery.ScalarQueryParameter("value", "STRING", discovered)
+            bigquery.ScalarQueryParameter("value", "STRING", discovered),
         ]
     )
     try:
@@ -211,13 +216,9 @@ def fetch_rss_feed(feed_url: str, timeout: int) -> List[Dict[str, Any]]:
                 if ch_url:
                     image_url = ch_url.text.strip()
 
-        parsed_items.append({
-            "title": title,
-            "link": link,
-            "summary": summary,
-            "published": published_dt,
-            "image_url": image_url
-        })
+        parsed_items.append(
+            {"title": title, "link": link, "summary": summary, "published": published_dt, "image_url": image_url}
+        )
 
     return parsed_items
 
@@ -235,7 +236,7 @@ def build_as2_article(item: Dict[str, Any], source: str, domain: str) -> Dict[st
         "is": "Ilta-Sanomat",
         "kauppalehti": "Kauppalehti",
         "mtv": "MTV Uutiset",
-        "valtioneuvosto": "Valtioneuvosto"
+        "valtioneuvosto": "Valtioneuvosto",
     }
     publisher_urls = {
         "hs": "https://www.hs.fi",
@@ -243,7 +244,7 @@ def build_as2_article(item: Dict[str, Any], source: str, domain: str) -> Dict[st
         "is": "https://www.is.fi",
         "kauppalehti": "https://www.kauppalehti.fi",
         "mtv": "https://www.mtvuutiset.fi",
-        "valtioneuvosto": "https://valtioneuvosto.fi"
+        "valtioneuvosto": "https://valtioneuvosto.fi",
     }
 
     publisher_name = publisher_names.get(source, source.capitalize())
@@ -263,25 +264,18 @@ def build_as2_article(item: Dict[str, Any], source: str, domain: str) -> Dict[st
         "summary": item["summary"],
         "published": published_str,
         "updated": published_str,
-        "attributedTo": {
-            "type": "Organization",
-            "name": publisher_name,
-            "url": publisher_url
-        }
+        "attributedTo": {"type": "Organization", "name": publisher_name, "url": publisher_url},
     }
 
     if item["image_url"]:
-        article_json["image"] = {
-            "type": "Image",
-            "url": item["image_url"]
-        }
+        article_json["image"] = {"type": "Image", "url": item["image_url"]}
 
     return {
         "id": as2_id,
         "source": source,
         "published": item["published"],
         "updated": item["published"],
-        "object_json": article_json
+        "object_json": article_json,
     }
 
 
@@ -299,12 +293,14 @@ def write_to_bigquery(bq_client: bigquery.Client, project: str, dataset: str, ar
         logger.info(f"Ladataan {len(pending_articles)} päivämäärätöntä artikkelia pending-tauluun...")
         pending_rows = []
         for art in pending_articles:
-            pending_rows.append({
-                "id": art["id"],
-                "source": art["source"],
-                "received_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                "object_json": json.dumps(art["object_json"])
-            })
+            pending_rows.append(
+                {
+                    "id": art["id"],
+                    "source": art["source"],
+                    "received_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    "object_json": json.dumps(art["object_json"]),
+                }
+            )
         pending_table_id = f"{project}.{dataset}.objects_pending"
         pending_schema = [
             bigquery.SchemaField("id", "STRING", mode="REQUIRED"),
@@ -312,10 +308,7 @@ def write_to_bigquery(bq_client: bigquery.Client, project: str, dataset: str, ar
             bigquery.SchemaField("received_at", "TIMESTAMP", mode="REQUIRED"),
             bigquery.SchemaField("object_json", "JSON", mode="NULLABLE"),
         ]
-        pending_config = bigquery.LoadJobConfig(
-            write_disposition="WRITE_APPEND",
-            schema=pending_schema
-        )
+        pending_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND", schema=pending_schema)
         try:
             load_job = bq_client.load_table_from_json(pending_rows, pending_table_id, job_config=pending_config)
             load_job.result()
@@ -332,13 +325,15 @@ def write_to_bigquery(bq_client: bigquery.Client, project: str, dataset: str, ar
     # Muunnetaan datetime ISO-merkkijonoksi ja object_json JSON-yhteensopivaksi
     rows_to_load = []
     for art in published_articles:
-        rows_to_load.append({
-            "id": art["id"],
-            "source": art["source"],
-            "published": art["published"].isoformat(),
-            "updated": art["updated"].isoformat(),
-            "object_json": json.dumps(art["object_json"])
-        })
+        rows_to_load.append(
+            {
+                "id": art["id"],
+                "source": art["source"],
+                "published": art["published"].isoformat(),
+                "updated": art["updated"].isoformat(),
+                "object_json": json.dumps(art["object_json"]),
+            }
+        )
 
     # Temp-taulun latausskeema
     schema = [
@@ -349,10 +344,7 @@ def write_to_bigquery(bq_client: bigquery.Client, project: str, dataset: str, ar
         bigquery.SchemaField("object_json", "JSON", mode="NULLABLE"),
     ]
 
-    job_config = bigquery.LoadJobConfig(
-        write_disposition="WRITE_TRUNCATE",
-        schema=schema
-    )
+    job_config = bigquery.LoadJobConfig(write_disposition="WRITE_TRUNCATE", schema=schema)
 
     logger.info(f"Ladataan {len(rows_to_load)} riviä väliaikaistauluun {temp_table_id}")
     load_job = bq_client.load_table_from_json(rows_to_load, temp_table_id, job_config=job_config)
@@ -385,7 +377,9 @@ def write_to_bigquery(bq_client: bigquery.Client, project: str, dataset: str, ar
         bq_client.delete_table(temp_table_id, not_found_ok=True)
 
 
-def update_last_fetched_timestamp(bq_client: bigquery.Client, project: str, dataset: str, run_time: datetime.datetime) -> None:
+def update_last_fetched_timestamp(
+    bq_client: bigquery.Client, project: str, dataset: str, run_time: datetime.datetime
+) -> None:
     """Päivittää config-tauluun tiedon milloin haku on viimeksi suoritettu onnistuneesti."""
     config_key = "rss.last_fetched_at"
     merge_query = f"""
@@ -400,7 +394,7 @@ def update_last_fetched_timestamp(bq_client: bigquery.Client, project: str, data
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
             bigquery.ScalarQueryParameter("key", "STRING", config_key),
-            bigquery.ScalarQueryParameter("value", "STRING", run_time.isoformat())
+            bigquery.ScalarQueryParameter("value", "STRING", run_time.isoformat()),
         ]
     )
     try:
@@ -488,6 +482,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     from gcp_logging import send_ops_notification
+
     try:
         main()
         send_ops_notification("rss-fetch-job", "success")

@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 import og_parser
 from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from gcp_logging import get_logger
 from google.cloud import bigquery
 from pydantic import BaseModel
@@ -17,18 +18,34 @@ from slowapi.util import get_remote_address
 logger = get_logger("og-scraper")
 
 limiter = Limiter(key_func=get_remote_address)
+
 app = FastAPI(title="ActivityStreams OG Scraper", version="1.0.0")
 app.state.limiter = limiter
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://uutisseuranta.net",
+        "https://uutisseuranta.github.io",
+        "http://localhost:5173",
+        "http://localhost:4173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 @app.exception_handler(RateLimitExceeded)
 async def custom_rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
     response = Response(
         status_code=429,
         content=json.dumps({"error": f"Rate limit exceeded: {exc.detail}"}),
-        media_type="application/json"
+        media_type="application/json",
     )
     response.headers["Retry-After"] = "60"
     return response
+
 
 PROJECT = os.getenv("GCP_PROJECT")
 DATASET = os.getenv("BQ_DATASET", "activitystreams")
@@ -102,7 +119,7 @@ def scrape_url(request: Request, req: ScrapeRequest, response: Response):
     # Vaaditaan vähintään title — sivut ilman otsikkoa eivät sovi AS2 Article -objektiksi
     title = og_parser.longer(metadata.get("title"), None)
     if not title:
-         raise HTTPException(status_code=422, detail="No title found in HTML.")
+        raise HTTPException(status_code=422, detail="No title found in HTML.")
 
     # 4. Muodosta AS2 Article -objekti
     # id: sha256(url) — determinisitinen, sama URL tuottaa aina saman id:n (idempotenttisuus)
@@ -140,18 +157,11 @@ def scrape_url(request: Request, req: ScrapeRequest, response: Response):
         "summary": og_parser.longer(metadata.get("description"), None),
         "published": published_str,
         "updated": updated_str,
-        "attributedTo": {
-            "type": "Organization",
-            "name": site_name,
-            "url": site_url
-        }
+        "attributedTo": {"type": "Organization", "name": site_name, "url": site_url},
     }
 
     if metadata.get("image"):
-        article_json["image"] = {
-            "type": "Image",
-            "url": metadata["image"]
-        }
+        article_json["image"] = {"type": "Image", "url": metadata["image"]}
 
     # 5. Tallenna BigQueryyn MERGE-lauseella (upsert-semantiikka)
     # WHEN MATCHED: päivitetään vain scraped-lähteestä tulleet rivit — ei ylikirjoiteta RSS-dataa

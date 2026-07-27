@@ -77,7 +77,9 @@ def validate_url_ip(url: str) -> bool:
         return False
 
 
-def fetch_url_stream_with_headers(url: str, timeout: float = TIMEOUT, max_bytes: int = MAX_RESPONSE_BYTES) -> tuple[bytes, dict[str, str]]:
+def fetch_url_stream_with_headers(
+    url: str, timeout: float = TIMEOUT, max_bytes: int = MAX_RESPONSE_BYTES
+) -> tuple[bytes, dict[str, str]]:
     """Hakee sivun turvallisesti redirectejä seuraten ja SSRF-suojauksen tarkistaen.
 
     Streamataan vain </head>-tagiin asti tai max_bytes kokoon saakka.
@@ -137,7 +139,6 @@ def fetch_url_stream(url: str, timeout: float = TIMEOUT, max_bytes: int = MAX_RE
     """
     content, _headers = fetch_url_stream_with_headers(url, timeout, max_bytes)
     return content
-
 
 
 def get_robots_parser(url: str) -> RobotFileParser:
@@ -223,6 +224,7 @@ def parse_og_metadata(html_content: bytes, default_url: str) -> Dict[str, Option
 
     # 2. Etsitään JSON-LD-lohkoja (Schema.org)
     import json
+
     json_ld_published = None
     json_ld_modified = None
     for script in soup.find_all("script", type="application/ld+json"):
@@ -269,4 +271,3 @@ def longer(a: Optional[str], b: Optional[str]) -> Optional[str]:
     if not b_stripped:
         return a_stripped
     return a_stripped if len(a_stripped) >= len(b_stripped) else b_stripped
-

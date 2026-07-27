@@ -23,6 +23,7 @@ logger = get_logger("query-api")
 
 current_request = contextvars.ContextVar("current_request")
 
+
 def get_query_user_or_ip(request: Request) -> str:
     current_request.set(request)
     auth_header = request.headers.get("Authorization")
@@ -41,6 +42,7 @@ def get_query_user_or_ip(request: Request) -> str:
             pass
     return get_remote_address(request)
 
+
 def get_outbox_limit() -> str:
     req = current_request.get(None)
     if req:
@@ -49,13 +51,20 @@ def get_outbox_limit() -> str:
             return "120/minute"
     return "60/minute"
 
+
 limiter = Limiter(key_func=get_query_user_or_ip)
+
 app = FastAPI(title="ActivityStreams Query API", version="1.0.0")
 app.state.limiter = limiter
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://uutisseuranta.net",
+        "https://uutisseuranta.github.io",
+        "http://localhost:5173",
+        "http://localhost:4173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -68,26 +77,25 @@ async def add_request_context_middleware(request: Request, call_next):
     response = await call_next(request)
     return response
 
+
 @app.exception_handler(RateLimitExceeded)
 async def custom_rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
     response = Response(
         status_code=429,
         content=json.dumps({"error": f"Rate limit exceeded: {exc.detail}"}),
-        media_type="application/json"
+        media_type="application/json",
     )
     response.headers["Retry-After"] = "60"
     return response
 
+
 # Google OIDC tokenin vahvistusfunktiot
 def verify_google_token(token: str, audience: str) -> Optional[Dict[str, Any]]:
     try:
-        return id_token.verify_oauth2_token(
-            token,
-            google_requests.Request(),
-            audience=audience
-        )
+        return id_token.verify_oauth2_token(token, google_requests.Request(), audience=audience)
     except Exception:
         return None
+
 
 def verify_auth_token_optional(auth_header: Optional[str]) -> Optional[str]:
     if not auth_header:
@@ -118,9 +126,11 @@ def verify_auth_token_optional(auth_header: Optional[str]) -> Optional[str]:
     logger.warning("Autentikaatio hylätty: OIDC-tokenia ei voitu vahvistaa")
     raise HTTPException(status_code=401, detail="Invalid OIDC token.")
 
+
 # Globaalit ympäristömuuttujat — luetaan kerran käynnistyksen yhteydessä
 PROJECT = os.getenv("GCP_PROJECT")
 DATASET = os.getenv("BQ_DATASET")
+SOCIAL_DATASET = os.getenv("BQ_SOCIAL_DATASET", "activitystreams_social")
 LOCATION = os.getenv("BQ_LOCATION", "europe-north1")
 
 if not PROJECT or not DATASET:
@@ -155,9 +165,7 @@ def get_total_items_cached(tags: List[str]) -> int:
             SELECT 1 FROM UNNEST(tags) t WHERE t IN UNNEST(@search_tags)
           )
     """
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[bigquery.ArrayQueryParameter("search_tags", "STRING", tags)]
-    )
+    job_config = bigquery.QueryJobConfig(query_parameters=[bigquery.ArrayQueryParameter("search_tags", "STRING", tags)])
 
     try:
         results = list(bq_client.query(query, job_config=job_config).result())
@@ -167,10 +175,7 @@ def get_total_items_cached(tags: List[str]) -> int:
         # Palautetaan vanha cache-arvo jos käytettävissä, muuten 0
         return cached["value"] if cached else 0
 
-    _count_cache[cache_key] = {
-        "value": count,
-        "expires": now + CACHE_TTL
-    }
+    _count_cache[cache_key] = {"value": count, "expires": now + CACHE_TTL}
     return count
 
 
@@ -180,23 +185,17 @@ def get_outbox(
     request: Request,
     tag: List[str] = Query(default=None, description="Haettavat tagit (toistuva parametri)"),
     n: int = Query(default=50, description="Palautettavien kohteiden määrä (1-500)"),
-    authorization: Optional[str] = Header(None)
+    authorization: Optional[str] = Header(None),
 ):
     # Verifioidaan token jos sellainen on toimitettu
     verify_auth_token_optional(authorization)
     # 1. Validoidaan tagit
     if not tag:
-        raise HTTPException(
-            status_code=400,
-            detail="At least one 'tag' query parameter is required."
-        )
+        raise HTTPException(status_code=400, detail="At least one 'tag' query parameter is required.")
 
     # 2. Validoidaan n-parametri (1-500)
     if n <= 0 or n > 500:
-        raise HTTPException(
-            status_code=400,
-            detail="Parameter 'n' must be between 1 and 500."
-        )
+        raise HTTPException(status_code=400, detail="Parameter 'n' must be between 1 and 500.")
 
     # Normalisoidaan tagit: pieniksi kirjaimiksi ja varmistetaan #-etuliite (päätös L-011)
     # Sallitaan sekä "politiikka" että "#politiikka" — molemmat normalisoidaan muotoon "#politiikka"
@@ -208,10 +207,7 @@ def get_outbox(
                 val = f"#{val}"
             search_tags.append(val)
     if not search_tags:
-        raise HTTPException(
-            status_code=400,
-            detail="Valid tags must be provided."
-        )
+        raise HTTPException(status_code=400, detail="Valid tags must be provided.")
 
     logger.info(f"Haku tageilla: {search_tags}, koko n: {n}")
 
@@ -244,7 +240,7 @@ def get_outbox(
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
             bigquery.ArrayQueryParameter("search_tags", "STRING", search_tags),
-            bigquery.ScalarQueryParameter("limit_n", "INT64", n)
+            bigquery.ScalarQueryParameter("limit_n", "INT64", n),
         ]
     )
 
@@ -275,26 +271,20 @@ def get_outbox(
             #    tulevien AS2-laajennusten kanssa. Ks. AS2_CONTRACT.md ja issue #33.
             obj["@context"] = [
                 "https://www.w3.org/ns/activitystreams",
-                {
-                    "_uutisseuranta": "https://uutisseuranta.net/ns#",
-                    "dislikes": "_uutisseuranta:dislikes"
-                }
+                {"_uutisseuranta": "https://uutisseuranta.net/ns#", "dislikes": "_uutisseuranta:dislikes"},
             ]
 
             # likes: AS2 Core §5.7 -kenttä, palautetaan Collection-muodossa (ei kokonaisluku).
             # totalItems riittää — koko aktiviteettilistan palauttaminen olisi liian raskas.
-            obj["likes"] = {
-                "type": "Collection",
-                "totalItems": row["like_count"]
-            }
+            like_cnt = row["like_count"] or 0
+            dislike_cnt = row["dislike_count"] or 0
+
+            obj["likes"] = {"type": "Collection", "totalItems": like_cnt}
 
             # dislikes: projektikohtainen laajennus — ei AS2 Core -kenttä (toisin kuin 'likes').
             # Kirjattu hallittuna laajennuksena AS2_CONTRACT.md:hen.
             # Collection-rakenne on yhdenmukainen AS2 Core §5.7 'likes'-käytännön kanssa.
-            obj["dislikes"] = {
-                "type": "Collection",
-                "totalItems": row["dislike_count"]
-            }
+            obj["dislikes"] = {"type": "Collection", "totalItems": dislike_cnt}
 
             # reactionCount = likes + dislikes (kaikki reaktiot yhteensä).
             # Neutraali nimitys: sisältää sekä Agree (Like) että Disagree (Dislike) -reaktiot.
@@ -302,7 +292,7 @@ def get_outbox(
             # Invariantti: arvo on oikein vain jos write-api estää duplikaattiäänet per käyttäjä.
             # Toggle-logiikka ja duplikaattiesto on ratkaistu write-apissa (poistetaan vanha, lisätään uusi).
             # Hallittu AS2-poikkeama: toggle ei kirjaa 'Undo Like' -aktiviteettia — ks. AS2_CONTRACT.md §4.
-            obj["_uutisseuranta:reactionCount"] = row["like_count"] + row["dislike_count"]
+            obj["_uutisseuranta:reactionCount"] = like_cnt + dislike_cnt
 
             if row["updated"]:
                 updated_dt = row["updated"]
@@ -321,6 +311,7 @@ def get_outbox(
 
     # 6. Rakennetaan self-URL AS2 OrderedCollection id-kenttään
     import urllib.parse
+
     base_url = "https://activitystreams.uutisseuranta.net/ap/outbox"
     tag_params = "&".join(f"tag={urllib.parse.quote(t)}" for t in search_tags)
     self_url = f"{base_url}?{tag_params}&n={n}"
@@ -330,14 +321,13 @@ def get_outbox(
         "type": "OrderedCollection",
         "id": self_url,
         "totalItems": total_items,
-        "orderedItems": ordered_items
+        "orderedItems": ordered_items,
     }
 
     # application/activity+json on ActivityPub-yhteensopiva Content-Type
     # (application/ld+json; profile="..." olisi tiukempi AS2, mutta activity+json on laajemmin tuettu)
     return Response(
-        content=json.dumps(response_json, ensure_ascii=False),
-        media_type="application/activity+json; charset=utf-8"
+        content=json.dumps(response_json, ensure_ascii=False), media_type="application/activity+json; charset=utf-8"
     )
 
 
@@ -354,7 +344,7 @@ def update_archive_url_in_bq(url: str, archive_url: str):
         job_config = bigquery.QueryJobConfig(
             query_parameters=[
                 bigquery.ScalarQueryParameter("archive_url", "STRING", json.dumps(archive_url)),
-                bigquery.ScalarQueryParameter("url", "STRING", url)
+                bigquery.ScalarQueryParameter("url", "STRING", url),
             ]
         )
         bq_client.query(query, job_config=job_config).result()
@@ -399,6 +389,7 @@ async def check_status(url: str, background_tasks: BackgroundTasks):
 _stats_cache = None
 _stats_cache_time = 0.0
 
+
 @app.get("/ap/stats")
 async def get_stats():
     """Palauttaa uutisseurannan avainlukutilastot välimuistista tai laskee ne BigQueryssä."""
@@ -413,13 +404,13 @@ async def get_stats():
     try:
         # 1. Lasketaan lähteiden lukumäärä
         query_sources = f"""
-            SELECT COUNT(DISTINCT JSON_VALUE(object_json.actor.id)) as cnt
+            SELECT COUNT(DISTINCT JSON_VALUE(PARSE_JSON(LAX_STRING(object_json)).attributedTo.name)) as cnt
             FROM `{PROJECT}.{DATASET}.objects`
             WHERE deleted = FALSE
         """
         job_sources = bq_client.query(query_sources)
         results_sources = list(job_sources.result())
-        sources_count = results_sources[0].cnt if results_sources and results_sources[0].cnt is not None else 150
+        sources_count = results_sources[0].cnt if results_sources and results_sources[0].cnt else 150
 
         # 2. Lasketaan uutisten lukumäärä viimeisen 24 tunnin ajalta
         query_articles = f"""
@@ -430,13 +421,52 @@ async def get_stats():
         """
         job_articles = bq_client.query(query_articles)
         results_articles = list(job_articles.result())
-        articles_last_24h = results_articles[0].cnt if results_articles and results_articles[0].cnt is not None else 10000
+        articles_last_24h = (
+            results_articles[0].cnt if results_articles and results_articles[0].cnt is not None else 10000
+        )
+
+        # 3. Lasketaan aktiivisimmat lähteet viimeisen 24 tunnin ajalta
+        query_sources_active = f"""
+            SELECT JSON_VALUE(PARSE_JSON(LAX_STRING(object_json)).attributedTo.name) as name, COUNT(*) as cnt
+            FROM `{PROJECT}.{DATASET}.objects`
+            WHERE deleted = FALSE
+              AND published >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR)
+              AND JSON_VALUE(PARSE_JSON(LAX_STRING(object_json)).attributedTo.name) IS NOT NULL
+            GROUP BY name
+            ORDER BY cnt DESC
+            LIMIT 6
+        """
+        job_sources_active = bq_client.query(query_sources_active)
+        results_sources_active = list(job_sources_active.result())
+
+        active_sources = []
+        for r in results_sources_active:
+            if r.name:
+                active_sources.append({"name": r.name, "cnt": r.cnt})
+
+        # Jos tuloksia on alle 6, täytetään puuttuvat oletusarvoilla (välttäen duplikaatteja)
+        default_sources = [
+            {"name": "Yle Uutiset", "cnt": 312},
+            {"name": "Helsingin Sanomat", "cnt": 255},
+            {"name": "Kauppalehti", "cnt": 204},
+            {"name": "MTV Uutiset", "cnt": 161},
+            {"name": "Iltalehti", "cnt": 136},
+            {"name": "Taloussanomat", "cnt": 99},
+        ]
+
+        existing_names = {s["name"].lower() for s in active_sources}
+        for ds in default_sources:
+            if len(active_sources) >= 6:
+                break
+            if ds["name"].lower() not in existing_names:
+                active_sources.append(ds)
 
         # Oletuspäivitysväli on 5 minuuttia
         stats = {
             "sources_count": sources_count,
             "articles_last_24h": articles_last_24h,
-            "update_interval_minutes": 5
+            "update_interval_minutes": 5,
+            "active_sources": active_sources,
         }
 
         # Päivitetään välimuisti
@@ -447,12 +477,83 @@ async def get_stats():
     except Exception as e:
         logger.error(f"Virhe laskettaessa tilastoja: {e}")
         # Virhetilanteessa palautetaan fallback-oletusarvot
+        default_sources = [
+            {"name": "Yle Uutiset", "cnt": 312},
+            {"name": "Helsingin Sanomat", "cnt": 255},
+            {"name": "Kauppalehti", "cnt": 204},
+            {"name": "MTV Uutiset", "cnt": 161},
+            {"name": "Iltalehti", "cnt": 136},
+            {"name": "Taloussanomat", "cnt": 99},
+        ]
         return {
             "sources_count": 150,
             "articles_last_24h": 10000,
-            "update_interval_minutes": 5
+            "update_interval_minutes": 5,
+            "active_sources": default_sources,
         }
 
+
+@app.get("/ap/replies")
+def get_replies(
+    request: Request,
+    id: str = Query(default=None, description="Alkuperäisen artikkelin tai pääkommentin AS2 id"),
+    authorization: Optional[str] = Header(None),
+):
+    # Verifioidaan token jos sellainen on toimitettu
+    verify_auth_token_optional(authorization)
+
+    if not id:
+        raise HTTPException(status_code=400, detail="Parameter 'id' is required.")
+
+    # BigQuery-haku:
+    # Haetaan kaikki kommentit, joilla thread_root = @id tai in_reply_to = @id
+    # ja joiden vastaava objekti ei ole poistettu (deleted = FALSE).
+    query = f"""
+        SELECT
+          o.id,
+          o.published,
+          o.object_json,
+          o.like_count,
+          o.dislike_count,
+          a.in_reply_to,
+          a.thread_root
+        FROM `{PROJECT}.{SOCIAL_DATASET}.activities` a
+        JOIN `{PROJECT}.{DATASET}.objects` o ON a.object_id = o.id
+        WHERE o.deleted = FALSE
+          AND a.type = 'Create'
+          AND a.object_type = 'Note'
+          AND (a.thread_root = @target_id OR a.in_reply_to = @target_id)
+        ORDER BY o.published ASC
+    """
+    job_config = bigquery.QueryJobConfig(query_parameters=[bigquery.ScalarQueryParameter("target_id", "STRING", id)])
+
+    try:
+        query_job = bq_client.query(query, job_config=job_config)
+        rows = list(query_job.result())
+    except Exception as e:
+        logger.error(f"Kommenttien haku epäonnistui: {e}")
+        raise HTTPException(status_code=500, detail="Database query failed.")
+
+    replies = []
+    for row in rows:
+        try:
+            obj_data = row["object_json"]
+            if isinstance(obj_data, str):
+                obj = json.loads(obj_data)
+            else:
+                obj = obj_data
+
+            # Päivitetään tykkäystiedot objects-taulun mukaan
+            if "object" in obj and isinstance(obj["object"], dict):
+                obj["object"]["like_count"] = row["like_count"]
+                obj["object"]["dislike_count"] = row["dislike_count"]
+
+            replies.append(obj)
+        except Exception as e:
+            logger.warning(f"Virhe kommenttirivin käsittelyssä: {e}")
+            continue
+
+    return {"type": "Collection", "totalItems": len(replies), "orderedItems": replies}
 
 
 @app.get("/healthz")
