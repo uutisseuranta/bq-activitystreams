@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import MagicMock
+
 import voikko_job
 
 
@@ -9,22 +10,12 @@ class TestVoikkoJob(unittest.TestCase):
         self.assertEqual(voikko_job.clean_text(None), "")
 
     def test_extract_text(self):
-        obj = {
-            "name": "Pääotsikko",
-            "summary": "Lyhyt tiivistelmä",
-            "content": "<p>Leipäteksti</p>"
-        }
+        obj = {"name": "Pääotsikko", "summary": "Lyhyt tiivistelmä", "content": "<p>Leipäteksti</p>"}
         extracted = voikko_job.extract_text(obj)
         # clean_text korvaa HTML-tagit välilyönneillä, jolloin leipätekstin ympärille jää välilyönnit
         self.assertEqual(extracted, "Pääotsikko Lyhyt tiivistelmä  Leipäteksti ")
 
-        activity = {
-            "type": "Create",
-            "object": {
-                "name": "Note Otsikko",
-                "content": "Sisältö"
-            }
-        }
+        activity = {"type": "Create", "object": {"name": "Note Otsikko", "content": "Sisältö"}}
         self.assertEqual(voikko_job.extract_text(activity), "Note Otsikko Sisältö")
 
     def test_analyze_tags_uppercase_keys_regression(self):

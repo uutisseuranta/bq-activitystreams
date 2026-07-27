@@ -22,11 +22,12 @@ class JsonFormatter(logging.Formatter):
             "severity": record.levelname,
             "message": record.getMessage(),
             "logger": record.name,
-            "time": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+            "time": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
         }
         if record.exc_info:
             log_entry["exception"] = self.formatException(record.exc_info)
         return json.dumps(log_entry, ensure_ascii=False)
+
 
 handler = logging.StreamHandler()
 handler.setFormatter(JsonFormatter())
@@ -35,23 +36,53 @@ logger = logging.getLogger("voikko-job")
 
 # Sanat, joita ei haluta tageiksi (lisäsuodatin Voikon sanaluokkien lisäksi)
 STOPWORDS = {
-    "olla", "että", "joka", "se", "hän", "tämä", "voida", "saada", "tulla",
-    "pitää", "tehdä", "vuosi", "päivä", "aika", "koko", "moni", "muu", "kaikki",
-    "jokin", "mikä", "mukaan", "sekä", "kuin", "vaan", "vai", "tai", "koska",
-    "suomi", "suomalainen", "uutiset", "uutinen", "viime", "uusi", "ensimmäinen"
+    "olla",
+    "että",
+    "joka",
+    "se",
+    "hän",
+    "tämä",
+    "voida",
+    "saada",
+    "tulla",
+    "pitää",
+    "tehdä",
+    "vuosi",
+    "päivä",
+    "aika",
+    "koko",
+    "moni",
+    "muu",
+    "kaikki",
+    "jokin",
+    "mikä",
+    "mukaan",
+    "sekä",
+    "kuin",
+    "vaan",
+    "vai",
+    "tai",
+    "koska",
+    "suomi",
+    "suomalainen",
+    "uutiset",
+    "uutinen",
+    "viime",
+    "uusi",
+    "ensimmäinen",
 }
 
 # Hylättävät sanaluokat (Voikon class-attribuutit)
 # Hylätään pronominit, konjunktiot, adpositiot, kieltosanat, huudahdukset ja numeraalit.
 # Pidetään pääosin substantiivit (nimisana), adjektiivit (laatusana) ja verbit (teonsana).
 REJECTED_CLASSES = {
-    "asemosana",    # pronominit (esim. se, tämä, kuka)
-    "sidesana",     # konjunktiot (esim. ja, että, mutta)
-    "suhdesana",    # adpositiot (esim. kanssa, mukaan, jälkeen)
-    "kieltosana",   # kieltosanat (esim. ei)
-    "huudahdussana",# interjektiot
-    "luku",         # numeraalit / numerot
-    "seikkasana"    # adverbit (esim. nopeasti, huomenna) - usein liian yleisiä / kohinaa
+    "asemosana",  # pronominit (esim. se, tämä, kuka)
+    "sidesana",  # konjunktiot (esim. ja, että, mutta)
+    "suhdesana",  # adpositiot (esim. kanssa, mukaan, jälkeen)
+    "kieltosana",  # kieltosanat (esim. ei)
+    "huudahdussana",  # interjektiot
+    "luku",  # numeraalit / numerot
+    "seikkasana",  # adverbit (esim. nopeasti, huomenna) - usein liian yleisiä / kohinaa
 }
 
 MIN_WORD_LEN = 3
@@ -73,11 +104,7 @@ def extract_text(obj: Dict[str, Any]) -> str:
     # Jos kyseessä on AS2-aktiviteetti joka käärii objektin
     inner = obj.get("object", obj) if isinstance(obj.get("object"), dict) else obj
 
-    parts = [
-        inner.get("name", ""),
-        inner.get("summary", ""),
-        inner.get("content", "")
-    ]
+    parts = [inner.get("name", ""), inner.get("summary", ""), inner.get("content", "")]
     raw_text = " ".join(str(p) for p in parts if p)
     return clean_text(raw_text)
 
@@ -181,11 +208,7 @@ def main() -> None:
 
             # Päivitetään object_json['tag'] AS2 Hashtageina (Decision L-011)
             obj["tag"] = [
-                {
-                    "type": "Hashtag",
-                    "name": f"#{word}",
-                    "href": f"https://uutisseuranta.net/ap/outbox?tag=%23{word}"
-                }
+                {"type": "Hashtag", "name": f"#{word}", "href": f"https://uutisseuranta.net/ap/outbox?tag=%23{word}"}
                 for word in raw_tags
             ]
 
@@ -197,11 +220,7 @@ def main() -> None:
             obj["tag"] = []
 
         # Tallennettaessa asetetaan dynaamiset tagit AS2-objektiin
-        updates.append({
-            "id": obj_id,
-            "tags": tags,
-            "object_json": json.dumps(obj)
-        })
+        updates.append({"id": obj_id, "tags": tags, "object_json": json.dumps(obj)})
         logger.info(f"Objekti {obj_id} -> Tagit: {tags}")
 
     # 3. Päivitetään tulokset BigQueryyn väliaikaistaulun ja MERGE-lauseen avulla
@@ -213,10 +232,7 @@ def main() -> None:
         bigquery.SchemaField("object_json", "JSON", mode="NULLABLE"),
     ]
 
-    load_config = bigquery.LoadJobConfig(
-        write_disposition="WRITE_TRUNCATE",
-        schema=schema
-    )
+    load_config = bigquery.LoadJobConfig(write_disposition="WRITE_TRUNCATE", schema=schema)
 
     try:
         logger.info(f"Ladataan {len(updates)} riviä väliaikaistauluun {temp_table_id}")
@@ -239,7 +255,6 @@ def main() -> None:
         bq_client.query(merge_query).result()
         logger.info(f"Rikastus valmis. Päivitetty {len(updates)} objektia.")
 
-
     except Exception as e:
         logger.error(f"Virhe BigQueryyn tallennuksessa: {e}")
     finally:
@@ -253,6 +268,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     from gcp_logging import send_ops_notification
+
     try:
         main()
         send_ops_notification("voikko-job", "success")

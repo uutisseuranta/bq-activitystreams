@@ -47,6 +47,7 @@ from slowapi.util import get_remote_address
 
 logger = get_logger("write-api")
 
+
 def get_user_id(request: Request) -> str:
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
@@ -68,8 +69,8 @@ def get_user_id(request: Request) -> str:
         pass
     return get_remote_address(request)
 
+
 limiter = Limiter(key_func=get_user_id)
-from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="ActivityStreams Write API", version="1.0.0")
 app.state.limiter = limiter
@@ -86,15 +87,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
 @app.exception_handler(RateLimitExceeded)
 async def custom_rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
     response = Response(
         status_code=429,
         content=json.dumps({"error": f"Rate limit exceeded: {exc.detail}"}),
-        media_type="application/json"
+        media_type="application/json",
     )
     response.headers["Retry-After"] = "60"
     return response
+
 
 # Ympäristömuuttujat
 PROJECT = os.getenv("GCP_PROJECT")
@@ -120,11 +124,7 @@ bq_client = bigquery.Client(project=PROJECT)
 def verify_google_token(token: str, audience: str) -> Optional[Dict[str, Any]]:
     """Validoi Google OIDC-tokenin annetulle audiencelle."""
     try:
-        return id_token.verify_oauth2_token(
-            token,
-            google_requests.Request(),
-            audience=audience
-        )
+        return id_token.verify_oauth2_token(token, google_requests.Request(), audience=audience)
     except Exception:
         return None
 
@@ -182,8 +182,7 @@ def verify_auth_token(auth_header: Optional[str]) -> str:
             sub = id_info.get("sub")
             if not sub:
                 logger.warning(
-                    f"Autentikaatio hylätty: sub-kenttä puuttuu tokenista, "
-                    f"aud={audience}, email={id_info.get('email')}"
+                    f"Autentikaatio hylätty: sub-kenttä puuttuu tokenista, aud={audience}, email={id_info.get('email')}"
                 )
                 raise HTTPException(status_code=401, detail="Token missing subject claim.")
 
@@ -206,9 +205,7 @@ def get_object_by_id(obj_id: str) -> Optional[Dict[str, Any]]:
         FROM `{PROJECT}.{DATASET}.objects`
         WHERE id = @id LIMIT 1
     """
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[bigquery.ScalarQueryParameter("id", "STRING", obj_id)]
-    )
+    job_config = bigquery.QueryJobConfig(query_parameters=[bigquery.ScalarQueryParameter("id", "STRING", obj_id)])
     try:
         rows = list(bq_client.query(query, job_config=job_config).result())
         if rows:
@@ -220,7 +217,7 @@ def get_object_by_id(obj_id: str) -> Optional[Dict[str, Any]]:
                 "deleted": row["deleted"],
                 "like_count": row["like_count"],
                 "dislike_count": row["dislike_count"],
-                "object_json": obj
+                "object_json": obj,
             }
     except Exception as e:
         logger.error(f"Virhe haettaessa objektia {obj_id}: {e}")
@@ -237,7 +234,7 @@ def get_comments_count_by_actor(actor: str, object_id: str) -> int:
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
             bigquery.ScalarQueryParameter("actor", "STRING", actor),
-            bigquery.ScalarQueryParameter("object_id", "STRING", object_id)
+            bigquery.ScalarQueryParameter("object_id", "STRING", object_id),
         ]
     )
     try:
@@ -265,7 +262,7 @@ def get_existing_reaction(actor: str, object_id: str) -> Optional[str]:
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
             bigquery.ScalarQueryParameter("actor", "STRING", actor),
-            bigquery.ScalarQueryParameter("object_id", "STRING", object_id)
+            bigquery.ScalarQueryParameter("object_id", "STRING", object_id),
         ]
     )
     try:
@@ -293,7 +290,7 @@ def remove_reaction(actor: str, object_id: str) -> None:
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
             bigquery.ScalarQueryParameter("actor", "STRING", actor),
-            bigquery.ScalarQueryParameter("object_id", "STRING", object_id)
+            bigquery.ScalarQueryParameter("object_id", "STRING", object_id),
         ]
     )
     try:
@@ -304,8 +301,9 @@ def remove_reaction(actor: str, object_id: str) -> None:
         raise
 
 
-def handle_reaction(act_type: str, actor_id: str, obj_id: str,
-                    target_obj: Dict[str, Any], published_str: str) -> Response:
+def handle_reaction(
+    act_type: str, actor_id: str, obj_id: str, target_obj: Dict[str, Any], published_str: str
+) -> Response:
     """Yhteinen käsittelijä Like- ja Dislike-aktiviteeteille.
 
     Toggle-logiikka (#33, hallittu AS2-poikkeama kirjattu AS2_CONTRACT.md:hen #54):
@@ -322,7 +320,7 @@ def handle_reaction(act_type: str, actor_id: str, obj_id: str,
         return Response(
             status_code=200,
             content=json.dumps({"status": "already_reacted", "type": act_type}),
-            media_type="application/json"
+            media_type="application/json",
         )
 
     if existing is not None:
@@ -339,13 +337,14 @@ def handle_reaction(act_type: str, actor_id: str, obj_id: str,
         "actor": actor_id,
         "object_id": obj_id,
         "object_type": object_type,
-        "object_json": json.dumps({"type": act_type, "id": act_id, "actor": actor_id,
-                                    "object": obj_id, "published": published_str}),
+        "object_json": json.dumps(
+            {"type": act_type, "id": act_id, "actor": actor_id, "object": obj_id, "published": published_str}
+        ),
         "target_id": None,
         "in_reply_to": None,
         "thread_root": None,
         "published": published_str,
-        "received_at": published_str
+        "received_at": published_str,
     }
 
     likes_row = {
@@ -353,7 +352,7 @@ def handle_reaction(act_type: str, actor_id: str, obj_id: str,
         "actor": actor_id,
         "object_id": obj_id,
         "reaction_type": act_type,
-        "published": published_str
+        "published": published_str,
     }
 
     try:
@@ -364,11 +363,7 @@ def handle_reaction(act_type: str, actor_id: str, obj_id: str,
         raise HTTPException(status_code=500, detail="Database write failed.")
 
     logger.info(f"{act_type} tallennettu: actor={actor_id}, object={obj_id}, id={act_id}")
-    return Response(
-        status_code=201,
-        content=json.dumps({"id": act_id}),
-        media_type="application/json"
-    )
+    return Response(status_code=201, content=json.dumps({"id": act_id}), media_type="application/json")
 
 
 @app.post("/ap/activities")
@@ -450,7 +445,7 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
             "in_reply_to": in_reply_to,
             "thread_root": thread_root,
             "published": published_str,
-            "received_at": published_str
+            "received_at": published_str,
         }
 
         merge_query = f"""
@@ -468,7 +463,7 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
             query_parameters=[
                 bigquery.ScalarQueryParameter("id", "STRING", obj_id),
                 bigquery.ScalarQueryParameter("object_json", "STRING", json.dumps(act_object)),
-                bigquery.ScalarQueryParameter("published", "TIMESTAMP", datetime.datetime.now(datetime.timezone.utc))
+                bigquery.ScalarQueryParameter("published", "TIMESTAMP", datetime.datetime.now(datetime.timezone.utc)),
             ]
         )
 
@@ -479,7 +474,9 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
             logger.error(f"Virhe kommentin tallennuksessa: {e}")
             raise HTTPException(status_code=500, detail="Database write failed.")
 
-        return Response(status_code=201, content=json.dumps({"id": act_id, "object_id": obj_id}), media_type="application/json")
+        return Response(
+            status_code=201, content=json.dumps({"id": act_id, "object_id": obj_id}), media_type="application/json"
+        )
 
     elif act_type == "Delete":
         obj_id = act_object if isinstance(act_object, str) else act_object.get("id")
@@ -512,7 +509,7 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
             "in_reply_to": None,
             "thread_root": None,
             "published": published_str,
-            "received_at": published_str
+            "received_at": published_str,
         }
 
         update_query = f"""
@@ -570,7 +567,7 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
             "in_reply_to": None,
             "thread_root": None,
             "published": published_str,
-            "received_at": published_str
+            "received_at": published_str,
         }
 
         merge_query = f"""
@@ -584,7 +581,7 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
         merge_config = bigquery.QueryJobConfig(
             query_parameters=[
                 bigquery.ScalarQueryParameter("id", "STRING", obj_id),
-                bigquery.ScalarQueryParameter("object_json", "STRING", json.dumps(updated_object))
+                bigquery.ScalarQueryParameter("object_json", "STRING", json.dumps(updated_object)),
             ]
         )
 

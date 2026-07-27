@@ -31,7 +31,6 @@ def _make_bq_mock(mock_bq_class, object_json: str) -> MagicMock:
 
 
 class TestOgEnrichmentJob(unittest.TestCase):
-
     @patch("og_enrichment_job.bigquery.Client")
     @patch("og_enrichment_job.og_parser")
     def test_enrichment_success(self, mock_parser, mock_bq_class):

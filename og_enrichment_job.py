@@ -100,25 +100,29 @@ def main() -> None:
         if not url:
             logger.warning(f"Rivi {row_id} ohitetaan: url-kenttä puuttuu.")
             # Merkitään enriched=TRUE virheellä — estää äärettömän uudelleenyrityksen
-            rows_to_load.append({
-                "id": row_id,
-                "source": row_source,
-                "object_json": json.dumps(object_json),
-                "og_enriched": True,
-                "og_enriched_error": "Missing url in object_json"
-            })
+            rows_to_load.append(
+                {
+                    "id": row_id,
+                    "source": row_source,
+                    "object_json": json.dumps(object_json),
+                    "og_enriched": True,
+                    "og_enriched_error": "Missing url in object_json",
+                }
+            )
             continue
 
         # 2. Tarkistetaan robots.txt — kunnioitetaan sivuston crawling-kieltoja
         if not og_parser.robots_check(url):
             logger.warning(f"robots.txt estää URL:n: {url} (id: {row_id})")
-            rows_to_load.append({
-                "id": row_id,
-                "source": row_source,
-                "object_json": json.dumps(object_json),
-                "og_enriched": True,
-                "og_enriched_error": "Blocked by robots.txt"
-            })
+            rows_to_load.append(
+                {
+                    "id": row_id,
+                    "source": row_source,
+                    "object_json": json.dumps(object_json),
+                    "og_enriched": True,
+                    "og_enriched_error": "Blocked by robots.txt",
+                }
+            )
             continue
 
         # 3. Haetaan ja parsitetaan OG-tagit
@@ -150,10 +154,7 @@ def main() -> None:
 
             # image: OG voittaa aina jos saatavilla (OG-kuva on yksiselitteisesti valittu)
             if metadata.get("image"):
-                object_json["image"] = {
-                    "type": "Image",
-                    "url": metadata["image"]
-                }
+                object_json["image"] = {"type": "Image", "url": metadata["image"]}
 
             # published prioriteetti: JSON-LD (jo parsittu metadata["published_time"]:iin) -> OG -> Last-Modified
             resolved_published = metadata.get("published_time")
@@ -174,33 +175,39 @@ def main() -> None:
                 object_json["updated"] = metadata["modified_time"]
 
             logger.info(f"Artikkeli {row_id} rikastettu onnistuneesti.")
-            rows_to_load.append({
-                "id": row_id,
-                "source": row_source,
-                "object_json": json.dumps(object_json),
-                "og_enriched": True,
-                "og_enriched_error": None
-            })
+            rows_to_load.append(
+                {
+                    "id": row_id,
+                    "source": row_source,
+                    "object_json": json.dumps(object_json),
+                    "og_enriched": True,
+                    "og_enriched_error": None,
+                }
+            )
 
         except PermissionError as pe:
             # og_parser.fetch_url_stream nostaa PermissionErrorin SSRF-validointivirheistä
             logger.warning(f"SSRF-validointivirhe haettaessa {url}: {pe}")
-            rows_to_load.append({
-                "id": row_id,
-                "source": row_source,
-                "object_json": json.dumps(object_json),
-                "og_enriched": True,
-                "og_enriched_error": f"SSRF check failed: {pe}"
-            })
+            rows_to_load.append(
+                {
+                    "id": row_id,
+                    "source": row_source,
+                    "object_json": json.dumps(object_json),
+                    "og_enriched": True,
+                    "og_enriched_error": f"SSRF check failed: {pe}",
+                }
+            )
         except Exception as e:
             logger.warning(f"Virhe haettaessa tai parsiessa URL {url}: {e}")
-            rows_to_load.append({
-                "id": row_id,
-                "source": row_source,
-                "object_json": json.dumps(object_json),
-                "og_enriched": True,
-                "og_enriched_error": f"Fetch/Parse error: {e}"
-            })
+            rows_to_load.append(
+                {
+                    "id": row_id,
+                    "source": row_source,
+                    "object_json": json.dumps(object_json),
+                    "og_enriched": True,
+                    "og_enriched_error": f"Fetch/Parse error: {e}",
+                }
+            )
 
     # 5. Päivitetään BigQueryyn temp-taulu + MERGE -patternilla
     # Syy temp-tauluun: BigQuery ei tue suoraa batch-UPDATE:a JSON-arvoilla.
@@ -219,10 +226,7 @@ def main() -> None:
         bigquery.SchemaField("og_enriched_error", "STRING", mode="NULLABLE"),
     ]
 
-    job_config = bigquery.LoadJobConfig(
-        write_disposition="WRITE_TRUNCATE",
-        schema=schema
-    )
+    job_config = bigquery.LoadJobConfig(write_disposition="WRITE_TRUNCATE", schema=schema)
 
     try:
         logger.info(f"Ladataan {len(rows_to_load)} rikastustulosta väliaikaistauluun {temp_table_id}")
@@ -281,6 +285,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     from gcp_logging import send_ops_notification
+
     try:
         main()
         send_ops_notification("og-enrichment-job", "success")

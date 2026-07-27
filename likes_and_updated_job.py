@@ -21,11 +21,12 @@ class JsonFormatter(logging.Formatter):
             "severity": record.levelname,
             "message": record.getMessage(),
             "logger": record.name,
-            "time": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+            "time": datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z"),
         }
         if record.exc_info:
             log_entry["exception"] = self.formatException(record.exc_info)
         return json.dumps(log_entry, ensure_ascii=False)
+
 
 handler = logging.StreamHandler()
 handler.setFormatter(JsonFormatter())
@@ -42,7 +43,9 @@ def main() -> None:
         logger.critical("Virhe: GCP_PROJECT ja BQ_DATASET ovat pakollisia ympäristömuuttujia.")
         sys.exit(1)
 
-    logger.info(f"Käynnistetään synkronointi. Projekti: {project}, Julkinen dataset: {dataset}, Sosiaalinen dataset: {social_dataset}")
+    logger.info(
+        f"Käynnistetään synkronointi. Projekti: {project}, Julkinen dataset: {dataset}, Sosiaalinen dataset: {social_dataset}"
+    )
 
     bq_client = bigquery.Client(project=project)
 
@@ -105,6 +108,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     from gcp_logging import send_ops_notification
+
     try:
         main()
         send_ops_notification("likes-and-updated-job", "success")

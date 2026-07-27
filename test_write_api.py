@@ -21,6 +21,7 @@ os.environ.setdefault("ALLOW_MOCK_AUTH", "true")
 with patch("google.cloud.bigquery.Client"):
     from fastapi.testclient import TestClient  # noqa: E402
     from write_api import app, limiter, verify_auth_token  # noqa: E402
+
     # Estetään muiden testien epäonnistuminen poistamalla rate limitit käytöstä oletuksena
     # kaikille testiluokille. Erillinen TestWriteRateLimiting ottaa sen tarvittaessa käyttöön.
     limiter.enabled = False
@@ -52,7 +53,7 @@ class TestAuthSecurity(unittest.TestCase):
         self.valid_payload = {
             "type": "Like",
             "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
-            "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"
+            "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
         }
 
     def test_missing_authorization_header_returns_401(self):
@@ -62,19 +63,13 @@ class TestAuthSecurity(unittest.TestCase):
 
     def test_empty_bearer_token_returns_401(self):
         """Authorization: Bearer ilman tokenia → 401."""
-        response = self.client.post(
-            "/ap/activities",
-            headers={"Authorization": "Bearer "},
-            json=self.valid_payload
-        )
+        response = self.client.post("/ap/activities", headers={"Authorization": "Bearer "}, json=self.valid_payload)
         self.assertEqual(response.status_code, 401)
 
     def test_malformed_authorization_scheme_returns_401(self):
         """Basic-scheme Bearerin sijaan → 401 (ei kaadu 500-virheeseen)."""
         response = self.client.post(
-            "/ap/activities",
-            headers={"Authorization": "Basic dXNlcjpwYXNz"},
-            json=self.valid_payload
+            "/ap/activities", headers={"Authorization": "Basic dXNlcjpwYXNz"}, json=self.valid_payload
         )
         self.assertEqual(response.status_code, 401)
 
@@ -88,12 +83,9 @@ class TestAuthSecurity(unittest.TestCase):
         tässä koodipolussa.
         """
         response = self.client.post(
-            "/ap/activities",
-            headers={"Authorization": "Bearer THISISNOTAJWT"},
-            json=self.valid_payload
+            "/ap/activities", headers={"Authorization": "Bearer THISISNOTAJWT"}, json=self.valid_payload
         )
-        self.assertEqual(response.status_code, 401,
-            f"Epäkelpo token sai väärän statuksen: {response.status_code}")
+        self.assertEqual(response.status_code, 401, f"Epäkelpo token sai väärän statuksen: {response.status_code}")
 
     @patch("write_api.verify_google_token")
     def test_expired_token_returns_401(self, mock_verify):
@@ -107,9 +99,7 @@ class TestAuthSecurity(unittest.TestCase):
         """
         mock_verify.return_value = None  # expired / invalid
         response = self.client.post(
-            "/ap/activities",
-            headers={"Authorization": "Bearer vanhentunut.token.here"},
-            json=self.valid_payload
+            "/ap/activities", headers={"Authorization": "Bearer vanhentunut.token.here"}, json=self.valid_payload
         )
         self.assertEqual(response.status_code, 401)
 
@@ -124,9 +114,7 @@ class TestAuthSecurity(unittest.TestCase):
         """
         mock_verify.return_value = None  # wrong aud
         response = self.client.post(
-            "/ap/activities",
-            headers={"Authorization": "Bearer token.wrong.audience"},
-            json=self.valid_payload
+            "/ap/activities", headers={"Authorization": "Bearer token.wrong.audience"}, json=self.valid_payload
         )
         self.assertEqual(response.status_code, 401)
 
@@ -158,8 +146,7 @@ class TestAuthSecurity(unittest.TestCase):
             with self.assertRaises(HTTPException) as ctx:
                 verify_auth_token("Bearer jokin.oikea.token")
             self.assertEqual(ctx.exception.status_code, 401)
-            self.assertIn("subject", ctx.exception.detail.lower(),
-                "Virheviesti ei mainitse puuttuvaa subject-kenttää")
+            self.assertIn("subject", ctx.exception.detail.lower(), "Virheviesti ei mainitse puuttuvaa subject-kenttää")
 
     @patch("write_api.verify_google_token")
     def test_valid_token_with_correct_sub_succeeds(self, mock_verify):
@@ -175,24 +162,25 @@ class TestAuthSecurity(unittest.TestCase):
             "exp": int(time.time()) + 3600,
             "iss": "https://accounts.google.com",
         }
-        with patch("write_api.get_object_by_id") as mock_obj, \
-             patch("write_api.get_existing_reaction") as mock_reaction, \
-             patch("write_api.bq_client") as mock_bq:
+        with (
+            patch("write_api.get_object_by_id") as mock_obj,
+            patch("write_api.get_existing_reaction") as mock_reaction,
+            patch("write_api.bq_client") as mock_bq,
+        ):
             mock_obj.return_value = {
                 "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
                 "deleted": False,
-                "object_json": {"id": "target-id", "type": "Article"}
+                "object_json": {"id": "target-id", "type": "Article"},
             }
             mock_reaction.return_value = None
             mock_bq.insert_rows_json.return_value = []
             response = self.client.post(
-                "/ap/activities",
-                headers={"Authorization": "Bearer kelvollinen.token"},
-                json=self.valid_payload
+                "/ap/activities", headers={"Authorization": "Bearer kelvollinen.token"}, json=self.valid_payload
             )
         # Joko 201 (onnistui) tai 200 (idempotent) — ei 401/403/500
-        self.assertIn(response.status_code, [200, 201],
-            f"Kelvollinen token hylättiin: {response.status_code} {response.text}")
+        self.assertIn(
+            response.status_code, [200, 201], f"Kelvollinen token hylättiin: {response.status_code} {response.text}"
+        )
 
 
 class TestDeleteActivity(unittest.TestCase):
@@ -219,8 +207,8 @@ class TestDeleteActivity(unittest.TestCase):
             "deleted": False,
             "object_json": {
                 "type": "Note",
-                "attributedTo": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345"
-            }
+                "attributedTo": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
+            },
         }
         mock_bq.insert_rows_json.return_value = []
         mock_bq.query.return_value.result.return_value = None
@@ -229,7 +217,7 @@ class TestDeleteActivity(unittest.TestCase):
         payload = {
             "type": "Delete",
             "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
-            "object": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7Y"
+            "object": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7Y",
         }
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 200)
@@ -237,7 +225,7 @@ class TestDeleteActivity(unittest.TestCase):
         self.assertEqual(resp_data["status"], "deleted")
         self.assertTrue(
             resp_data["id"].startswith("https://activitystreams.uutisseuranta.net/ap/activities/deletes/"),
-            f"Delete-aktiviteetin id-kenttä väärässä muodossa: {resp_data.get('id')}"
+            f"Delete-aktiviteetin id-kenttä väärässä muodossa: {resp_data.get('id')}",
         )
 
     @patch("write_api.get_object_by_id")
@@ -247,14 +235,14 @@ class TestDeleteActivity(unittest.TestCase):
             "deleted": False,
             "object_json": {
                 "type": "Note",
-                "attributedTo": "https://activitystreams.uutisseuranta.net/ap/users/toinen-kayttaja"
-            }
+                "attributedTo": "https://activitystreams.uutisseuranta.net/ap/users/toinen-kayttaja",
+            },
         }
         headers = {"Authorization": "Bearer mock-test"}
         payload = {
             "type": "Delete",
             "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
-            "object": "https://activitystreams.uutisseuranta.net/ap/objects/comments/OTHER"
+            "object": "https://activitystreams.uutisseuranta.net/ap/objects/comments/OTHER",
         }
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 403)
@@ -266,14 +254,14 @@ class TestDeleteActivity(unittest.TestCase):
             "deleted": True,
             "object_json": {
                 "type": "Note",
-                "attributedTo": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345"
-            }
+                "attributedTo": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
+            },
         }
         headers = {"Authorization": "Bearer mock-test"}
         payload = {
             "type": "Delete",
             "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
-            "object": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7Y"
+            "object": "https://activitystreams.uutisseuranta.net/ap/objects/comments/01H7Y",
         }
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 200)
@@ -286,7 +274,7 @@ class TestDeleteActivity(unittest.TestCase):
         payload = {
             "type": "Delete",
             "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
-            "object": "https://activitystreams.uutisseuranta.net/ap/objects/comments/NOTFOUND"
+            "object": "https://activitystreams.uutisseuranta.net/ap/objects/comments/NOTFOUND",
         }
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 404)
@@ -315,7 +303,7 @@ class TestLikeActivity(unittest.TestCase):
         mock_get_obj.return_value = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
             "deleted": False,
-            "object_json": {"id": "target-id", "type": "Article"}
+            "object_json": {"id": "target-id", "type": "Article"},
         }
         mock_get_reaction.return_value = None
         mock_bq.insert_rows_json.return_value = []
@@ -324,7 +312,7 @@ class TestLikeActivity(unittest.TestCase):
         payload = {
             "type": "Like",
             "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
-            "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"
+            "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
         }
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 201)
@@ -336,7 +324,7 @@ class TestLikeActivity(unittest.TestCase):
         mock_get_obj.return_value = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
             "deleted": False,
-            "object_json": {"id": "target-id", "type": "Article"}
+            "object_json": {"id": "target-id", "type": "Article"},
         }
         mock_get_reaction.return_value = "Like"
 
@@ -344,7 +332,7 @@ class TestLikeActivity(unittest.TestCase):
         payload = {
             "type": "Like",
             "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
-            "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"
+            "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
         }
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 200)
@@ -355,13 +343,13 @@ class TestLikeActivity(unittest.TestCase):
         mock_get_obj.return_value = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
             "deleted": True,
-            "object_json": {"id": "target-id", "type": "Article"}
+            "object_json": {"id": "target-id", "type": "Article"},
         }
         headers = {"Authorization": "Bearer mock-test"}
         payload = {
             "type": "Like",
             "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
-            "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"
+            "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
         }
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 404)
@@ -373,7 +361,7 @@ class TestLikeActivity(unittest.TestCase):
         payload = {
             "type": "Like",
             "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
-            "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/NOTFOUND"
+            "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/NOTFOUND",
         }
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 404)
@@ -387,7 +375,7 @@ class TestLikeActivity(unittest.TestCase):
         mock_get_obj.return_value = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
             "deleted": False,
-            "object_json": {"id": "target-id", "type": "Article"}
+            "object_json": {"id": "target-id", "type": "Article"},
         }
         mock_get_reaction.return_value = "Dislike"
         mock_bq.insert_rows_json.return_value = []
@@ -396,7 +384,7 @@ class TestLikeActivity(unittest.TestCase):
         payload = {
             "type": "Like",
             "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
-            "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"
+            "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
         }
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 201)
@@ -430,7 +418,7 @@ class TestCreateActivity(unittest.TestCase):
         mock_get_obj.return_value = {
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
             "deleted": False,
-            "object_json": {"id": "target-id", "type": "Article", "thread_root": None}
+            "object_json": {"id": "target-id", "type": "Article", "thread_root": None},
         }
         mock_bq.insert_rows_json.return_value = []
         mock_bq.query.return_value.result.return_value = None
@@ -442,19 +430,19 @@ class TestCreateActivity(unittest.TestCase):
             "object": {
                 "type": "Note",
                 "content": "Tämä on testi-kommentti",
-                "inReplyTo": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"
-            }
+                "inReplyTo": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
+            },
         }
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 201)
         body = response.json()
         self.assertTrue(
             body["id"].startswith("https://activitystreams.uutisseuranta.net/ap/activities/creates/"),
-            f"Create-aktiviteetin id väärässä muodossa: {body.get('id')}"
+            f"Create-aktiviteetin id väärässä muodossa: {body.get('id')}",
         )
         self.assertTrue(
             body["object_id"].startswith("https://activitystreams.uutisseuranta.net/ap/objects/comments/"),
-            f"object_id väärässä muodossa: {body.get('object_id')}"
+            f"object_id väärässä muodossa: {body.get('object_id')}",
         )
 
     @patch("write_api.get_object_by_id")
@@ -463,10 +451,7 @@ class TestCreateActivity(unittest.TestCase):
         payload = {
             "type": "Create",
             "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
-            "object": {
-                "type": "Note",
-                "content": "Kommentti ilman inReplyTo"
-            }
+            "object": {"type": "Note", "content": "Kommentti ilman inReplyTo"},
         }
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 400)
@@ -479,8 +464,8 @@ class TestCreateActivity(unittest.TestCase):
             "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
             "object": {
                 "type": "Article",
-                "inReplyTo": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"
-            }
+                "inReplyTo": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
+            },
         }
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 400)
@@ -494,12 +479,14 @@ class TestCreateActivity(unittest.TestCase):
 
         mock_get_obj.side_effect = lambda obj_id: {
             parent_url: {
-                "id": parent_url, "deleted": False,
-                "object_json": {"type": "Note", "inReplyTo": grandparent_url, "thread_root": root_url}
+                "id": parent_url,
+                "deleted": False,
+                "object_json": {"type": "Note", "inReplyTo": grandparent_url, "thread_root": root_url},
             },
             grandparent_url: {
-                "id": grandparent_url, "deleted": False,
-                "object_json": {"type": "Note", "inReplyTo": root_url, "thread_root": root_url}
+                "id": grandparent_url,
+                "deleted": False,
+                "object_json": {"type": "Note", "inReplyTo": root_url, "thread_root": root_url},
             },
         }.get(obj_id, None)
 
@@ -507,11 +494,7 @@ class TestCreateActivity(unittest.TestCase):
         payload = {
             "type": "Create",
             "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
-            "object": {
-                "type": "Note",
-                "content": "Liian syvä vastaus",
-                "inReplyTo": parent_url
-            }
+            "object": {"type": "Note", "content": "Liian syvä vastaus", "inReplyTo": parent_url},
         }
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 400)
@@ -537,7 +520,7 @@ class TestUnsupportedActivityType(unittest.TestCase):
         payload = {
             "type": "Follow",
             "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
-            "object": "https://activitystreams.uutisseuranta.net/ap/users/toinen"
+            "object": "https://activitystreams.uutisseuranta.net/ap/users/toinen",
         }
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 400)
@@ -546,7 +529,7 @@ class TestUnsupportedActivityType(unittest.TestCase):
         headers = {"Authorization": "Bearer mock-test"}
         payload = {
             "actor": "https://activitystreams.uutisseuranta.net/ap/users/test-user-sub-12345",
-            "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"
+            "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
         }
         response = self.client.post("/ap/activities", headers=headers, json=payload)
         self.assertEqual(response.status_code, 400)
@@ -579,6 +562,7 @@ class TestWriteRateLimiting(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
         from write_api import limiter
+
         limiter.enabled = True
         limiter.reset()
 
@@ -589,7 +573,10 @@ class TestWriteRateLimiting(unittest.TestCase):
             "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
             "type": "Article",
             "deleted": False,
-            "object_json": {"type": "Article", "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"}
+            "object_json": {
+                "type": "Article",
+                "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y",
+            },
         }
         mock_bq.insert_rows_json.return_value = []
         mock_bq.query.return_value = patch("google.cloud.bigquery.job.QueryJob")
@@ -599,22 +586,16 @@ class TestWriteRateLimiting(unittest.TestCase):
         for _ in range(30):
             response = self.client.post(
                 "/ap/activities",
-                json={
-                    "type": "Like",
-                    "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"
-                },
-                headers={"Authorization": "Bearer mock-test"}
+                json={"type": "Like", "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"},
+                headers={"Authorization": "Bearer mock-test"},
             )
             self.assertEqual(response.status_code, 201)
 
         # 31. pyyntö antaa 429
         response = self.client.post(
             "/ap/activities",
-            json={
-                "type": "Like",
-                "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"
-            },
-            headers={"Authorization": "Bearer mock-test"}
+            json={"type": "Like", "object": "https://activitystreams.uutisseuranta.net/ap/objects/articles/01H7Y"},
+            headers={"Authorization": "Bearer mock-test"},
         )
         self.assertEqual(response.status_code, 429)
         self.assertIn("Retry-After", response.headers)
