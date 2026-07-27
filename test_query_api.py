@@ -399,5 +399,42 @@ class TestQueryApiRegressions(unittest.TestCase):
         # updated pitäisi puuttua JSON-vastauksesta, jos se on None
         self.assertNotIn("updated", items[0])
 
+    @patch("query_api.bq_client")
+    def test_get_replies_success(self, mock_bq):
+        mock_comment_row = {
+            "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/comment-1",
+            "published": datetime.datetime(2026, 7, 4, 12, 0, tzinfo=datetime.timezone.utc),
+            "object_json": (
+                '{"type": "Create", "actor": "https://uutisseuranta.net/users/user1", '
+                '"object": {"type": "Note", "id": "https://activitystreams.uutisseuranta.net/ap/objects/comments/comment-1", '
+                '"inReplyTo": "target-id", "content": "Kommentti 1"}}'
+            ),
+            "like_count": 5,
+            "dislike_count": 2,
+            "in_reply_to": "target-id",
+            "thread_root": "target-id"
+        }
+        mock_bq.query.return_value = create_mock_query_job([mock_comment_row])
+
+        response = self.client.get("/ap/replies?id=target-id")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["type"], "Collection")
+        self.assertEqual(data["totalItems"], 1)
+        self.assertEqual(data["orderedItems"][0]["object"]["content"], "Kommentti 1")
+        self.assertEqual(data["orderedItems"][0]["object"]["like_count"], 5)
+        self.assertEqual(data["orderedItems"][0]["object"]["dislike_count"], 2)
+
+    def test_get_replies_missing_id(self):
+        response = self.client.get("/ap/replies")
+        self.assertEqual(response.status_code, 400)
+
+    @patch("query_api.bq_client")
+    def test_get_replies_database_error(self, mock_bq):
+        mock_bq.query.side_effect = Exception("BigQuery failure")
+        response = self.client.get("/ap/replies?id=target-id")
+        self.assertEqual(response.status_code, 500)
+
+
 
 

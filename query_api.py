@@ -126,6 +126,7 @@ def verify_auth_token_optional(auth_header: Optional[str]) -> Optional[str]:
 # Globaalit ympäristömuuttujat — luetaan kerran käynnistyksen yhteydessä
 PROJECT = os.getenv("GCP_PROJECT")
 DATASET = os.getenv("BQ_DATASET")
+SOCIAL_DATASET = os.getenv("BQ_SOCIAL_DATASET", "activitystreams_social")
 LOCATION = os.getenv("BQ_LOCATION", "europe-north1")
 
 if not PROJECT or not DATASET:
@@ -507,6 +508,80 @@ async def get_stats():
             "active_sources": default_sources
         }
 
+
+
+@app.get("/ap/replies")
+def get_replies(
+    request: Request,
+    id: str = Query(default=None, description="Alkuperäisen artikkelin tai pääkommentin AS2 id"),
+    authorization: Optional[str] = Header(None)
+):
+    # Verifioidaan token jos sellainen on toimitettu
+    verify_auth_token_optional(authorization)
+    
+    if not id:
+        raise HTTPException(
+            status_code=400,
+            detail="Parameter 'id' is required."
+        )
+
+    # BigQuery-haku:
+    # Haetaan kaikki kommentit, joilla thread_root = @id tai in_reply_to = @id
+    # ja joiden vastaava objekti ei ole poistettu (deleted = FALSE).
+    query = f"""
+        SELECT
+          o.id,
+          o.published,
+          o.object_json,
+          o.like_count,
+          o.dislike_count,
+          a.in_reply_to,
+          a.thread_root
+        FROM `{PROJECT}.{SOCIAL_DATASET}.activities` a
+        JOIN `{PROJECT}.{DATASET}.objects` o ON a.object_id = o.id
+        WHERE o.deleted = FALSE
+          AND a.type = 'Create'
+          AND a.object_type = 'Note'
+          AND (a.thread_root = @target_id OR a.in_reply_to = @target_id)
+        ORDER BY o.published ASC
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("target_id", "STRING", id)
+        ]
+    )
+
+    try:
+        query_job = bq_client.query(query, job_config=job_config)
+        rows = list(query_job.result())
+    except Exception as e:
+        logger.error(f"Kommenttien haku epäonnistui: {e}")
+        raise HTTPException(status_code=500, detail="Database query failed.")
+
+    replies = []
+    for row in rows:
+        try:
+            obj_data = row["object_json"]
+            if isinstance(obj_data, str):
+                obj = json.loads(obj_data)
+            else:
+                obj = obj_data
+            
+            # Päivitetään tykkäystiedot objects-taulun mukaan
+            if "object" in obj and isinstance(obj["object"], dict):
+                obj["object"]["like_count"] = row["like_count"]
+                obj["object"]["dislike_count"] = row["dislike_count"]
+
+            replies.append(obj)
+        except Exception as e:
+            logger.warning(f"Virhe kommenttirivin käsittelyssä: {e}")
+            continue
+
+    return {
+        "type": "Collection",
+        "totalItems": len(replies),
+        "orderedItems": replies
+    }
 
 
 @app.get("/healthz")
