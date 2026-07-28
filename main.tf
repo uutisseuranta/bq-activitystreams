@@ -19,7 +19,7 @@ terraform {
 
   required_providers {
     google = {
-      source  = "hashicorp/google"
+      source = "hashicorp/google"
       # ~> 5.40 sallii patch-päivitykset 5.40.x+ mutta estää 6.x-hyppäyksen.
       # Google Provider 5.x sisältää breaking changeja eri minor-versioissa —
       # minor-pinned (5.0) on liian löysä. Nosta tätä harkiten ja tarkista
@@ -27,7 +27,7 @@ terraform {
       version = "~> 5.40"
     }
     github = {
-      source  = "integrations/github"
+      source = "integrations/github"
       # ~> 6.0 — GitHub provider on stabiilimpi kuin Google; minor-pinned riittää.
       version = "~> 6.0"
     }
