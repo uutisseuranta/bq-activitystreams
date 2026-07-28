@@ -28,10 +28,10 @@ jobs:
       - name: terraform apply
         run: |
           terraform apply -auto-approve \
-            -var="github_token=${{ secrets.GITHUB_TOKEN }}" \
             -var="google_client_id=${{ secrets.GOOGLE_CLIENT_ID }}"
         env:
           TF_VAR_gcp_project: uutisseuranta-activitystreams
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   deploy:
     needs: terraform-apply
