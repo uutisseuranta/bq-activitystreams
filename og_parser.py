@@ -120,13 +120,7 @@ def fetch_url_stream_with_headers(
                         content_bytes = content_bytes[:max_bytes]
                         break
 
-                    try:
-                        # Etsitään head-osion päättymistä
-                        text = content_bytes.decode("utf-8", errors="ignore")
-                        if "</head>" in text.lower():
-                            break
-                    except Exception:
-                        pass
+
 
                 headers_dict = dict(response.headers)
                 return bytes(content_bytes), headers_dict
@@ -277,8 +271,11 @@ def parse_og_metadata(html_content: bytes, default_url: str) -> Dict[str, Any]:
                 has_part = item.get("hasPart")
                 has_parts = has_part if isinstance(has_part, list) else [has_part]
                 for hp in has_parts:
+                    # hasPart.isAccessibleForFree=False tarkoittaa, että OSA sisällöstä on
+                    # tilaajille. Ylikirjoitetaan vain jos ylätason arvo ei ole jo True.
                     if isinstance(hp, dict) and hp.get("isAccessibleForFree") is False:
-                        is_accessible_for_free = False
+                        if is_accessible_for_free is not True:
+                            is_accessible_for_free = False
         except Exception:
             pass
 
