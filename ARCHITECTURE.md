@@ -59,18 +59,17 @@ Kirjoittajat per taulu:
 
 ### Cloud Scheduler -ajastukset
 
-| Job | Cron | Kellonaika (EET) |
+| Job | Cron | Kellonaika (Europe/Helsinki) |
 |---|---|---|
-| `rss-fetch-job` | `0 * * * *` | kerran tunnissa |
-| `ahjo-fetch-job` | `0 3 * * *` | 06:00 |
-| `hri-fetch-job` | `30 3 * * *` | 06:30 |
-| `voikko-enrich-job` | `30 * * * *` | 30 min välein |
-| `likes-and-updated-job` | `*/15 * * * *` | 15 min välein |
+| `rss-fetch-job` | `7,22,37,52 * * * *` | Joka 15. minuutti (:07, :22, :37, :52) |
+| `og-enrichment-job` | `14 * * * *` | Kerran tunnissa (:14) |
+| `voikko-job` | `19 * * * *` | Kerran tunnissa (:19) |
+| `likes-and-updated-job` | `21 */2 * * *` | Joka toinen tunti (:21) |
 
 Huom: `likes-and-updated-job` korvaa aiemmat erilliset `likes-sync-job` ja `activity-updated-job` -ajastukset. Molemmat laskennat ajetaan samassa Cloud Run Job -suorituksessa — ks. [Tykkäyslaskuri ja updated-aikaleima](#tykkäyslaskuri-ja-updated-aikaleima-1112).
 
 > [!NOTE]
-> **Kesäaika:** Cloud Scheduler käyttää UTC:tä eikä säädä kesäaikaa automaattisesti. EET (talviaika UTC+2) ja EEST (kesäaika UTC+3) eroavat tunnin. Cron-kommentit on merkitty EET-ajassa — kesällä ajastukset lähtevät tunnin myöhemmin kuin kommentti ilmoittaa. Tämä on hyväksytty trade-off: ajastusajalla ei ole kriittistä merkitystä tässä kontekstissa.
+> **Kesäaika:** Cloud Scheduler käyttää Europe/Helsinki -aikavyöhykettä.
 
 ---
 
@@ -78,11 +77,10 @@ Huom: `likes-and-updated-job` korvaa aiemmat erilliset `likes-sync-job` ja `acti
 
 | Job / palvelu | Tyyppi | Cron / endpoint | Kirjoittaa | Vastuu |
 |---|---|---|---|---|
-| rss-fetch-job | Cloud Run Job | `0 * * * *` | `activitystreams.objects` | Uutissyötteet (RSS) |
-| ahjo-fetch-job | Cloud Run Job | `0 3 * * *` | `activitystreams.objects` | OpenAhjo-päätökset |
-| hri-fetch-job | Cloud Run Job | `30 3 * * *` | `activitystreams.objects` | HRI-datasetit |
-| voikko-enrich-job | Cloud Run Job | `30 * * * *` | `activitystreams.objects.tags*` | Lemmatisoidut tagit (Voikko) |
-| likes-and-updated-job | Cloud Run Job | `*/15 * * * *` | `activitystreams.objects.like_count, updated` | Tykkäyslaskuri + updated |
+| rss-fetch-job | Cloud Run Job | `7,22,37,52 * * * *` | `activitystreams.objects` | Uutissyötteet (RSS) |
+| og-enrichment-job | Cloud Run Job | `14 * * * *` | `activitystreams.objects` | OG-metatietojen rikastus |
+| voikko-job | Cloud Run Job | `19 * * * *` | `activitystreams.objects.tags*` | Lemmatisoidut tagit (Voikko) |
+| likes-and-updated-job | Cloud Run Job | `21 */2 * * *` | `activitystreams.objects.like_count, updated` | Tykkäyslaskuri + updated |
 | query-api | Cloud Run Service | `GET /ap/outbox` | — | AS2 outbox, lukupään API |
 | og-scraper | Cloud Run Service | `POST /ap/scrape` | `activitystreams.objects` | OG-scraper valikoiduille domaineille |
 | write-api | Cloud Run Service | `POST /ap/activities` | `activitystreams_social.*` | Käyttäjäaktiviteetit (kommentit, tykkäykset) |

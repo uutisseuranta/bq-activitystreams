@@ -20,8 +20,8 @@ resource "google_cloud_scheduler_job" "rss_fetch" {
   name             = "rss-fetch-job-trigger"
   region           = var.scheduler_region
   project          = var.gcp_project
-  description      = "Ajaa rss-fetch-jobin joka 15. minuutti"
-  schedule         = "*/15 * * * *"
+  description      = "Ajaa rss-fetch-jobin joka 15. minuutti (minuuteilla 7, 22, 37, 52)"
+  schedule         = "7,22,37,52 * * * *"
   time_zone        = "Europe/Helsinki"
   attempt_deadline = "320s"
 
@@ -43,8 +43,8 @@ resource "google_cloud_scheduler_job" "og_enrichment" {
   name             = "og-enrichment-job-trigger"
   region           = var.scheduler_region
   project          = var.gcp_project
-  description      = "Rikastaa OG-metatiedot uusille artikkeleille tunneittain"
-  schedule         = "5 * * * *"
+  description      = "Rikastaa OG-metatiedot uusille artikkeleille tunneittain (minuutilla :14)"
+  schedule         = "14 * * * *"
   time_zone        = "Europe/Helsinki"
   attempt_deadline = "540s"
 
@@ -66,8 +66,8 @@ resource "google_cloud_scheduler_job" "voikko" {
   name             = "voikko-job-trigger"
   region           = var.scheduler_region
   project          = var.gcp_project
-  description      = "Lemmatisoi uudet artikkelit kerran tunnissa"
-  schedule         = "20 * * * *"
+  description      = "Lemmatisoi uudet artikkelit kerran tunnissa (minuutilla :19)"
+  schedule         = "19 * * * *"
   time_zone        = "Europe/Helsinki"
   attempt_deadline = "540s"
 
@@ -89,8 +89,8 @@ resource "google_cloud_scheduler_job" "likes_and_updated" {
   name             = "likes-and-updated-job-trigger"
   region           = var.scheduler_region
   project          = var.gcp_project
-  description      = "Päivittää sosiaaliset metriikat (tykkäykset, päivitysajat) joka toinen tunti"
-  schedule         = "0 */2 * * *"
+  description      = "Päivittää sosiaaliset metriikat joka toinen tunti (minuutilla :21)"
+  schedule         = "21 */2 * * *"
   time_zone        = "Europe/Helsinki"
   attempt_deadline = "320s"
 
