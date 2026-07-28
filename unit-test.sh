@@ -7,7 +7,25 @@ set -euo pipefail
 # shellcheck source=fetch_helpers.sh
 source "$(dirname "$0")/fetch_helpers.sh"
 
+echo "Tarkistetaan DECISION_LOG.csv..."
+BADDATES=$(tail -n +2 DECISION_LOG.csv | awk -F',' '
+  NF == 0 || $0 ~ /^[[:space:]]*$/ {
+    print "Rivi " NR+1 ": Tiedostossa on tyhjä rivi. Poista ylimääräiset tyhjät rivit tiedostosta."
+    next
+  }
+  $2 !~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/ {
+    print "Rivi " NR+1 ": Päivämääräsarake \"" $2 "\" on virheellinen. Odotetaan muotoa YYYY-MM-DD."
+  }
+')
+if [ -n "$BADDATES" ]; then
+  echo "❌ Virheellinen päivämäärämuoto tai tyhjä rivi:"
+  echo "$BADDATES"
+  exit 1
+fi
+echo "  ✓ DECISION_LOG.csv tarkistettu onnistuneesti"
+
 echo "Ajetaan Python-yksikkötestit..."
+
 
 python3 - <<'EOF'
 import sys
