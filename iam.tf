@@ -186,6 +186,14 @@ resource "google_project_iam_member" "backend_service_usage" {
   member  = "serviceAccount:${google_service_account.backend.email}"
 }
 
+# Viewer-oikeus deploy-SA:lle, jotta gcloud builds submit voi striimata lokit default-ämpäristä
+resource "google_project_iam_member" "backend_viewer" {
+  #checkov:skip=CKV_GCP_34: Deploy-SA vaatii Viewer-oikeuden lokien striimaukseen kääntämisen aikana
+  project = var.gcp_project
+  role    = "roles/viewer"
+  member  = "serviceAccount:${google_service_account.backend.email}"
+}
+
 
 # Salli kaikkien kirjautuneiden Google-käyttäjien kutsua write-apita (G-009, G-010)
 resource "google_cloud_run_v2_service_iam_member" "write_api_all_authenticated_users" {

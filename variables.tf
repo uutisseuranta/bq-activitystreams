@@ -105,22 +105,3 @@ variable "rss_request_timeout" {
   type        = string
   default     = "10"
 }
-
-variable "query_api_image_tag" {
-  description = "query-api container image tag (commit sha or version)"
-  type        = string
-  default     = "latest"
-}
-
-variable "write_api_image_tag" {
-  description = "write-api container image tag (commit sha or version)"
-  type        = string
-  default     = "latest"
-}
-
-variable "og_scraper_image_tag" {
-  description = "og-scraper container image tag (commit sha or version)"
-  type        = string
-  default     = "latest"
-}
-
