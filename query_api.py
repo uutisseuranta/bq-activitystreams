@@ -194,66 +194,80 @@ def get_total_items_cached(tags: List[str]) -> int:
 @limiter.limit(get_outbox_limit)
 def get_outbox(
     request: Request,
-    tag: List[str] = Query(default=None, description="Haettavat tagit (toistuva parametri)"),
+    tag: Optional[List[str]] = Query(default=None, description="Haettavat tagit (toistuva parametri, valinnainen)"),
     n: int = Query(default=50, description="Palautettavien kohteiden määrä (1-500)"),
     authorization: Optional[str] = Header(None),
 ):
     # Verifioidaan token jos sellainen on toimitettu
     verify_auth_token_optional(authorization)
-    # 1. Validoidaan tagit
-    if not tag:
-        raise HTTPException(status_code=400, detail="At least one 'tag' query parameter is required.")
 
-    # 2. Validoidaan n-parametri (1-500)
+    # 1. Validoidaan n-parametri (1-500)
     if n <= 0 or n > 500:
         raise HTTPException(status_code=400, detail="Parameter 'n' must be between 1 and 500.")
 
-    # Normalisoidaan tagit: pieniksi kirjaimiksi ja varmistetaan #-etuliite (päätös L-011)
-    # Sallitaan sekä "politiikka" että "#politiikka" — molemmat normalisoidaan muotoon "#politiikka"
+    # Normalisoidaan tagit jos toimitettu
     search_tags = []
-    for t in tag:
-        val = t.strip().lower()
-        if val:
-            if not val.startswith("#"):
-                val = f"#{val}"
-            search_tags.append(val)
-    if not search_tags:
-        raise HTTPException(status_code=400, detail="Valid tags must be provided.")
+    if tag:
+        for t in tag:
+            val = t.strip().lower()
+            if val:
+                if not val.startswith("#"):
+                    val = f"#{val}"
+                search_tags.append(val)
 
-    logger.info(f"Haku tageilla: {search_tags}, koko n: {n}")
+    logger.info(f"Outbox-haku tageilla: {search_tags or 'KAIKKI'}, koko n: {n}")
 
-    # 3. BigQuery-haku relevanssipisteytyksen mukaan
-    # Relevanssi = osuvien hakutagien lukumäärä artikkelin tagien joukossa.
-    # Esimerkki: haku ["#politiikka", "#EU"], artikkeli jolla molemmat tagit saa relevance=2.
-    # Tasatilanne ratkaistaan: like_count DESC → updated DESC → published DESC → id ASC.
-    query = f"""
-        SELECT
-          id,
-          source,
-          published,
-          updated,
-          like_count,
-          dislike_count,
-          object_json,
-          (
-            SELECT COUNT(*)
-            FROM UNNEST(tags) t
-            WHERE t IN UNNEST(@search_tags)
-          ) AS relevance
-        FROM `{PROJECT}.{DATASET}.objects`
-        WHERE deleted = FALSE
-          AND EXISTS (
-            SELECT 1 FROM UNNEST(tags) t WHERE t IN UNNEST(@search_tags)
-          )
-        ORDER BY relevance DESC, like_count DESC, updated DESC, published DESC NULLS LAST, id ASC
-        LIMIT @limit_n
-    """
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ArrayQueryParameter("search_tags", "STRING", search_tags),
-            bigquery.ScalarQueryParameter("limit_n", "INT64", n),
-        ]
-    )
+    # 2. BigQuery-haku
+    if search_tags:
+        query = f"""
+            SELECT
+              id,
+              source,
+              published,
+              updated,
+              like_count,
+              dislike_count,
+              object_json,
+              (
+                SELECT COUNT(*)
+                FROM UNNEST(tags) t
+                WHERE t IN UNNEST(@search_tags)
+              ) AS relevance
+            FROM `{PROJECT}.{DATASET}.objects`
+            WHERE deleted = FALSE
+              AND EXISTS (
+                SELECT 1 FROM UNNEST(tags) t WHERE t IN UNNEST(@search_tags)
+              )
+            ORDER BY relevance DESC, like_count DESC, updated DESC, published DESC NULLS LAST, id ASC
+            LIMIT @limit_n
+        """
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ArrayQueryParameter("search_tags", "STRING", search_tags),
+                bigquery.ScalarQueryParameter("limit_n", "INT64", n),
+            ]
+        )
+    else:
+        query = f"""
+            SELECT
+              id,
+              source,
+              published,
+              updated,
+              like_count,
+              dislike_count,
+              object_json,
+              1 AS relevance
+            FROM `{PROJECT}.{DATASET}.objects`
+            WHERE deleted = FALSE
+            ORDER BY published DESC NULLS LAST, updated DESC, like_count DESC, id ASC
+            LIMIT @limit_n
+        """
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("limit_n", "INT64", n),
+            ]
+        )
 
     try:
         query_job = bq_client.query(query, job_config=job_config)

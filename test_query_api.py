@@ -77,8 +77,8 @@ class TestOutboxQuery(unittest.TestCase):
 
     def test_outbox_missing_tag(self):
         response = self.client.get("/ap/outbox?n=10")
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("At least one 'tag' query parameter is required", response.json()["detail"])
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["type"], "OrderedCollection")
 
     def test_outbox_invalid_n(self):
         response = self.client.get("/ap/outbox?tag=politiikka&n=0")
