@@ -64,7 +64,7 @@ resource "google_cloud_run_v2_service" "query_api" {
     }
 
     containers {
-      image = "${local.image_base}/query-api:latest"
+      image = "${local.image_base}/query-api:${var.query_api_image_tag}"
 
       env {
         name  = "GCP_PROJECT"
@@ -126,7 +126,7 @@ resource "google_cloud_run_v2_service" "write_api" {
     }
 
     containers {
-      image = "${local.image_base}/write-api:latest"
+      image = "${local.image_base}/write-api:${var.write_api_image_tag}"
 
       env {
         name  = "GCP_PROJECT"
@@ -201,7 +201,8 @@ resource "google_cloud_run_v2_service" "og_scraper" {
     }
 
     containers {
-      image = "${local.image_base}/og-scraper:latest"
+      image = "${local.image_base}/og-scraper:${var.og_scraper_image_tag}"
+
 
       env {
         name  = "GCP_PROJECT"

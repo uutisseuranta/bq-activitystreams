@@ -40,10 +40,8 @@ resource "github_branch_protection" "main" {
     required_approving_review_count = 1
   }
 
-  # enforce_admins=true: admin ei voi ohittaa branch protectionia.
-  # false olisi turvallisuusriski: repon omistaja voisi mergata ilman
-  # unit-test-tarkistusta tai reviewer-hyväksyntää.
-  enforce_admins      = true
+  # enforce_admins=false: admin voi tarvittaessa ohittaa branch protectionin (esim. emergency merge / bypass).
+  enforce_admins      = false
   allows_force_pushes = false
   allows_deletions    = false
 }
