@@ -163,6 +163,12 @@ def scrape_url(request: Request, req: ScrapeRequest, response: Response):
     if metadata.get("image"):
         article_json["image"] = {"type": "Image", "url": metadata["image"]}
 
+    if metadata.get("is_accessible_for_free") is False:
+        article_json["isAccessibleForFree"] = False
+        article_json["tag"] = [{"type": "Hashtag", "name": "#tilaajille", "href": "https://uutisseuranta.net/?tag=%23tilaajille"}]
+    elif metadata.get("is_accessible_for_free") is True:
+        article_json["isAccessibleForFree"] = True
+
     # 5. Tallenna BigQueryyn MERGE-lauseella (upsert-semantiikka)
     # WHEN MATCHED: päivitetään vain scraped-lähteestä tulleet rivit — ei ylikirjoiteta RSS-dataa
     # WHEN NOT MATCHED: luodaan uusi rivi, og_enriched=TRUE koska scraper tekee rikastuksen heti

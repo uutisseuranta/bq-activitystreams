@@ -3,7 +3,7 @@ import ipaddress
 import logging
 import socket
 import time
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
@@ -184,10 +184,10 @@ def robots_check(url: str, user_agent: str = "Uutisseuranta-Bot") -> bool:
         return True
 
 
-def parse_og_metadata(html_content: bytes, default_url: str) -> Dict[str, Optional[str]]:
-    """Parsii Open Graph ja meta-tagit HTML-sisällöstä."""
+def parse_og_metadata(html_content: bytes, default_url: str) -> Dict[str, Any]:
+    """Parsii Open Graph, meta-tagit ja JSON-LD Schema.org (ml. maksumuurin status isAccessibleForFree)."""
     soup = BeautifulSoup(html_content, "lxml")
-    metadata: Dict[str, Optional[str]] = {
+    metadata: Dict[str, Any] = {
         "title": None,
         "description": None,
         "image": None,
@@ -195,7 +195,10 @@ def parse_og_metadata(html_content: bytes, default_url: str) -> Dict[str, Option
         "site_name": None,
         "published_time": None,
         "modified_time": None,
+        "is_accessible_for_free": None,
     }
+
+    is_accessible_for_free: Optional[bool] = None
 
     for meta in soup.find_all("meta"):
         property_attr = meta.get("property", "").lower()
@@ -222,6 +225,12 @@ def parse_og_metadata(html_content: bytes, default_url: str) -> Dict[str, Option
         elif name_attr == "description" and not metadata["description"]:
             metadata["description"] = content
 
+        # Meta-tason maksumuuritunnistus
+        if "paywall" in name_attr and content.lower() in ("true", "yes", "1", "paid", "locked"):
+            is_accessible_for_free = False
+        elif name_attr == "article:content_tier" and content.lower() in ("locked", "metered", "paywall"):
+            is_accessible_for_free = False
+
     # 2. Etsitään JSON-LD-lohkoja (Schema.org)
     import json
 
@@ -230,20 +239,29 @@ def parse_og_metadata(html_content: bytes, default_url: str) -> Dict[str, Option
     for script in soup.find_all("script", type="application/ld+json"):
         try:
             data = json.loads(script.string or "")
-            if isinstance(data, dict):
-                # Voidaan käsitellä joko yksittäinen objekti tai lista (@graph)
-                if "@graph" in data and isinstance(data["@graph"], list):
-                    for graph_obj in data["@graph"]:
-                        if isinstance(graph_obj, dict):
-                            if "datePublished" in graph_obj:
-                                json_ld_published = graph_obj["datePublished"]
-                            if "dateModified" in graph_obj:
-                                json_ld_modified = graph_obj["dateModified"]
-                else:
-                    if "datePublished" in data:
-                        json_ld_published = data["datePublished"]
-                    if "dateModified" in data:
-                        json_ld_modified = data["dateModified"]
+            items = data if isinstance(data, list) else (data.get("@graph", [data]) if isinstance(data, dict) else [data])
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                if "datePublished" in item and not json_ld_published:
+                    json_ld_published = item["datePublished"]
+                if "dateModified" in item and not json_ld_modified:
+                    json_ld_modified = item["dateModified"]
+
+                # JSON-LD Schema.org isAccessibleForFree maksumuuritarkistus
+                if "isAccessibleForFree" in item:
+                    val = item["isAccessibleForFree"]
+                    if val is False or str(val).lower() == "false":
+                        is_accessible_for_free = False
+                    elif val is True or str(val).lower() == "true":
+                        if is_accessible_for_free is None:
+                            is_accessible_for_free = True
+
+                has_part = item.get("hasPart")
+                has_parts = has_part if isinstance(has_part, list) else [has_part]
+                for hp in has_parts:
+                    if isinstance(hp, dict) and hp.get("isAccessibleForFree") is False:
+                        is_accessible_for_free = False
         except Exception:
             pass
 
@@ -252,6 +270,8 @@ def parse_og_metadata(html_content: bytes, default_url: str) -> Dict[str, Option
         metadata["published_time"] = json_ld_published
     if json_ld_modified:
         metadata["modified_time"] = json_ld_modified
+
+    metadata["is_accessible_for_free"] = is_accessible_for_free
 
     # Fallback otsikolle jos og:title puuttuu
     if not metadata["title"]:
