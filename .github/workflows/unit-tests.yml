@@ -196,7 +196,7 @@ jobs:
             URL=$(gcloud run services describe $svc \
               --region europe-north1 \
               --project uutisseuranta-activitystreams \
-              --format='value(metadata.annotations["run.googleapis.com/urls"])' | grep -o 'https://[^"]*europe-north1.run.app' | head -n 1)
+              --format='value(status.url)')
             echo "Healthcheck: $svc → $URL/healthz"
             TOKEN=$(gcloud auth print-identity-token 2>/dev/null || echo "")
             HEALTH_OK=0
