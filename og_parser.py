@@ -184,6 +184,23 @@ def robots_check(url: str, user_agent: str = "Uutisseuranta-Bot") -> bool:
         return True
 
 
+def get_wayback_snapshot(url: str, timeout: float = 5.0) -> Optional[str]:
+    """Tarkistaa Internet Archiven Availability API:sta, onko URL-osoitteesta olemassa tallennettua snapshotia.
+    Palauttaa suoran Wayback Machine snapshot URL-osoitteen jos saatavilla, muuten None.
+    """
+    try:
+        api_url = f"https://archive.org/wayback/available?url={url}"
+        response = httpx.get(api_url, headers=OG_HEADERS, timeout=timeout)
+        if response.status_code == 200:
+            data = response.json()
+            closest = data.get("archived_snapshots", {}).get("closest")
+            if isinstance(closest, dict) and closest.get("available") is True and closest.get("url"):
+                return str(closest["url"])
+    except Exception as e:
+        logger.info(f"Wayback Availability check error for {url}: {e}")
+    return None
+
+
 def parse_og_metadata(html_content: bytes, default_url: str) -> Dict[str, Any]:
     """Parsii Open Graph, meta-tagit ja JSON-LD Schema.org (ml. maksumuurin status isAccessibleForFree)."""
     soup = BeautifulSoup(html_content, "lxml")
