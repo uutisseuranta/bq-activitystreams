@@ -31,15 +31,15 @@ Edustaa uutisartikkelia, blogipostausta tai muuta itsenäistä tekstituotetta.
 
 | Property | Type | Required | Possible values | Deprecated | Default | Description | Examples |
 | -------- | ---- | -------- | --------------- | ---------- | ------- | ----------- | -------- |
-| @context | `array` or `string` | ✅ | object and/or string and/or string |  |  | JSON-LD konteksti, tyypillisesti https://www.w3.org/ns/activitystreams ja uutisseuranta-nimiavaruuslaajennus |  |
+| @context | `array` or `string` | ✅ | object and/or string and/or string |  |  | JSON-LD konteksti, tyypillisesti https://www.w3.org/ns/activitystreams, schema:isAccessibleForFree ja uutisseuranta-nimiavaruuslaajennus |  |
 | type | `string` | ✅ | string |  |  | Objektin tyyppi, arvon on oltava 'Article' |  |
 | id | `string` | ✅ | string |  |  | Objektin yksikäsitteinen pysyvä tunniste (persistent IRI: https://uutisseuranta.net/ap/objects/{hash}) |  |
 | name | `string` | ✅ | string |  |  | Artikkelin otsikko tai nimi |  |
 | url | `string` | ✅ | string |  |  | Alkuperäisen artikkelin verkko-osoite (URL) |  |
-| isAccessibleForFree | `boolean` |  | boolean |  |  | Schema.org isAccessibleForFree (false = artikkelissa maksumuuri / tilaajille, true = ilmainen) | `false` |
 | published | `string` | ✅ | string |  |  | Julkaisuajankohta RFC 3339 -muodossa |  |
 | summary | `string` |  | string |  |  | Artikkelin yhteenveto tai lyhyt katkelma |  |
 | content | `string` |  | string |  |  | Artikkelin HTML-muotoiltu pääsisältö |  |
+| isAccessibleForFree | `boolean` |  | boolean |  |  | Schema.org isAccessibleForFree -ominaisuus (false = artikkelissa on maksumuuri / vain tilaajille, true = vapaasti luettavissa) |  |
 | updated | `string` |  | string |  |  | Viimeisin päivitysajankohta RFC 3339 -muodossa |  |
 | attributedTo | `string` |  | string |  |  | Artikkelin tekijä tai julkaisija (esim. uutislähteen nimi) |  |
 | likes | `object` |  | object |  |  | Artikkelin tykkäysten kokoelma (AS2 Core §5.7) |  |
