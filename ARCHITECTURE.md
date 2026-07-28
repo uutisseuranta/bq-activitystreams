@@ -545,12 +545,17 @@ gcloud run services update write-api \
 
 ### CI/CD-työnkulku (GitHub Actions)
 
-1. PR → CI ajaa `unit-test.sh`
-2. Push `main`-haaraan → GitHub Actions käynnistyy
-3. WIF-autentikaatio GCP:hen (ei pysyviä avaimia)
-4. Docker-imagen rakennus → Artifact Registry
-5. `gcloud run` -deploy
-6. `live-smoke-test.sh` post-deploy
+1. PR → CI ajaa `unit-test.sh` ja Terraform plan -tarkistukset.
+2. Push `main`-haaraan → GitHub Actions käynnistyy.
+3. WIF-autentikaatio GCP:hen (ei pysyviä avaimia).
+4. **Rinnakkainen matriisijulkaisu (matrix-deploy)**:
+   - Jokainen Cloud Run -palvelu (`query-api`, `write-api`, `og-scraper`) buildataan ja deployataan omana rinnakkaisena jobinaan ilman välitöntä tuotantoliikennettä (`--no-traffic`).
+5. **Post-deploy tagattu healthcheck**:
+   - Testataan uuden revision toiminta suoraan sen omalla URL-osoitteella käyttäen reittejä `/health` ja `/ready` (z-loppuiset polut, kuten `/healthz`, on poistettu GFE-tason 404-kaappausongelman vuoksi).
+6. **Liikenteenohjaus tai rollback**:
+   - Jos healthcheck läpäistään, ohjataan 100% liikenne uuteen revisioon.
+   - Jos healthcheck epäonnistuu, palautetaan liikenne aiempaan toimineeseen revisioon itsenäisesti vaikuttamatta muihin palveluihin.
+
 
 ---
 

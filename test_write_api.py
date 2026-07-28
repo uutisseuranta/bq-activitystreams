@@ -540,21 +540,21 @@ class TestHealthEndpoints(unittest.TestCase):
         self.client = TestClient(app)
 
     def test_healthz_returns_ok(self):
-        response = self.client.get("/healthz")
+        response = self.client.get("/health")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "ok")
 
     @patch("write_api.bq_client")
     def test_readyz_returns_ready_when_bq_ok(self, mock_bq):
         mock_bq.list_datasets.return_value = iter([])
-        response = self.client.get("/readyz")
+        response = self.client.get("/ready")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "ready")
 
     @patch("write_api.bq_client")
     def test_readyz_returns_503_when_bq_fails(self, mock_bq):
         mock_bq.list_datasets.side_effect = Exception("BQ unreachable")
-        response = self.client.get("/readyz")
+        response = self.client.get("/ready")
         self.assertEqual(response.status_code, 503)
 
 

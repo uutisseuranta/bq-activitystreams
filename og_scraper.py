@@ -60,18 +60,22 @@ class ScrapeRequest(BaseModel):
     url: str
 
 
-@app.get("/healthz")
+@app.get("/health")
 def healthz():
-    # Cloud Run liveness-probe — vastaa aina 200 OK jos prosessi on elossa
+    # Cloud Run liveness-probe — vastaa aina 200 OK jos prosessi on elossa.
+    # HUOM: Vältä 'z'-loppuisia polkuja (kuten /healthz), sillä Google Frontend (GFE) kaappaa
+    # ne ja palauttaa julkisista osoitteista 404-virheen ennen pyynnön välitystä kontille.
     return {"status": "ok"}
 
 
-@app.get("/readyz")
+@app.get("/ready")
 def readyz():
     # Cloud Run readiness-probe — tässä palvelussa ei ole erillistä BQ-yhteystarkistusta,
     # koska BQ-asiakas on globaali ja yhteys luodaan vasta ensimmäisessä kyselyssä.
     # Ks. query_api/main.py readyz() jossa on aktiivinen BQ-tarkistus.
+    # HUOM: Vältä 'z'-loppuisia polkuja (kuten /readyz), sillä GFE kaappaa ne ja palauttaa 404-virheen.
     return {"status": "ok"}
+
 
 
 @app.post("/ap/scrape", status_code=210)  # Standardissa palautetaan 201 tai 200, tiketti pyytää 201

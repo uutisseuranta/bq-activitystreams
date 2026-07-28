@@ -83,14 +83,16 @@ resource "google_cloud_run_v2_service" "query_api" {
         value = local.query_api_sa_email
       }
 
+      # G-017: Käytetään /health ja /ready -polkuja z-loppuisten sijaan,
+      # jotta vältetään Google Frontendin (GFE) sisäinen 404-kaappaus julkisissa pyynnöissä.
       liveness_probe {
         http_get {
-          path = "/healthz"
+          path = "/health"
         }
       }
       startup_probe {
         http_get {
-          path = "/readyz"
+          path = "/ready"
         }
       }
     }
@@ -162,14 +164,16 @@ resource "google_cloud_run_v2_service" "write_api" {
         }
       }
 
+      # G-017: Käytetään /health ja /ready -polkuja z-loppuisten sijaan,
+      # jotta vältetään Google Frontendin (GFE) sisäinen 404-kaappaus julkisissa pyynnöissä.
       liveness_probe {
         http_get {
-          path = "/healthz"
+          path = "/health"
         }
       }
       startup_probe {
         http_get {
-          path = "/readyz"
+          path = "/ready"
         }
       }
     }
@@ -216,14 +220,16 @@ resource "google_cloud_run_v2_service" "og_scraper" {
         value = local.og_scraper_sa_email
       }
 
+      # G-017: Käytetään /health ja /ready -polkuja z-loppuisten sijaan,
+      # jotta vältetään Google Frontendin (GFE) sisäinen 404-kaappaus julkisissa pyynnöissä.
       liveness_probe {
         http_get {
-          path = "/healthz"
+          path = "/health"
         }
       }
       startup_probe {
         http_get {
-          path = "/readyz"
+          path = "/ready"
         }
       }
     }
