@@ -71,7 +71,7 @@ jobs:
             --region ${{ env.REGION }} \
             --project uutisseuranta-activitystreams \
             --command uvicorn --args="${{ matrix.args }}" \
-            --startup-cpu-boost \
+            --cpu-boost \
             --update-labels="git-sha=${{ github.sha }},deployed-by=github-actions" \
             --update-env-vars="BUILD_SHA=${{ github.sha }},DEPLOYED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
