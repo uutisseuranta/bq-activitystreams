@@ -25,11 +25,10 @@ Järjestelmä koostuu neljästä ajastetusti ajettavasta Cloud Run Jobista ja ko
 
 | Job tai palvelu | Tyyppi | Ajastus | Vastuu |
 |---|---|---|---|
-| `rss-fetch-job` | Cloud Run Job | Kerran tunnissa | Uutissyötteet RSS-lähteistä |
-| `ahjo-fetch-job` | Cloud Run Job | 06:00 (EET) | OpenAhjo-päätösdokumentit |
-| `hri-fetch-job` | Cloud Run Job | 06:30 (EET) | HRI-datasetit |
-| `voikko-enrich-job` | Cloud Run Job | 30 min välein | Morfologiset tagit (Voikko) |
-| `likes-and-updated-job` | Cloud Run Job | 15 min välein | Tykkäyslaskuri ja `updated`-aikaleima |
+| `rss-fetch-job` | Cloud Run Job | Joka 15. min (:07, :22, :37, :52) | Uutissyötteet RSS-lähteistä |
+| `og-enrichment-job` | Cloud Run Job | Kerran tunnissa (:14) | OpenGraph-metatietojen haku ja rikastus |
+| `voikko-job` | Cloud Run Job | Kerran tunnissa (:19) | Morfologiset tagit ja lemmatisointi (Voikko) |
+| `likes-and-updated-job` | Cloud Run Job | Joka 2. tunti (:21) | Tykkäyslaskuri ja `updated`-aikaleima |
 | `query-api` | Cloud Run Service | `GET /ap/outbox` | AS2 outbox, lukupään API |
 | `og-scraper` | Cloud Run Service | `POST /ap/scrape` | OG-metatietojen haku URL:sta |
 | `write-api` | Cloud Run Service | `POST /ap/activities` | Käyttäjäaktiviteetit |
