@@ -36,6 +36,7 @@ Edustaa uutisartikkelia, blogipostausta tai muuta itsenäistä tekstituotetta.
 | id | `string` | ✅ | string |  |  | Objektin yksikäsitteinen pysyvä tunniste (persistent IRI: https://uutisseuranta.net/ap/objects/{hash}) |  |
 | name | `string` | ✅ | string |  |  | Artikkelin otsikko tai nimi |  |
 | url | `string` | ✅ | string |  |  | Alkuperäisen artikkelin verkko-osoite (URL) |  |
+| isAccessibleForFree | `boolean` |  | boolean |  |  | Schema.org isAccessibleForFree (false = artikkelissa maksumuuri / tilaajille, true = ilmainen) | `false` |
 | published | `string` | ✅ | string |  |  | Julkaisuajankohta RFC 3339 -muodossa |  |
 | summary | `string` |  | string |  |  | Artikkelin yhteenveto tai lyhyt katkelma |  |
 | content | `string` |  | string |  |  | Artikkelin HTML-muotoiltu pääsisältö |  |
