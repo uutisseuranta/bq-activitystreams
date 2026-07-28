@@ -82,7 +82,7 @@ jobs:
 
   deploy:
     concurrency:
-      group: deploy-production-${{ matrix.service }}
+      group: deploy-production
       cancel-in-progress: false
     needs: [unit-test, terraform-lint]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -90,22 +90,6 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - service: query-api
-            image: query-api
-            health_path: /health
-            args: "query_api:app,--host,0.0.0.0,--port,8080"
-          - service: write-api
-            image: write-api
-            health_path: /health
-            args: "write_api:app,--host,0.0.0.0,--port,8080"
-          - service: og-scraper
-            image: og-scraper
-            health_path: /health
-            args: "og_scraper:app,--host,0.0.0.0,--port,8080"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: google-github-actions/auth@71f986410dfbc7added4569d411d040a91dc6935 # v2.1.10
@@ -114,80 +98,35 @@ jobs:
           service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
       - uses: google-github-actions/setup-gcloud@6a7c903a70c8625ed6700fa299f5ddb4ca6022e9 # v2.1.5
 
-      - name: Tallenna nykyinen revisio rollbackia varten
-        id: previous
+      - name: Rakenna ja julkaise kontti-imaget
         run: |
-          REV=$(gcloud run services describe ${{ matrix.service }} \
-            --region europe-north1 \
-            --project uutisseuranta-activitystreams \
-            --format='value(status.traffic[0].revisionName)' 2>/dev/null || echo "")
-          echo "PREV_REV=$REV" >> $GITHUB_ENV
-          echo "Edellinen revisio: $REV"
-
-      - name: Deploy uusi versio ilman tuotantoliikennettä
-        run: |
-          gcloud builds submit --tag europe-north1-docker.pkg.dev/uutisseuranta-activitystreams/jobs/${{ matrix.image }}:latest \
+          gcloud builds submit --tag europe-north1-docker.pkg.dev/uutisseuranta-activitystreams/jobs/query-api:${{ github.sha }} \
             --project uutisseuranta-activitystreams
-          
-          # Deployataan --no-traffic tagilla, jotta uusi versio saa oman testattavan URL:n vaikuttamatta tuotantoon
-          gcloud run deploy ${{ matrix.service }} \
-            --image europe-north1-docker.pkg.dev/uutisseuranta-activitystreams/jobs/${{ matrix.image }}:latest \
-            --region europe-north1 \
-            --project uutisseuranta-activitystreams \
-            --command uvicorn --args="${{ matrix.args }}" \
-            --no-traffic \
-            --tag "gha-${{ github.run_id }}-${{ github.run_attempt }}"
+          gcloud builds submit --tag europe-north1-docker.pkg.dev/uutisseuranta-activitystreams/jobs/write-api:${{ github.sha }} \
+            --project uutisseuranta-activitystreams
+          gcloud builds submit --tag europe-north1-docker.pkg.dev/uutisseuranta-activitystreams/jobs/og-scraper:${{ github.sha }} \
+            --project uutisseuranta-activitystreams
 
-      - name: Post-deploy healthcheck ja liikenteen ohjaus tai rollback
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "1.9.8"
+
+      - name: terraform init
+        run: terraform init
+
+      - name: terraform apply
         run: |
-          # Haetaan juuri deployatun tagillisen revision URL
-          URL=$(gcloud run services describe ${{ matrix.service }} \
-            --region europe-north1 \
-            --project uutisseuranta-activitystreams \
-            --format='value(status.traffic[?tag="gha-${{ github.run_id }}-${{ github.run_attempt }}"].url)')
-          
-          if [ -z "$URL" ]; then
-            # Fallback jos tagikohtaista URL:ää ei jostain syystä saatu (Cloud Run 1.0 vs 2.0 eroavuudet)
-            URL=$(gcloud run services describe ${{ matrix.service }} \
-              --region europe-north1 \
-              --project uutisseuranta-activitystreams \
-              --format='value(status.url)')
-          fi
-
-          echo "Healthcheck: ${{ matrix.service }} → $URL${{ matrix.health_path }}"
-          HEALTH_OK=0
-          
-          # Suoritetaan curl-testit (max 10 yritystä)
-          for attempt in {1..10}; do
-            if curl -sf --max-time 10 "$URL${{ matrix.health_path }}"; then
-              HEALTH_OK=1
-              break
-            fi
-            echo "Attempt $attempt failed. Waiting 5s..."
-            sleep 5
-          done
-          
-          if [ "$HEALTH_OK" -eq 1 ]; then
-            echo "Healthcheck onnistui! Ohjataan 100% liikenne uuteen versioon..."
-            gcloud run services update-traffic ${{ matrix.service }} \
-              --to-revisions="gha-${{ github.run_id }}-${{ github.run_attempt }}=100" \
-              --region europe-north1 \
-              --project uutisseuranta-activitystreams
-          else
-            echo "VIRHE: Healthcheck epäonnistui. Suoritetaan rollback aiempaan revisioon..."
-            if [ -n "$PREV_REV" ]; then
-              gcloud run services update-traffic ${{ matrix.service }} \
-                --to-revisions="$PREV_REV=100" \
-                --region europe-north1 \
-                --project uutisseuranta-activitystreams
-            else
-              echo "Edellistä revisiota ei ole tallennettu — rollbackia ei voida suorittaa automaattisesti."
-            fi
-            exit 1
-          fi
+          terraform apply -auto-approve \
+            -var="query_api_image_tag=${{ github.sha }}" \
+            -var="write_api_image_tag=${{ github.sha }}" \
+            -var="og_scraper_image_tag=${{ github.sha }}" \
+            -var="github_token=${{ secrets.GITHUB_TOKEN }}" \
+            -var="google_client_id=${{ secrets.GOOGLE_CLIENT_ID }}"
+        env:
+          TF_VAR_gcp_project: uutisseuranta-activitystreams
 
   notify-ops:
-    needs: [unit-test, terraform-lint, terraform-plan, deploy]
+    needs: [unit-test, terraform-lint, deploy]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -196,7 +135,6 @@ jobs:
         run: |
           if [ "${{ needs.unit-test.result }}" = "failure" ] || \
              [ "${{ needs.terraform-lint.result }}" = "failure" ] || \
-             [ "${{ needs.terraform-plan.result }}" = "failure" ] || \
              [ "${{ needs.deploy.result }}" = "failure" ]; then
             echo "status=failure" >> $GITHUB_OUTPUT
           else
@@ -223,3 +161,4 @@ jobs:
                 "run_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
               }
             }'
+
