@@ -85,7 +85,8 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     (
       (assertion.ref == 'refs/heads/main' && (
         assertion.job_workflow_ref == 'uutisseuranta/bq-activitystreams/.github/workflows/unit-tests.yml@refs/heads/main' ||
-        assertion.job_workflow_ref == 'uutisseuranta/bq-activitystreams/.github/workflows/smoke-test.yml@refs/heads/main'
+        assertion.job_workflow_ref == 'uutisseuranta/bq-activitystreams/.github/workflows/smoke-test.yml@refs/heads/main' ||
+        assertion.job_workflow_ref == 'uutisseuranta/bq-activitystreams/.github/workflows/deploy.yml@refs/heads/main'
       )) ||
       (assertion.ref.startsWith('refs/pull/') &&
         assertion.job_workflow_ref.startsWith('uutisseuranta/bq-activitystreams/.github/workflows/unit-tests.yml@refs/pull/')
