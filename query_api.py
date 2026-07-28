@@ -238,10 +238,6 @@ def get_outbox(
               AND EXISTS (
                 SELECT 1 FROM UNNEST(tags) t WHERE t IN UNNEST(@search_tags)
               )
-              AND NOT (
-                JSON_VALUE(object_json.isAccessibleForFree) = 'false'
-                AND JSON_VALUE(object_json.url_archive) IS NULL
-              )
             ORDER BY relevance DESC, like_count DESC, updated DESC, published DESC NULLS LAST, id ASC
             LIMIT @limit_n
         """
@@ -264,10 +260,6 @@ def get_outbox(
               1 AS relevance
             FROM `{PROJECT}.{DATASET}.objects`
             WHERE deleted = FALSE
-              AND NOT (
-                JSON_VALUE(object_json.isAccessibleForFree) = 'false'
-                AND JSON_VALUE(object_json.url_archive) IS NULL
-              )
             ORDER BY published DESC NULLS LAST, updated DESC, like_count DESC, id ASC
             LIMIT @limit_n
         """

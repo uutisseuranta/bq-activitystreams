@@ -41,7 +41,7 @@ Kontekstiimäärittely `@context` on oltava rajapinnan palauttamissa Article-obj
 - **Valinnaiset kentät:** `summary`, `content`, `updated`, `attributedTo`, `likes`, `dislikes`, `_uutisseuranta:reactionCount`, `tag` (morfologiset tagit `Hashtag`-objekteina Jaccard-samankaltaisuusvertailua varten), `isAccessibleForFree`, `url_archive`
 
 > [!NOTE]
-> **Maksumuurisuodatus**: Jos artikkelin `isAccessibleForFree` on `false`, artikkeli vaatii `url_archive`-kentän (Wayback Machine -arkistolinkki). Artikkeleita, joissa `isAccessibleForFree = false` mutta `url_archive` puuttuu, ei palauteta API-rajapinnasta eikä näytetä uutisvirrassa lainkaan.
+> **Maksumuurimerkinnät**: Maksumuurin takana olevat uutiset (`isAccessibleForFree = false`) palautetaan rajapinnasta normaalisti, vaikka niillä ei olisi vielä arkistolinkkiä (`url_archive` puuttuu). Käyttöliittymä näyttää näille uutisille lukkokuvakkeen ja ohjaa lukijan arkistolinkkiin vain, jos sellainen on olemassa.
 
 ### Note (Kommentti)
 - **Pakolliset kentät:** `@context`, `type` (Note), `id`, `content`, `published`, `attributedTo`, `inReplyTo`
