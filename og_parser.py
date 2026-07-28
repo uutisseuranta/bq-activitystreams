@@ -3,7 +3,7 @@ import ipaddress
 import logging
 import socket
 import time
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
