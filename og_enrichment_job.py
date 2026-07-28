@@ -50,8 +50,8 @@ def main() -> None:
     query = f"""
         SELECT id, object_json, 'main' as origin, source
         FROM `{project}.{dataset}.objects`
-        WHERE source = 'rss'
-          AND og_enriched = FALSE
+        WHERE source != 'user'
+          AND (og_enriched = FALSE OR og_enriched IS NULL)
           AND deleted = FALSE
         UNION ALL
         SELECT id, object_json, 'pending' as origin, source
