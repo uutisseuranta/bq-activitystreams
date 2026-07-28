@@ -87,6 +87,10 @@
         "$ref": "#/$defs/hashtag"
       },
       "description": "Artikkeliin liittyvät AS2 Hashtag-objektit (Voikko-jobin tuottamat morfologiset tagit)"
+    },
+    "url_archive": {
+      "type": "string",
+      "description": "Wayback Machine -arkistolinkki maksumuurin ohittamiseen"
     }
   },
   "required": ["@context", "type", "id", "name", "url", "published"],

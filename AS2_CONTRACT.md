@@ -1,4 +1,4 @@
-# AS2 Contract (v0.5.0)
+# AS2 Contract (v0.6.0)
 
 Tämä dokumentti määrittelee `uutisseuranta`-järjestelmän käyttämän rajapintasopimuksen, joka pohjautuu W3C ActivityStreams 2.0 (AS2) -spesifikaatioon.
 
@@ -14,7 +14,7 @@ Kontekstiimäärittely `@context` on oltava rajapinnan palauttamissa Article-obj
   "https://www.w3.org/ns/activitystreams",
   {
     "_uutisseuranta": "https://uutisseuranta.net/ns#",
-    "dislikes": "_uutisseuranta:dislikes"
+    "dislikes": "_uutissenschaft:dislikes"
   }
 ]
 ```
@@ -28,7 +28,7 @@ Kontekstiimäärittely `@context` on oltava rajapinnan palauttamissa Article-obj
    - Tyyppi: `Integer`
    - Kuvaus: Yhteenlaskettu tykkäys- ja dislike-määrä (`likes.totalItems + dislikes.totalItems`). Neutraali nimitys: sisältää sekä Agree (Like) että Disagree (Dislike) -reaktiot.
 
-## 3. Minimikenttäjoukot (v0.5.0)
+## 3. Minimikenttäjoukot (v0.6.0)
 
 ### Article (Uutisartikkeli)
 - **Pakolliset kentät:**
@@ -38,7 +38,10 @@ Kontekstiimäärittely `@context` on oltava rajapinnan palauttamissa Article-obj
   * `name`
   * `url` (Alkuperäinen uutisen URL toimituksen sivulla)
   * `published`
-- **Valinnaiset kentät:** `summary`, `content`, `updated`, `attributedTo`, `likes`, `dislikes`, `_uutisseuranta:reactionCount`, `tag` (morfologiset tagit `Hashtag`-objekteina Jaccard-samankaltaisuusvertailua varten)
+- **Valinnaiset kentät:** `summary`, `content`, `updated`, `attributedTo`, `likes`, `dislikes`, `_uutisseuranta:reactionCount`, `tag` (morfologiset tagit `Hashtag`-objekteina Jaccard-samankaltaisuusvertailua varten), `isAccessibleForFree`, `url_archive`
+
+> [!NOTE]
+> **Maksumuurisuodatus**: Jos artikkelin `isAccessibleForFree` on `false`, artikkeli vaatii `url_archive`-kentän (Wayback Machine -arkistolinkki). Artikkeleita, joissa `isAccessibleForFree = false` mutta `url_archive` puuttuu, ei palauteta API-rajapinnasta eikä näytetä uutisvirrassa lainkaan.
 
 ### Note (Kommentti)
 - **Pakolliset kentät:** `@context`, `type` (Note), `id`, `content`, `published`, `attributedTo`, `inReplyTo`
@@ -47,21 +50,41 @@ Kontekstiimäärittely `@context` on oltava rajapinnan palauttamissa Article-obj
 ### OrderedCollection (Outbox)
 - **Pakolliset kentät:** `@context`, `type` (OrderedCollection), `id`, `totalItems`, `orderedItems`
 
-## 4. Hallitut poikkeamat standardista
+## 4. Aktiviteetit ja kirjoitusrajapinta (Write API)
+
+### Tunnisteen (tagi) lisääminen uutiselle (`Add`-aktiviteetti)
+Uuden aihetunnisteen (Hashtag) lisäämiseksi uutisartikkelille lähetetään `POST` `/ap/inbox`-osoitteeseen seuraavan muotoinen JSON-dokumentti:
+```json
+{
+  "@context": "https://www.w3.org/ns/activitystreams",
+  "type": "Add",
+  "actor": "https://uutisseuranta.net/users/{uid}",
+  "object": {
+    "type": "Hashtag",
+    "name": "#tiede"
+  },
+  "target": {
+    "type": "Article",
+    "id": "https://uutisseuranta.net/ap/objects/{hash}"
+  }
+}
+```
+
+## 5. Hallitut poikkeamat standardista
 - **Undo Like -poikkeama:** Järjestelmä toteuttaa toggle-reaktiologiikan (Like ↔ Dislike) poistamalla vanhan reaktion tietokannasta ja lisäämällä uuden. Tästä ei luoda erillistä AS2 `Undo`-aktiviteettia lokiin historiatiedon anonymisoinnin säilyttämiseksi.
-- **OrderedCollectionPage -poikkeama (Päätös L-009):** `GET /ap/outbox` käyttää omaa hakumallia eikä AS2 `OrderedCollectionPage` + `next`/`prev` -linkkikentтиä. Tämä on tehty yksinkertaisuuden ja BigQuery-pohjaisen suorituskyvyn vuoksi, koska järjestelmä ei federoidu ulkoisiin AP-palvelimiin.
+- **OrderedCollectionPage -poikkeama (Päätös L-009):** `GET /ap/outbox` käyttää omaa hakumallia eikä AS2 `OrderedCollectionPage` + `next`/`prev` -linkkikenttiä. Tämä on tehty yksinkertaisuuden ja BigQuery-pohjaisen suorituskyvyn vuoksi, koska järjestelmä ei federoidu ulkoisiin AP-palvelimiin.
 
   **Miten paginaatio toimii käytännössä:** Client pyytää artikkeleita `?tag=` + `?n=`-parametreilla ilman kursoreja tai sivunumeroita. Vastauksen `totalItems` kertoo koko kokoelman koon, mutta `orderedItems`-taulukossa palautetaan vain pyydetty määrä (n kpl). AS2-yhteensopiva client, joka odottaa `next`/`prev`-linkkejä, ei voi sivuttaa kokoelmaa näiden kautta — paginaatio tapahtuu kutsumalla API:a uudelleen suuremmalla `n`-arvolla:
 
   ```
-  GET /ap/outbox?tag=politiikka&n=5    → top-5 (pikaesäkatselyun)
+  GET /ap/outbox?tag=politiikka&n=5    → top-5 (pikaesikatseluun)
   GET /ap/outbox?tag=politiikka&n=50   → top-50 (scroll-to-load)
   GET /ap/outbox?tag=politiikka&n=500  → top-500 (maksimierä)
   ```
 
   Client suodattaa duplikaatit selaimen muistissa `id`-kentän perusteella. Tämä malli sopii BigQuery-pohjaiseen relevanssilajitteluun eikä vaadi OFFSET-lauseita. `totalItems` on yhteensopiva AS2 `Collection`-tyypin kanssa mutta ei `OrderedCollectionPage`-käytännön kanssa — poikkeama on täysin perusteltu, koska järjestelmä ei federoidu ulkopuolisiin ActivityPub-palvelimiin.
 
-## 5. Automaattinen skeemavalidointi (CI/CD)
+## 6. Automaattinen skeemavalidointi (CI/CD)
 Rajapintasopimuksen koneluettavat ja viralliset JSON Schema -määritelmät sijaitsevat repositorion juuressa:
 - [article.schema.json](file:///Users/jaakkokorhonen/uutisseuranta/bq-activitystreams/article.schema.json)
 - [note.schema.json](file:///Users/jaakkokorhonen/uutisseuranta/bq-activitystreams/note.schema.json)
