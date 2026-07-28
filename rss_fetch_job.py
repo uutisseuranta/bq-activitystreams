@@ -200,6 +200,15 @@ def fetch_rss_feed(feed_url: str, timeout: int) -> List[Dict[str, Any]]:
         if media_thumb and media_thumb.get("url"):
             image_url = media_thumb["url"]
 
+        # 1b. media:content (commonly used by Helsingin Sanomat, Iltalehti, etc.)
+        if not image_url:
+            media_content = item.find("media:content") or item.find("content")
+            if media_content and media_content.get("url"):
+                medium = media_content.get("medium", "")
+                mime_type = media_content.get("type", "")
+                if medium == "image" or mime_type.startswith("image/") or not (medium or mime_type):
+                    image_url = media_content["url"]
+
         # 2. enclosure type="image/*"
         if not image_url:
             enclosures = item.find_all("enclosure")

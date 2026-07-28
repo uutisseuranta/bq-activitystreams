@@ -80,6 +80,12 @@ def parse_feed(xml_bytes):
         if (mt := item.find("media:thumbnail", NS)) is not None:
             image_url = mt.get("url")
         if not image_url:
+            if (mc := item.find("media:content", NS)) is not None:
+                medium = mc.get("medium")
+                mime_type = mc.get("type")
+                if medium == "image" or (mime_type and mime_type.startswith("image/")) or not (medium or mime_type):
+                    image_url = mc.get("url")
+        if not image_url:
             for enc in item.findall("enclosure"):
                 if (enc.get("type") or "").startswith("image/"):
                     image_url = enc.get("url"); break
@@ -193,7 +199,26 @@ assert imgs[0].image_url == "https://example.com/enc.jpg",  f"enclosure: {imgs[0
 assert imgs[1].image_url == "https://example.com/thumb.jpg", f"media:thumbnail: {imgs[1].image_url}"
 assert imgs[2].image_url == "https://example.com/channel.jpg", f"kanava: {imgs[2].image_url}"
 
-print("  ✓ parse_feed: kuvaprioriteetti (media:thumbnail > enclosure > kanava)")
+# parse_feed: media:content tuki (HS-formaatti ja määritetty uutisotsikko)
+RSS_MEDIA_CONTENT = """<?xml version="1.0"?>
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <title>HS.fi - Uutiset</title>
+    <item>
+      <title>Ura | Neuvosto-Virossa oltiin ihmeissään, kun Jukka Kunnas toi amerikkalaista viihdettä maahan</title>
+      <link>https://www.hs.fi/ura/art-2000010582967.html</link>
+      <pubDate>Sun, 26 Jul 2026 12:00:00 +0300</pubDate>
+      <media:content url="https://hs.mediadelivery.fi/img/1920/123456.jpg" medium="image" />
+    </item>
+  </channel>
+</rss>""".encode('utf-8')
+
+items_mc = parse_feed(RSS_MEDIA_CONTENT)
+assert len(items_mc) == 1, f"Odotettu 1 artikkeli, saatiin {len(items_mc)}"
+assert items_mc[0].image_url == "https://hs.mediadelivery.fi/img/1920/123456.jpg", f"Väärä kuva: {items_mc[0].image_url}"
+assert items_mc[0].title == "Ura | Neuvosto-Virossa oltiin ihmeissään, kun Jukka Kunnas toi amerikkalaista viihdettä maahan"
+
+print("  ✓ parse_feed: media:content tuki (Helsingin Sanomat kuvatiedostot)")
 
 # parse_feed: tyhjä syöte
 RSS_EMPTY = b"""<?xml version="1.0"?><rss version="2.0"><channel></channel></rss>"""
@@ -211,7 +236,7 @@ print("\nKaikki yksikkötestit läpäisty ✓")
 EOF
 
 echo "Ajetaan jaetut ja lib-testit..."
-python3 -m unittest test_og_parser test_gcp_logging test_as2_contract test_voikko_job
+python3 -m unittest test_og_parser test_gcp_logging test_as2_contract test_voikko_job test_rss_fetch_job
 
 echo "Ajetaan write_api-testit..."
 python3 -m unittest test_write_api
