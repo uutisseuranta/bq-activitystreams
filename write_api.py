@@ -603,16 +603,22 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
         raise HTTPException(status_code=400, detail=f"Activity type '{act_type}' is not supported.")
 
 
-@app.get("/healthz")
+@app.get("/health")
 def liveness():
+    # Cloud Run liveness-probe.
+    # HUOM: Vältä 'z'-loppuisia polkuja (kuten /healthz), sillä Google Frontend (GFE) kaappaa
+    # ne ja palauttaa julkisista osoitteista 404-virheen ennen pyynnön välitystä kontille.
     return {"status": "ok"}
 
 
-@app.get("/readyz")
+@app.get("/ready")
 def readiness():
+    # Cloud Run readiness-probe.
+    # HUOM: Vältä 'z'-loppuisia polkuja (kuten /readyz), sillä GFE kaappaa ne ja palauttaa 404-virheen.
     try:
         bq_client.list_datasets(max_results=1)
         return {"status": "ready"}
     except Exception as e:
         logger.error(f"Readiness-tarkistus epäonnistui: {e}")
         raise HTTPException(status_code=503, detail="Database connection failed")
+

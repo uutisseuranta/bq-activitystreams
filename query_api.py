@@ -619,14 +619,18 @@ def get_replies(
     return {"type": "Collection", "totalItems": len(replies), "orderedItems": replies}
 
 
-@app.get("/healthz")
+@app.get("/health")
 def liveness():
-    # Cloud Run liveness-probe — vastaa aina 200 OK jos prosessi on elossa
+    # Cloud Run liveness-probe — vastaa aina 200 OK jos prosessi on elossa.
+    # HUOM: Vältä 'z'-loppuisia polkuja (kuten /healthz), sillä Google Frontend (GFE) kaappaa
+    # ne ja palauttaa julkisista osoitteista 404-virheen ennen pyynnön välitystä kontille.
     return {"status": "ok"}
 
 
-@app.get("/readyz")
+@app.get("/ready")
 def readiness():
+    # Cloud Run readiness-probe.
+    # HUOM: Vältä 'z'-loppuisia polkuja (kuten /readyz), sillä GFE kaappaa ne ja palauttaa 404-virheen.
     try:
         # Aktiivinen BQ-yhteystarkistus: list_datasets on kevyt API-kutsu
         # joka vahvistaa sekä autentikaation että verkkoyhteyden toimivuuden
@@ -635,3 +639,4 @@ def readiness():
     except Exception as e:
         logger.error(f"Readiness-tarkistus epäonnistui: {e}")
         raise HTTPException(status_code=503, detail="Database connection failed")
+
