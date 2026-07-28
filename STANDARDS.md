@@ -50,6 +50,7 @@ Edustaa uutisartikkelia, blogipostausta tai muuta itsenäistä tekstituotetta.
 | dislikes.totalItems | `integer` | ✅ | integer |  |  |  |  |
 | _uutisseuranta:reactionCount | `integer` |  | integer |  |  | Yhteenlaskettu reaktiomäärä (likes.totalItems + dislikes.totalItems). Neutraali nimitys: sisältää sekä Agree (Like) että Disagree (Dislike) -reaktiot. |  |
 | tag | `array` |  | [hashtag](#hashtag) |  |  | Artikkeliin liittyvät AS2 Hashtag-objektit (Voikko-jobin tuottamat morfologiset tagit) |  |
+| url_archive | `string` |  | string |  |  | Wayback Machine -arkistolinkki maksumuurin ohittamiseen |  |
 
 
 ---
@@ -165,6 +166,8 @@ Tämä taulukko määrittelee, miten sisällön rikastusprosessissa eri metadata
 | `attributedTo` | `article:author` | `author.name` | Sisällöntuottajan tai median nimi. |
 | `type` | `og:type` (`article`) | `@type` (`NewsArticle`) | Validoidaan tyypin vastaavuus (`og:type = article`). |
 | `tag` | — | `keywords` | Voikko-morfologiset tagit muunnetaan AS2 `Hashtag`-objekteiksi. |
+| `isAccessibleForFree` | — | `isAccessibleForFree` | Schema.org isAccessibleForFree (maksumuuristatus). |
+| `url_archive` | — | — | Wayback Machine -arkistolinkki maksumuurin kiertämiseksi. |
 
 ---
 

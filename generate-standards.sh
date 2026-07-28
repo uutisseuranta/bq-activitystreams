@@ -95,6 +95,8 @@ Tämä taulukko määrittelee, miten sisällön rikastusprosessissa eri metadata
 | `attributedTo` | `article:author` | `author.name` | Sisällöntuottajan tai median nimi. |
 | `type` | `og:type` (`article`) | `@type` (`NewsArticle`) | Validoidaan tyypin vastaavuus (`og:type = article`). |
 | `tag` | — | `keywords` | Voikko-morfologiset tagit muunnetaan AS2 `Hashtag`-objekteiksi. |
+| `isAccessibleForFree` | — | `isAccessibleForFree` | Schema.org isAccessibleForFree (maksumuuristatus). |
+| `url_archive` | — | — | Wayback Machine -arkistolinkki maksumuurin kiertämiseksi. |
 
 ---
 
