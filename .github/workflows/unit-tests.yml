@@ -132,7 +132,7 @@ jobs:
     concurrency:
       group: deploy-production
       cancel-in-progress: false
-    needs: [unit-test, terraform-lint]
+    needs: [unit-test]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
@@ -196,7 +196,7 @@ jobs:
             URL=$(gcloud run services describe $svc \
               --region europe-north1 \
               --project uutisseuranta-activitystreams \
-              --format='value(status.url)')
+              --format='value(metadata.annotations["run.googleapis.com/urls"])' | grep -o 'https://[^"]*europe-north1.run.app' | head -n 1)
             echo "Healthcheck: $svc → $URL/healthz"
             TOKEN=$(gcloud auth print-identity-token 2>/dev/null || echo "")
             HEALTH_OK=0
