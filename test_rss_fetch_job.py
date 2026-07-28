@@ -1,7 +1,9 @@
 # bq-activitystreams/test_rss_fetch_job.py
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 from bs4 import BeautifulSoup
+
 import rss_fetch_job
 
 
