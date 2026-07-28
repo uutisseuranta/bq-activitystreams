@@ -120,13 +120,7 @@ def fetch_url_stream_with_headers(
                         content_bytes = content_bytes[:max_bytes]
                         break
 
-                    try:
-                        # Etsitään head-osion päättymistä
-                        text = content_bytes.decode("utf-8", errors="ignore")
-                        if "</head>" in text.lower():
-                            break
-                    except Exception:
-                        pass
+
 
                 headers_dict = dict(response.headers)
                 return bytes(content_bytes), headers_dict
