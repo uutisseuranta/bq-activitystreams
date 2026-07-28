@@ -174,9 +174,12 @@ def main() -> None:
             if metadata.get("modified_time"):
                 object_json["updated"] = metadata["modified_time"]
 
-            # isAccessibleForFree: tallennetaan Schema.org maksumuuritieto ja lisätään tarvittaessa #tilaajille -tagi
+            # isAccessibleForFree: tallennetaan Schema.org maksumuuritieto ja haetaan suora Wayback Machine snapshot
             if metadata.get("is_accessible_for_free") is False:
                 object_json["isAccessibleForFree"] = False
+                snapshot_url = og_parser.get_wayback_snapshot(url)
+                if snapshot_url:
+                    object_json["url_archive"] = snapshot_url
                 tags = object_json.get("tag", [])
                 if not any(isinstance(t, dict) and t.get("name") == "#tilaajille" for t in tags):
                     tags.append({"type": "Hashtag", "name": "#tilaajille", "href": "https://uutisseuranta.net/?tag=%23tilaajille"})
