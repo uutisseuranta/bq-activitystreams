@@ -2,9 +2,8 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from bs4 import BeautifulSoup
-
 import rss_fetch_job
+from bs4 import BeautifulSoup
 
 
 class TestRssFetchJob(unittest.TestCase):
