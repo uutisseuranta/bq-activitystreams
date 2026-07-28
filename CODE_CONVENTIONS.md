@@ -235,3 +235,20 @@ L-006,2026-07-05,2026-07-05 12:00:00,Ignore Ruff E501 (Line too long),...
 
 Jira-integraation päätösloki:
 [jira-github-integration/DECISION_LOG.csv](https://github.com/uutisseuranta/jira-github-integration/blob/main/DECISION_LOG.csv)
+
+---
+
+## GCP-first kehitys- ja testausstrategia (Päätös G-017)
+
+Paikalliset testit ja emulaattorit eivät vastaa täysin GCP:n tuotantoympäristön oikeuksia, verkkoreitityksiä ja Cloud Run -revisioiden liikennejakoja. Tämän vuoksi noudatetaan seuraavaa kehitysmallia:
+
+1. **Julkaisuun tähtäävä kehitys PR-vetoisesti**:
+   - Älä koskaan kehitä tai tee julkaisuun tähtääviä commit-ketjuja suoraan `main`-haaraan.
+   - Avaa PR heti kehityksen alussa, jotta koodi deployataan ja sitä testataan tuotannon kaltaisessa aidoissa GCP-ympäristöissä ennen mergeä.
+2. **Liikennejakojen (traffic routing) ja healthcheckien hallinta**:
+   - Varmista, ettei Cloud Run -palveluiden liikenne jää jumiin vanhoihin revisioihin. Rollback- ja liikenteenohjauskomennot täytyy testata ja ajaa livenä.
+3. **IAM-palvelutilien (Service Account) testaus**:
+   - Varmista, että sovelluksen vaatimat BigQuery-, Firestore- ja Secret Manager -oikeudet on myönnetty kontin suorittavalle Service Accountille eikä vain kehittäjän omalle profiilille.
+4. **Skeemojen ja dokumenttien synkronointi**:
+   - Kaikki datamallimuutokset skeemoissa (`*.schema.json`) on ajettava dokumentaatioon (`STANDARDS.md`) `generate-standards.sh` -skriptillä saman commit-ketjun aikana ennen PR:n luontia, jotta CI-putken validointi ei kaadu.
+
