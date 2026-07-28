@@ -438,8 +438,8 @@ async def get_stats():
     import time
 
     now = time.time()
-    # 1 tunnin välimuisti (3600 sekuntia)
-    if _stats_cache is not None and (now - _stats_cache_time) < 3600:
+    # 5 minuutin välimuisti (300 sekuntia)
+    if _stats_cache is not None and (now - _stats_cache_time) < 300:
         return _stats_cache
 
     try:
