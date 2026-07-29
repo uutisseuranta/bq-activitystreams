@@ -371,6 +371,7 @@ def handle_reaction(
     return Response(status_code=201, content=json.dumps({"id": act_id}), media_type="application/json")
 
 
+@app.post("/ap/inbox")
 @app.post("/ap/activities")
 @limiter.limit("30/minute")
 def post_activity(request: Request, activity: Dict[str, Any], authorization: Optional[str] = Header(None)):
@@ -598,6 +599,106 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
             raise HTTPException(status_code=500, detail="Database write failed.")
 
         return {"status": "updated", "id": act_id}
+
+    elif act_type == "Add":
+        if not isinstance(act_object, dict) or not isinstance(activity.get("target"), dict):
+            raise HTTPException(status_code=400, detail="Object and target must be JSON objects.")
+
+        obj_type = act_object.get("type")
+        tag_name = act_object.get("name")
+        target_id = activity.get("target", {}).get("id")
+        target_type = activity.get("target", {}).get("type")
+
+        if obj_type != "Hashtag" or not tag_name:
+            raise HTTPException(status_code=400, detail="Only 'Hashtag' object type with a name is supported.")
+
+        if target_type != "Article" or not target_id:
+            raise HTTPException(status_code=400, detail="Target must be an 'Article' with a valid ID.")
+
+        tag_name = tag_name.lower()
+        if not tag_name.startswith('#'):
+            tag_name = '#' + tag_name
+
+        target_obj = get_object_by_id(target_id)
+        if not target_obj or target_obj["deleted"]:
+            raise HTTPException(status_code=404, detail="Target article not found or deleted.")
+
+        current_tag_objs = target_obj["object_json"].get("tag") or []
+        tag_exists = any(
+            t.get("name", "").lower() == tag_name
+            for t in current_tag_objs
+            if isinstance(t, dict)
+        )
+        if tag_exists:
+            return Response(
+                status_code=200,
+                content=json.dumps({"status": "already_added", "id": target_id}),
+                media_type="application/json"
+            )
+
+        import urllib.parse
+        word = tag_name.lstrip('#')
+        new_tag_obj = {
+            "type": "Hashtag",
+            "name": tag_name,
+            "href": f"https://uutisseuranta.net/ap/outbox?tag=%23{urllib.parse.quote(word)}"
+        }
+
+        updated_tags_list = current_tag_objs.copy()
+        updated_tags_list.append(new_tag_obj)
+
+        updated_object = target_obj["object_json"].copy()
+        updated_object["tag"] = updated_tags_list
+
+        tags_array = [t.get("name", "").lower() for t in updated_tags_list if isinstance(t, dict) and t.get("name")]
+
+        act_id = f"https://activitystreams.uutisseuranta.net/ap/activities/adds/{ulid.new().str}"
+        activity["id"] = act_id
+        activity["published"] = published_str
+        activity["actor"] = actor_id
+
+        activities_row = {
+            "id": act_id,
+            "type": "Add",
+            "actor": actor_id,
+            "object_id": target_id,
+            "object_type": "Article",
+            "object_json": json.dumps(activity),
+            "target_id": None,
+            "in_reply_to": None,
+            "thread_root": None,
+            "published": published_str,
+            "received_at": published_str,
+        }
+
+        update_query = f"""
+            UPDATE `{PROJECT}.{DATASET}.objects`
+            SET
+              tags = @tags,
+              object_json = PARSE_JSON(@object_json),
+              updated = CURRENT_TIMESTAMP()
+            WHERE id = @id
+        """
+        update_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ArrayQueryParameter("tags", "STRING", tags_array),
+                bigquery.ScalarQueryParameter("object_json", "STRING", json.dumps(updated_object)),
+                bigquery.ScalarQueryParameter("id", "STRING", target_id),
+            ]
+        )
+
+        try:
+            bq_client.insert_rows_json(f"{PROJECT}.{SOCIAL_DATASET}.activities", [activities_row])
+            bq_client.query(update_query, job_config=update_config).result()
+        except Exception as e:
+            logger.error(f"Virhe lisättäessä tagia: {e}")
+            raise HTTPException(status_code=500, detail="Database write failed.")
+
+        return Response(
+            status_code=201,
+            content=json.dumps({"status": "added", "id": act_id}),
+            media_type="application/json"
+        )
 
     else:
         raise HTTPException(status_code=400, detail=f"Activity type '{act_type}' is not supported.")
