@@ -71,6 +71,10 @@ resource "google_cloud_run_v2_service" "query_api" {
         value = var.gcp_project
       }
       env {
+        name  = "SCHEDULER_REGION"
+        value = var.scheduler_region
+      }
+      env {
         name  = "BQ_DATASET"
         value = var.bq_dataset
       }

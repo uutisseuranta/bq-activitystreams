@@ -23,6 +23,33 @@ logger = get_logger("query-api")
 
 current_request = contextvars.ContextVar("current_request")
 
+last_user_activity = time.time()
+
+
+def manage_scheduler_job(action: str):
+    try:
+        from google.auth import default
+        from google.auth.transport.requests import Request
+        import httpx
+        
+        credentials, project = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+        if not credentials.valid:
+            credentials.refresh(Request())
+        
+        region = os.getenv("SCHEDULER_REGION", "europe-west1")
+        job_name = "query-api-keep-warm"
+        
+        url = f"https://cloudscheduler.googleapis.com/v1/projects/{project}/locations/{region}/jobs/{job_name}:{action}"
+        headers = {
+            "Authorization": f"Bearer {credentials.token}",
+            "Content-Length": "0"
+        }
+        
+        r = httpx.post(url, headers=headers)
+        logger.info(f"Cloud Scheduler job {action} response: {r.status_code} {r.text}")
+    except Exception as e:
+        logger.error(f"Failed to {action} Cloud Scheduler job: {e}")
+
 
 def get_query_user_or_ip(request: Request) -> str:
     current_request.set(request)
@@ -194,10 +221,17 @@ def get_total_items_cached(tags: List[str]) -> int:
 @limiter.limit(get_outbox_limit)
 def get_outbox(
     request: Request,
+    background_tasks: BackgroundTasks,
     tag: Optional[List[str]] = Query(default=None, description="Haettavat tagit (toistuva parametri, valinnainen)"),
     n: int = Query(default=50, description="Palautettavien kohteiden määrä (1-500)"),
     authorization: Optional[str] = Header(None),
 ):
+    global last_user_activity
+    now = time.time()
+    if now - last_user_activity > 7200:
+        background_tasks.add_task(manage_scheduler_job, "resume")
+    last_user_activity = now
+
     # Verifioidaan token jos sellainen on toimitettu
     verify_auth_token_optional(authorization)
 
@@ -449,12 +483,15 @@ _stats_cache_time = 0.0
 
 
 @app.get("/ap/stats")
-async def get_stats():
+async def get_stats(background_tasks: BackgroundTasks):
     """Palauttaa uutisseurannan avainlukutilastot välimuistista tai laskee ne BigQueryssä."""
-    global _stats_cache, _stats_cache_time
+    global _stats_cache, _stats_cache_time, last_user_activity
     import time
 
     now = time.time()
+    if now - last_user_activity > 7200:
+        background_tasks.add_task(manage_scheduler_job, "resume")
+    last_user_activity = now
     # 5 minuutin välimuisti (300 sekuntia)
     if _stats_cache is not None and (now - _stats_cache_time) < 300:
         return _stats_cache
@@ -554,9 +591,16 @@ async def get_stats():
 @app.get("/ap/replies")
 def get_replies(
     request: Request,
+    background_tasks: BackgroundTasks,
     id: str = Query(default=None, description="Alkuperäisen artikkelin tai pääkommentin AS2 id"),
     authorization: Optional[str] = Header(None),
 ):
+    global last_user_activity
+    now = time.time()
+    if now - last_user_activity > 7200:
+        background_tasks.add_task(manage_scheduler_job, "resume")
+    last_user_activity = now
+
     # Verifioidaan token jos sellainen on toimitettu
     verify_auth_token_optional(authorization)
 
@@ -612,6 +656,17 @@ def get_replies(
             continue
 
     return {"type": "Collection", "totalItems": len(replies), "orderedItems": replies}
+
+
+@app.get("/ap/keep-warm")
+def keep_warm():
+    global last_user_activity
+    elapsed = time.time() - last_user_activity
+    if elapsed > 7200:  # 2 hours
+        logger.info(f"Ei käyttäjäaktiivisuutta 2 tuntiin (kulunut {elapsed:.1f}s). Pausetaan keep-warm ajastin.")
+        manage_scheduler_job("pause")
+        return {"status": "paused", "reason": "inactivity", "elapsed_seconds": elapsed}
+    return {"status": "active", "elapsed_seconds": elapsed}
 
 
 @app.get("/health")

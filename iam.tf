@@ -204,4 +204,11 @@ resource "google_cloud_run_v2_service_iam_member" "og_scraper_public" {
   member   = "allUsers"
 }
 
+# Sallitaan query-apille Cloud Scheduler -ajastimen hallinta (pausettaminen ja jatkaminen)
+resource "google_project_iam_member" "query_api_scheduler_admin" {
+  project = var.gcp_project
+  role    = "roles/cloudscheduler.admin"
+  member  = "serviceAccount:${google_service_account.query_api.email}"
+}
+
 
