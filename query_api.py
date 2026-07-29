@@ -133,7 +133,9 @@ def verify_auth_token_optional(auth_header: Optional[str]) -> Optional[str]:
     if not auth_header:
         return None
     if not auth_header.startswith("Bearer "):
-        logger.warning("Autentikaatio hylätty: virheellinen Authorization-formaatti (ohitetaan julkisessa rajapinnassa)")
+        logger.warning(
+            "Autentikaatio hylätty: virheellinen Authorization-formaatti (ohitetaan julkisessa rajapinnassa)"
+        )
         return None
 
     token = auth_header.split(" ")[1]
@@ -689,4 +691,3 @@ def readiness():
     except Exception as e:
         logger.error(f"Readiness-tarkistus epäonnistui: {e}")
         raise HTTPException(status_code=503, detail="Database connection failed")
-
