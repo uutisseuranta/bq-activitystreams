@@ -64,7 +64,9 @@ resource "google_cloud_run_v2_service" "query_api" {
     }
 
     containers {
-      image = "${local.image_base}/query-api:latest"
+      image   = "${local.image_base}/query-api:latest"
+      command = ["uvicorn"]
+      args    = ["query_api:app", "--host", "0.0.0.0", "--port", "8080"]
 
       env {
         name  = "GCP_PROJECT"
@@ -130,7 +132,9 @@ resource "google_cloud_run_v2_service" "write_api" {
     }
 
     containers {
-      image = "${local.image_base}/write-api:latest"
+      image   = "${local.image_base}/write-api:latest"
+      command = ["uvicorn"]
+      args    = ["write_api:app", "--host", "0.0.0.0", "--port", "8080"]
 
       env {
         name  = "GCP_PROJECT"
@@ -205,7 +209,9 @@ resource "google_cloud_run_v2_service" "og_scraper" {
     }
 
     containers {
-      image = "${local.image_base}/og-scraper:latest"
+      image   = "${local.image_base}/og-scraper:latest"
+      command = ["uvicorn"]
+      args    = ["og_scraper:app", "--host", "0.0.0.0", "--port", "8080"]
 
       env {
         name  = "GCP_PROJECT"
