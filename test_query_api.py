@@ -140,21 +140,21 @@ class TestReadyzAndHealthz(unittest.TestCase):
         self.client = TestClient(app)
 
     def test_healthz(self):
-        response = self.client.get("/healthz")
+        response = self.client.get("/health")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ok"})
 
     @patch("query_api.bq_client")
     def test_readyz_success(self, mock_bq):
         mock_bq.list_datasets.return_value = []
-        response = self.client.get("/readyz")
+        response = self.client.get("/ready")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ready"})
 
     @patch("query_api.bq_client")
     def test_readyz_failure(self, mock_bq):
         mock_bq.list_datasets.side_effect = Exception("Auth failed")
-        response = self.client.get("/readyz")
+        response = self.client.get("/ready")
         self.assertEqual(response.status_code, 503)
         self.assertIn("Database connection failed", response.json()["detail"])
 

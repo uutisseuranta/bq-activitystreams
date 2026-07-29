@@ -540,21 +540,21 @@ class TestHealthEndpoints(unittest.TestCase):
         self.client = TestClient(app)
 
     def test_healthz_returns_ok(self):
-        response = self.client.get("/healthz")
+        response = self.client.get("/health")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "ok")
 
     @patch("write_api.bq_client")
     def test_readyz_returns_ready_when_bq_ok(self, mock_bq):
         mock_bq.list_datasets.return_value = iter([])
-        response = self.client.get("/readyz")
+        response = self.client.get("/ready")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "ready")
 
     @patch("write_api.bq_client")
     def test_readyz_returns_503_when_bq_fails(self, mock_bq):
         mock_bq.list_datasets.side_effect = Exception("BQ unreachable")
-        response = self.client.get("/readyz")
+        response = self.client.get("/ready")
         self.assertEqual(response.status_code, 503)
 
 
@@ -599,3 +599,112 @@ class TestWriteRateLimiting(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 429)
         self.assertIn("Retry-After", response.headers)
+
+
+class TestAddActivity(unittest.TestCase):
+    def setUp(self):
+        self.client = TestClient(app)
+        from write_api import limiter
+        limiter.enabled = False
+        self.valid_payload = {
+            "@context": "https://www.w3.org/ns/activitystreams",
+            "type": "Add",
+            "actor": "https://uutisseuranta.net/users/test-user",
+            "object": {
+                "type": "Hashtag",
+                "name": "#tiede"
+            },
+            "target": {
+                "type": "Article",
+                "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/hs/123"
+            }
+        }
+
+    @patch("write_api.bq_client")
+    @patch("write_api.get_object_by_id")
+    def test_add_tag_success_inbox(self, mock_get_obj, mock_bq):
+        mock_get_obj.return_value = {
+            "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/hs/123",
+            "source": "user",
+            "deleted": False,
+            "like_count": 0,
+            "dislike_count": 0,
+            "object_json": {
+                "type": "Article",
+                "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/hs/123",
+                "tag": []
+            }
+        }
+        mock_bq.insert_rows_json.return_value = []
+        mock_bq.query.return_value.result.return_value = None
+
+        response = self.client.post(
+            "/ap/inbox",
+            json=self.valid_payload,
+            headers={"Authorization": "Bearer mock-test"},
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertIn("added", response.json()["status"])
+
+    @patch("write_api.bq_client")
+    @patch("write_api.get_object_by_id")
+    def test_add_tag_success_activities(self, mock_get_obj, mock_bq):
+        mock_get_obj.return_value = {
+            "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/hs/123",
+            "source": "user",
+            "deleted": False,
+            "like_count": 0,
+            "dislike_count": 0,
+            "object_json": {
+                "type": "Article",
+                "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/hs/123",
+                "tag": []
+            }
+        }
+        mock_bq.insert_rows_json.return_value = []
+        mock_bq.query.return_value.result.return_value = None
+
+        response = self.client.post(
+            "/ap/activities",
+            json=self.valid_payload,
+            headers={"Authorization": "Bearer mock-test"},
+        )
+        self.assertEqual(response.status_code, 201)
+
+    @patch("write_api.bq_client")
+    @patch("write_api.get_object_by_id")
+    def test_add_existing_tag_returns_200(self, mock_get_obj, mock_bq):
+        mock_get_obj.return_value = {
+            "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/hs/123",
+            "source": "user",
+            "deleted": False,
+            "like_count": 0,
+            "dislike_count": 0,
+            "object_json": {
+                "type": "Article",
+                "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/hs/123",
+                "tag": [
+                    {"type": "Hashtag", "name": "#tiede", "href": "https://..."}
+                ]
+            }
+        }
+
+        response = self.client.post(
+            "/ap/inbox",
+            json=self.valid_payload,
+            headers={"Authorization": "Bearer mock-test"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "already_added")
+
+    @patch("write_api.get_object_by_id")
+    def test_add_tag_article_not_found_returns_404(self, mock_get_obj):
+        mock_get_obj.return_value = None
+
+        response = self.client.post(
+            "/ap/inbox",
+            json=self.valid_payload,
+            headers={"Authorization": "Bearer mock-test"},
+        )
+        self.assertEqual(response.status_code, 404)
+

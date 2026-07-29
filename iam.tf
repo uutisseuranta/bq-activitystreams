@@ -144,15 +144,6 @@ resource "google_project_iam_member" "backend_cloudbuild" {
   member  = "serviceAccount:${google_service_account.backend.email}"
 }
 
-# GCS-kirjoitusoikeus Cloud Build source uploadille
-resource "google_project_iam_member" "backend_storage_source" {
-  #checkov:skip=CKV_GCP_34: Cloud Build source upload vaatii GCS-kirjoitusoikeuden
-  # Huom: roles/storage.objectCreator antaa oikeuden kaikkiin projektin GCS-bucketeihin.
-  # Rajaus Cloud Build -bucketille resurssitasolla ei ole mahdollinen gcloud run deploy --source -polulla.
-  project = var.gcp_project
-  role    = "roles/storage.objectCreator"
-  member  = "serviceAccount:${google_service_account.backend.email}"
-}
 
 # Cloud Run Admin -oikeus deploy-SA:lle, jotta se voi päivittää ja hallinnoida Cloud Run -palveluita
 resource "google_project_iam_member" "backend_run_admin" {
@@ -177,6 +168,23 @@ resource "google_project_iam_member" "backend_artifactregistry_writer" {
   role    = "roles/artifactregistry.writer"
   member  = "serviceAccount:${google_service_account.backend.email}"
 }
+
+# Service Usage Consumer -oikeus deploy-SA:lle, jotta Cloud Build voi käyttää projektia kääntämiseen
+resource "google_project_iam_member" "backend_service_usage" {
+  #checkov:skip=CKV_GCP_34: Deploy-SA vaatii oikeuden käyttää projektin palveluita Cloud Buildiin
+  project = var.gcp_project
+  role    = "roles/serviceusage.serviceUsageConsumer"
+  member  = "serviceAccount:${google_service_account.backend.email}"
+}
+
+# Viewer-oikeus deploy-SA:lle, jotta gcloud builds submit voi striimata lokit default-ämpäristä
+resource "google_project_iam_member" "backend_viewer" {
+  #checkov:skip=CKV_GCP_34: Deploy-SA vaatii Viewer-oikeuden lokien striimaukseen kääntämisen aikana
+  project = var.gcp_project
+  role    = "roles/viewer"
+  member  = "serviceAccount:${google_service_account.backend.email}"
+}
+
 
 # Salli kaikkien kirjautuneiden Google-käyttäjien kutsua write-apita (G-009, G-010)
 resource "google_cloud_run_v2_service_iam_member" "write_api_all_authenticated_users" {

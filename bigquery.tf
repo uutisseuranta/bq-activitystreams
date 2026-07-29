@@ -26,7 +26,7 @@
 # ---------------------------------------------------------------------------
 
 resource "google_bigquery_dataset" "main" {
-  dataset_id                 = var.bq_dataset            # "activitystreams"
+  dataset_id                 = var.bq_dataset # "activitystreams"
   location                   = var.region
   delete_contents_on_destroy = false
 
@@ -112,7 +112,7 @@ resource "google_bigquery_table" "og_cache" {
 # ---------------------------------------------------------------------------
 
 resource "google_bigquery_dataset" "social" {
-  dataset_id                 = var.bq_social_dataset     # "activitystreams_social"
+  dataset_id                 = var.bq_social_dataset # "activitystreams_social"
   location                   = var.region
   delete_contents_on_destroy = false
 

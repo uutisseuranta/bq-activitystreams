@@ -545,12 +545,97 @@ gcloud run services update write-api \
 
 ### CI/CD-työnkulku (GitHub Actions)
 
-1. PR → CI ajaa `unit-test.sh`
-2. Push `main`-haaraan → GitHub Actions käynnistyy
-3. WIF-autentikaatio GCP:hen (ei pysyviä avaimia)
-4. Docker-imagen rakennus → Artifact Registry
-5. `gcloud run` -deploy
-6. `live-smoke-test.sh` post-deploy
+Deploy-työnkulku jaetaan kahteen vaiheeseen puhtaan ja atomisen IaC-hallinnan toteuttamiseksi:
+
+```
+push to main
+  └── terraform-apply   (vaihe 3a: probe-konfiguraatio, IAM-oikeudet, static infra)
+        └── deploy       (vaihe 3b: gcloud run deploy rinnakkaisena matriisina)
+```
+
+1. **Pull Request -tarkistukset (`unit-tests.yml`)**:
+   - Jokaisella PR-katselmoinnilla ajetaan `unit-test.sh`, Ruff-linttaukset, Checkov-turvallisuusanalyysi sekä `terraform validate` / `tflint`. Job ei ikinä deploaa sovellusta pilveen.
+2. **Push päähaaraan (`deploy.yml`)**:
+   - **Vaihe 3a: `terraform-apply`**: Ajaa `terraform apply` ja varmistaa, että Cloud Run -palveluiden probe-polut (`/health` ja `/ready`) ja IAM-luvat ovat ajan tasalla ennen sovelluksen deploamista.
+   - **Vaihe 3b: `deploy` (rinnakkainen matriisi)**: Ajaa `gcloud run deploy` matriisina (`fail-fast: false`) kullekin palvelulle (`query-api`, `write-api`, `og-scraper`). Kontit saavat dynaamiset metatiedot ja `git-sha` -labelit kääntöhetkellä.
+3. **Valvontailmoitus (`notify`)**:
+   - Lähettää `deploy`-jobin päätyttyä (needs: `deploy`, `if: always()`) keskitetyn webhook-ilmoituksen `ops`-repositorioon, josta se reitittyy edelleen Jira US-projektin tehtäviin.
+
+#### Deploy-transaktioketju (Mermaid):
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Dev as Kehittäjä
+
+    box rgb(240, 240, 240) GitHub Ympäristö
+        participant Repo as uutisseuranta/bq-activitystreams<br/>(Git push)
+        participant GHA as uutisseuranta/bq-activitystreams<br/>(GHA: deploy.yml)
+        participant Ops as uutisseuranta/ops<br/>(GHA: ci-monitor / jira)
+    end
+
+    box rgb(245, 245, 255) Google Cloud Platform (GCP)
+        participant WIF as Workload Identity Federation<br/>(OIDC valtuutus)
+        participant GCB as Cloud Build<br/>(Konttikäännökset)
+        participant GAR as Artifact Registry<br/>(Konttisäilö)
+        participant TF as Terraform Engine<br/>(GCS State tallennus)
+        participant CR as Cloud Run<br/>(Services & Jobs)
+    end
+
+    Dev->>Repo: Git push (main-haaraan)
+    activate Repo
+    Repo->>GHA: Laukaise 'Deploy to production' workflow (deploy.yml)
+    deactivate Repo
+    activate GHA
+
+    %% Vaihe 1: WIF Autentikointi
+    rect rgb(230, 245, 255)
+        Note over GHA, WIF: Vaihe 1: GCP OIDC / WIF-tunnistautuminen
+        GHA->>WIF: Pyydä OIDC-token (GitHub ID-Token)
+        Note over WIF: Hyväksytyt polut (wif.tf attribute_condition):<br/>1. main ja unit-tests.yml<br/>2. main ja smoke-test.yml<br/>3. main ja deploy.yml (uusi lisäys)<br/>4. PR-haara ja unit-tests.yml
+        WIF->>WIF: Validoi token (attribute_condition wif.tf:ssä)
+        WIF-->>GHA: Palauta GCP OAuth2-istuntotoken (backend-SA)
+    end
+
+    %% Vaihe 2: Terraform Apply (3a)
+    rect rgb(230, 255, 235)
+        Note over GHA, TF: Vaihe 2: Infra ja probe-konfiguraatio (3a)
+        GHA->>TF: terraform init & apply
+        activate TF
+        TF->>TF: Lukitse GCS state-tiedosto
+        TF->>CR: Varmista static infra ja probet (/health, /ready)
+        TF->>TF: Tallenna uusi tila GCS Stateen ja vapauta lukitus
+        deactivate TF
+        TF-->>GHA: Terraform apply valmis
+    end
+
+    %% Vaihe 3: Konttien rakennus ja deploy (3b)
+    rect rgb(255, 240, 230)
+        Note over GHA, GCB: Vaihe 3: Konttikäännös ja palvelujen käynnistys (3b)
+        par fail-fast: false — query-api, write-api, og-scraper rinnakkain
+            GHA->>GCB: gcloud builds submit (lähdekoodi + :latest)
+            GCB->>GCB: Rakenna container-image
+            GCB->>GAR: Push image Artifact Registryyn (:latest)
+            GCB-->>GHA: Käännös valmis
+            GHA->>CR: gcloud run deploy --image=...:latest --update-labels="git-sha=$sha" --update-env-vars="BUILD_SHA=$sha"
+            CR-->>CR: Palvelu käynnistyy
+            CR-->>GHA: startup_probe /ready OK
+        end
+    end
+
+    %% Vaihe 4: Ilmoitukset ops-repolle
+    rect rgb(255, 255, 240)
+        Note over GHA, Ops: Vaihe 4: Keskitetty valvontailmoitus
+        GHA->>Ops: POST /repos/uutisseuranta/ops/dispatches (client_payload)
+        activate Ops
+        Ops->>Ops: Välitä tilatieto Jira-webhookille (Jira-integraatio)
+        deactivate Ops
+    end
+
+    GHA-->>Dev: Valmis (Actions-status vihreänä)
+    deactivate GHA
+
+
 
 ---
 

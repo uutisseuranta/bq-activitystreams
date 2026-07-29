@@ -1,0 +1,111 @@
+name: Deploy to production
+
+on:
+  push:
+    branches: [main]
+
+env:
+  REGION: europe-north1
+  IMAGE_REGISTRY: europe-north1-docker.pkg.dev/uutisseuranta-activitystreams/jobs
+
+jobs:
+  terraform-apply:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: google-github-actions/auth@71f986410dfbc7added4569d411d040a91dc6935 # v2.1.10
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "1.9.8"
+      - name: terraform init
+        run: terraform init
+      - name: terraform apply
+        run: |
+          terraform apply -auto-approve \
+            -var="google_client_id=${{ secrets.GOOGLE_CLIENT_ID }}"
+        env:
+          TF_VAR_gcp_project: uutisseuranta-activitystreams
+          GITHUB_TOKEN: ${{ secrets.OPS_DISPATCH_TOKEN }}
+
+
+
+  deploy:
+    needs: terraform-apply
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: query-api
+            args: "query_api:app,--host,0.0.0.0,--port,8080"
+          - service: write-api
+            args: "write_api:app,--host,0.0.0.0,--port,8080"
+          - service: og-scraper
+            args: "og_scraper:app,--host,0.0.0.0,--port,8080"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: google-github-actions/auth@71f986410dfbc7added4569d411d040a91dc6935 # v2.1.10
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+      - uses: google-github-actions/setup-gcloud@6a7c903a70c8625ed6700fa299f5ddb4ca6022e9 # v2.1.5
+
+      - name: Rakenna ja julkaise kontti-image
+        run: |
+          gcloud builds submit --tag ${{ env.IMAGE_REGISTRY }}/${{ matrix.service }}:latest \
+            --project uutisseuranta-activitystreams
+
+      - name: Deploy uusi versio Cloud Run -palveluun
+        run: |
+          gcloud run deploy ${{ matrix.service }} \
+            --image ${{ env.IMAGE_REGISTRY }}/${{ matrix.service }}:latest \
+            --region ${{ env.REGION }} \
+            --project uutisseuranta-activitystreams \
+            --command uvicorn --args="${{ matrix.args }}" \
+            --cpu-boost \
+            --update-labels="git-sha=${{ github.sha }},deployed-by=github-actions" \
+            --update-env-vars="BUILD_SHA=${{ github.sha }},DEPLOYED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  notify-ops:
+    needs: [deploy]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine overall status
+        id: status
+        run: |
+          if [ "${{ needs.deploy.result }}" = "failure" ]; then
+            echo "status=failure" >> $GITHUB_OUTPUT
+          else
+            echo "status=success" >> $GITHUB_OUTPUT
+          fi
+      - name: Send Status to Centralized CI Monitor (ops repo)
+        env:
+          OPS_TOKEN: ${{ secrets.OPS_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$OPS_TOKEN" ]; then
+            echo "::warning::OPS_DISPATCH_TOKEN secret is missing! Skipping notification."
+            exit 0
+          fi
+          curl -s -X POST \
+            -H "Authorization: token $OPS_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/uutisseuranta/ops/dispatches \
+            -d '{
+              "event_type": "workflow-notification",
+              "client_payload": {
+                "repo": "${{ github.repository }}",
+                "workflow": "${{ github.workflow }}",
+                "status": "${{ steps.status.outputs.status }}",
+                "run_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+              }
+            }'
