@@ -46,11 +46,22 @@ jobs:
       matrix:
         include:
           - service: query-api
+            type: service
             args: "query_api:app,--host,0.0.0.0,--port,8080"
           - service: write-api
+            type: service
             args: "write_api:app,--host,0.0.0.0,--port,8080"
           - service: og-scraper
+            type: service
             args: "og_scraper:app,--host,0.0.0.0,--port,8080"
+          - service: rss-fetch-job
+            type: job
+          - service: likes-and-updated-job
+            type: job
+          - service: voikko-job
+            type: job
+          - service: og-enrichment-job
+            type: job
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: google-github-actions/auth@71f986410dfbc7added4569d411d040a91dc6935 # v2.1.10
@@ -65,6 +76,7 @@ jobs:
             --project uutisseuranta-activitystreams
 
       - name: Deploy uusi versio Cloud Run -palveluun
+        if: matrix.type == 'service'
         run: |
           gcloud run deploy ${{ matrix.service }} \
             --image ${{ env.IMAGE_REGISTRY }}/${{ matrix.service }}:latest \
@@ -74,6 +86,15 @@ jobs:
             --cpu-boost \
             --update-labels="git-sha=${{ github.sha }},deployed-by=github-actions" \
             --update-env-vars="BUILD_SHA=${{ github.sha }},DEPLOYED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+      - name: Deploy uusi versio Cloud Run -jobiin
+        if: matrix.type == 'job'
+        run: |
+          gcloud run jobs update ${{ matrix.service }} \
+            --image ${{ env.IMAGE_REGISTRY }}/${{ matrix.service }}:latest \
+            --region ${{ env.REGION }} \
+            --project uutisseuranta-activitystreams \
+            --update-labels="git-sha=${{ github.sha }},deployed-by=github-actions"
 
   notify-ops:
     needs: [deploy]
