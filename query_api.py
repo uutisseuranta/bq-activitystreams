@@ -270,8 +270,11 @@ def get_outbox(
         )
 
     try:
+        logger.info(f"Suoritetaan kysely: {query}")
+        logger.info(f"Parametrit: limit_n={n}, search_tags={search_tags}")
         query_job = bq_client.query(query, job_config=job_config)
         rows = list(query_job.result())
+        logger.info(f"Kysely palautti {len(rows)} riviä.")
     except Exception as e:
         logger.error(f"BigQuery-haku epäonnistui: {e}")
         raise HTTPException(status_code=500, detail="Database query failed.")
