@@ -647,10 +647,14 @@ def get_replies(
             else:
                 obj = obj_data
 
-            # Päivitetään tykkäystiedot objects-taulun mukaan
-            if "object" in obj and isinstance(obj["object"], dict):
-                obj["object"]["like_count"] = row["like_count"]
-                obj["object"]["dislike_count"] = row["dislike_count"]
+            # Injektoidaan in_reply_to aktiviteetti-sarakkeesta Note-objektiin
+            # (varmistaa yhteensopivuuden riippumatta object_json-tallennustavasta)
+            if row["in_reply_to"] and not obj.get("inReplyTo"):
+                obj["inReplyTo"] = row["in_reply_to"]
+
+            # Päivitetään tykkäystiedot objects-taulun mukaan (Note-objektissa suoraan)
+            obj["like_count"] = row["like_count"] or 0
+            obj["dislike_count"] = row["dislike_count"] or 0
 
             replies.append(obj)
         except Exception as e:
