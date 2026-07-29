@@ -28,23 +28,23 @@ last_user_activity = time.time()
 
 def manage_scheduler_job(action: str):
     try:
+        import httpx
         from google.auth import default
         from google.auth.transport.requests import Request
-        import httpx
-        
+
         credentials, project = default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
         if not credentials.valid:
             credentials.refresh(Request())
-        
+
         region = os.getenv("SCHEDULER_REGION", "europe-west1")
         job_name = "query-api-keep-warm"
-        
+
         url = f"https://cloudscheduler.googleapis.com/v1/projects/{project}/locations/{region}/jobs/{job_name}:{action}"
         headers = {
             "Authorization": f"Bearer {credentials.token}",
             "Content-Length": "0"
         }
-        
+
         r = httpx.post(url, headers=headers)
         logger.info(f"Cloud Scheduler job {action} response: {r.status_code} {r.text}")
     except Exception as e:
