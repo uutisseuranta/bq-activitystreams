@@ -107,3 +107,18 @@ resource "google_cloud_scheduler_job" "likes_and_updated" {
     }
   }
 }
+
+resource "google_cloud_scheduler_job" "query_api_keep_warm" {
+  name             = "query-api-keep-warm"
+  region           = var.scheduler_region
+  project          = var.gcp_project
+  description      = "Pings query-api every 10 minutes to keep it warm. Paused automatically after 2 hours of inactivity."
+  schedule         = "*/10 * * * *"
+  time_zone        = "Europe/Helsinki"
+  attempt_deadline = "60s"
+
+  http_target {
+    http_method = "GET"
+    uri         = "${google_cloud_run_v2_service.query_api.uri}/ap/keep-warm"
+  }
+}
