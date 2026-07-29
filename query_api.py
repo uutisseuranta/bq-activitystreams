@@ -616,7 +616,7 @@ def get_replies(
         SELECT
           o.id,
           o.published,
-          o.object_json,
+          a.object_json,
           o.like_count,
           o.dislike_count,
           a.in_reply_to,
