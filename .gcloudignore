@@ -1,0 +1,8 @@
+.git
+.github
+.venv
+venv
+.terraform
+.pytest_cache
+.ruff_cache
+.coverage

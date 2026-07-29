@@ -86,7 +86,7 @@ REJECTED_CLASSES = {
 }
 
 MIN_WORD_LEN = 3
-TOP_N_TAGS = 16
+TOP_N_TAGS = 7
 
 
 def clean_text(raw: str) -> str:

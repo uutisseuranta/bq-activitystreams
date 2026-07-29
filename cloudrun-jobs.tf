@@ -21,7 +21,8 @@ resource "google_cloud_run_v2_job" "rss_fetch" {
       service_account = local.write_api_sa_email
 
       containers {
-        image = "${local.image_base}/rss-fetch-job:latest"
+        image   = "${local.image_base}/rss-fetch-job:latest"
+        command = ["python", "rss_fetch_job.py"]
 
         env {
           name  = "GCP_PROJECT"
@@ -78,7 +79,8 @@ resource "google_cloud_run_v2_job" "voikko" {
       service_account = local.write_api_sa_email
 
       containers {
-        image = "${local.image_base}/voikko-job:latest"
+        image   = "${local.image_base}/voikko-job:latest"
+        command = ["python", "voikko_job.py"]
 
         env {
           name  = "GCP_PROJECT"
@@ -127,7 +129,8 @@ resource "google_cloud_run_v2_job" "og_enrichment" {
       service_account = local.write_api_sa_email
 
       containers {
-        image = "${local.image_base}/og-enrichment-job:latest"
+        image   = "${local.image_base}/og-enrichment-job:latest"
+        command = ["python", "og_enrichment_job.py"]
 
         env {
           name  = "GCP_PROJECT"
@@ -180,7 +183,8 @@ resource "google_cloud_run_v2_job" "likes_and_updated" {
       service_account = local.write_api_sa_email
 
       containers {
-        image = "${local.image_base}/likes-and-updated-job:latest"
+        image   = "${local.image_base}/likes-and-updated-job:latest"
+        command = ["python", "likes_and_updated_job.py"]
 
         env {
           name  = "GCP_PROJECT"
