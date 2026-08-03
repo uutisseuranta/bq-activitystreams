@@ -30,27 +30,25 @@
 #   #33/#48 – Lisätty Dislike-käsittelijä ja toggle-logiikka (Like ↔ Dislike)
 import base64
 import datetime
+import hashlib
 import json
 import os
-import hashlib
 from typing import Any, Dict, Optional
 
 import ulid
 from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from gcp_logging import get_logger
-from google.auth.transport import requests as google_requests
-from google.cloud import bigquery, storage
-from google.oauth2 import id_token
-from og_parser import validate_url_ip, robots_check
 from gcs_bronze import write_to_gcs_bronze
+from google.auth.transport import requests as google_requests
+from google.cloud import bigquery
+from google.oauth2 import id_token
+from og_parser import robots_check, validate_url_ip
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 logger = get_logger("write-api")
-
-
 
 
 def get_user_id(request: Request) -> str:
@@ -455,7 +453,7 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
                 return Response(
                     status_code=200,
                     content=json.dumps({"id": deterministic_act_id, "object_id": obj_id}),
-                    media_type="application/json"
+                    media_type="application/json",
                 )
 
             act_object["id"] = obj_id
@@ -488,21 +486,23 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
                 "id": obj_id,
                 "source": "user",
                 "received_at": published_str,
-                "object_json": json.dumps({
-                    "@context": "https://www.w3.org/ns/activitystreams",
-                    "type": "Article",
-                    "id": obj_id,
-                    "url": url,
-                    "name": act_object.get("name", ""),
-                    "summary": act_object.get("summary", ""),
-                    "published": published_str,
-                    "attributedTo": {"type": "Person", "id": actor_id}
-                })
+                "object_json": json.dumps(
+                    {
+                        "@context": "https://www.w3.org/ns/activitystreams",
+                        "type": "Article",
+                        "id": obj_id,
+                        "url": url,
+                        "name": act_object.get("name", ""),
+                        "summary": act_object.get("summary", ""),
+                        "published": published_str,
+                        "attributedTo": {"type": "Person", "id": actor_id},
+                    }
+                ),
             }
 
             try:
                 bq_client.insert_rows_json(f"{PROJECT}.{SOCIAL_DATASET}.activities", [activities_row])
-                
+
                 # Streaming insert objects_pending-tauluun parhaan latenssin saavuttamiseksi API-kutsussa
                 errors = bq_client.insert_rows_json(f"{PROJECT}.{DATASET}.objects_pending", [pending_row])
                 if errors:
@@ -578,7 +578,9 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
                 query_parameters=[
                     bigquery.ScalarQueryParameter("id", "STRING", obj_id),
                     bigquery.ScalarQueryParameter("object_json", "STRING", json.dumps(act_object)),
-                    bigquery.ScalarQueryParameter("published", "TIMESTAMP", datetime.datetime.now(datetime.timezone.utc)),
+                    bigquery.ScalarQueryParameter(
+                        "published", "TIMESTAMP", datetime.datetime.now(datetime.timezone.utc)
+                    ),
                 ]
             )
 
@@ -728,32 +730,29 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
             raise HTTPException(status_code=400, detail="Target must be an 'Article' with a valid ID.")
 
         tag_name = tag_name.lower()
-        if not tag_name.startswith('#'):
-            tag_name = '#' + tag_name
+        if not tag_name.startswith("#"):
+            tag_name = "#" + tag_name
 
         target_obj = get_object_by_id(target_id)
         if not target_obj or target_obj["deleted"]:
             raise HTTPException(status_code=404, detail="Target article not found or deleted.")
 
         current_tag_objs = target_obj["object_json"].get("tag") or []
-        tag_exists = any(
-            t.get("name", "").lower() == tag_name
-            for t in current_tag_objs
-            if isinstance(t, dict)
-        )
+        tag_exists = any(t.get("name", "").lower() == tag_name for t in current_tag_objs if isinstance(t, dict))
         if tag_exists:
             return Response(
                 status_code=200,
                 content=json.dumps({"status": "already_added", "id": target_id}),
-                media_type="application/json"
+                media_type="application/json",
             )
 
         import urllib.parse
-        word = tag_name.lstrip('#')
+
+        word = tag_name.lstrip("#")
         new_tag_obj = {
             "type": "Hashtag",
             "name": tag_name,
-            "href": f"https://uutisseuranta.net/ap/outbox?tag=%23{urllib.parse.quote(word)}"
+            "href": f"https://uutisseuranta.net/ap/outbox?tag=%23{urllib.parse.quote(word)}",
         }
 
         updated_tags_list = current_tag_objs.copy()
@@ -807,9 +806,7 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
             raise HTTPException(status_code=500, detail="Database write failed.")
 
         return Response(
-            status_code=201,
-            content=json.dumps({"status": "added", "id": act_id}),
-            media_type="application/json"
+            status_code=201, content=json.dumps({"status": "added", "id": act_id}), media_type="application/json"
         )
 
     else:
@@ -834,4 +831,3 @@ def readiness():
     except Exception as e:
         logger.error(f"Readiness-tarkistus epäonnistui: {e}")
         raise HTTPException(status_code=503, detail="Database connection failed")
-

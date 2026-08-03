@@ -3,18 +3,18 @@
 # and stages unseen items into BigQuery activitystreams.objects_pending.
 import datetime
 import hashlib
+import html
 import json
 import os
 import sys
-import html
-from bs4 import BeautifulSoup
-import defusedxml.ElementTree as ET
 from typing import Any, Dict, List, Optional
 
+import defusedxml.ElementTree as ET
 import httpx
+from bs4 import BeautifulSoup
 from gcp_logging import get_logger, send_ops_notification
-from google.cloud import bigquery, storage
 from gcs_bronze import write_to_gcs_bronze
+from google.cloud import bigquery
 
 logger = get_logger("lausuntopalvelu-fetch-job")
 
@@ -37,8 +37,6 @@ def parse_xml_date(date_str: str) -> Optional[datetime.datetime]:
         return None
 
 
-
-
 def get_last_fetched_timestamp(bq_client: bigquery.Client, project: str, dataset: str) -> Optional[str]:
     """Retrieves the last fetched timestamp for Lausuntopalvelu from config table."""
     query = f"SELECT value FROM `{project}.{dataset}.config` WHERE key = 'lausuntopalvelu.last_fetched_at'"
@@ -59,11 +57,7 @@ def get_existing_ids(bq_client: bigquery.Client, project: str, dataset: str, sou
         UNION DISTINCT
         SELECT id FROM `{project}.{dataset}.objects_pending` WHERE source = @source
     """
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ScalarQueryParameter("source", "STRING", source)
-        ]
-    )
+    job_config = bigquery.QueryJobConfig(query_parameters=[bigquery.ScalarQueryParameter("source", "STRING", source)])
     try:
         query_job = bq_client.query(query, job_config=job_config)
         results = query_job.result()
@@ -76,7 +70,11 @@ def get_existing_ids(bq_client: bigquery.Client, project: str, dataset: str, sou
 def build_as2_article(prop: Dict[str, Any], source: str, domain: str) -> Dict[str, Any]:
     """Converts a proposal dictionary into AS2 Article format."""
     prop_id = prop.get("Id")
-    proposal_url = f"https://www.lausuntopalvelu.fi/FI/Proposal/ProposalDetails?proposalId={prop_id}" if prop_id else "https://www.lausuntopalvelu.fi"
+    proposal_url = (
+        f"https://www.lausuntopalvelu.fi/FI/Proposal/ProposalDetails?proposalId={prop_id}"
+        if prop_id
+        else "https://www.lausuntopalvelu.fi"
+    )
 
     # Generoidaan ID
     input_str = f"{source}{proposal_url}"
@@ -110,20 +108,11 @@ def build_as2_article(prop: Dict[str, Any], source: str, domain: str) -> Dict[st
         "summary": summary,
         "published": pub_str,
         "updated": pub_str,
-        "attributedTo": {
-            "type": "Organization",
-            "name": org_name,
-            "url": "https://www.lausuntopalvelu.fi"
-        },
-        "license": None
+        "attributedTo": {"type": "Organization", "name": org_name, "url": "https://www.lausuntopalvelu.fi"},
+        "license": None,
     }
 
-    return {
-        "id": as2_id,
-        "source": source,
-        "published": pub_date,
-        "object_json": article_json
-    }
+    return {"id": as2_id, "source": source, "published": pub_date, "object_json": article_json}
 
 
 def write_to_bigquery(bq_client: bigquery.Client, project: str, dataset: str, items: List[Dict[str, Any]]) -> None:
@@ -135,19 +124,21 @@ def write_to_bigquery(bq_client: bigquery.Client, project: str, dataset: str, it
     logger.info(f"Loading {len(items)} items to objects_pending...")
     pending_rows = []
     for item in items:
-        pending_rows.append({
-            "id": item["id"],
-            "source": item["source"],
-            "received_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            "object_json": json.dumps(item["object_json"])
-        })
+        pending_rows.append(
+            {
+                "id": item["id"],
+                "source": item["source"],
+                "received_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "object_json": json.dumps(item["object_json"]),
+            }
+        )
 
     table_id = f"{project}.{dataset}.objects_pending"
     schema = [
         bigquery.SchemaField("id", "STRING", mode="REQUIRED"),
         bigquery.SchemaField("source", "STRING", mode="REQUIRED"),
         bigquery.SchemaField("received_at", "TIMESTAMP", mode="REQUIRED"),
-        bigquery.SchemaField("object_json", "JSON", mode="NULLABLE")
+        bigquery.SchemaField("object_json", "JSON", mode="NULLABLE"),
     ]
     job_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND", schema=schema)
     try:
@@ -159,7 +150,9 @@ def write_to_bigquery(bq_client: bigquery.Client, project: str, dataset: str, it
         raise e
 
 
-def update_last_fetched_timestamp(bq_client: bigquery.Client, project: str, dataset: str, run_time: datetime.datetime) -> None:
+def update_last_fetched_timestamp(
+    bq_client: bigquery.Client, project: str, dataset: str, run_time: datetime.datetime
+) -> None:
     """Updates config key for tracking fetch history."""
     config_key = "lausuntopalvelu.last_fetched_at"
     query = f"""
@@ -174,7 +167,7 @@ def update_last_fetched_timestamp(bq_client: bigquery.Client, project: str, data
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
             bigquery.ScalarQueryParameter("key", "STRING", config_key),
-            bigquery.ScalarQueryParameter("value", "STRING", run_time.isoformat())
+            bigquery.ScalarQueryParameter("value", "STRING", run_time.isoformat()),
         ]
     )
     try:
@@ -210,7 +203,7 @@ def main() -> None:
 
     # Haetaan lausuntopyynnöt OData API:sta XML-muodossa
     api_url = f"https://www.lausuntopalvelu.fi/api/v1/Lausuntopalvelu.svc/Proposals?{filter_query}$orderby=PublishedOn desc&$top=100"
-    
+
     proposals = []
     current_url = api_url
     page_count = 1
@@ -232,36 +225,36 @@ def main() -> None:
         try:
             root = ET.fromstring(raw_content)
             ns = {
-                'atom': 'http://www.w3.org/2005/Atom',
-                'm': 'http://schemas.microsoft.com/ado/2007/08/dataservices/metadata',
-                'd': 'http://schemas.microsoft.com/ado/2007/08/dataservices'
+                "atom": "http://www.w3.org/2005/Atom",
+                "m": "http://schemas.microsoft.com/ado/2007/08/dataservices/metadata",
+                "d": "http://schemas.microsoft.com/ado/2007/08/dataservices",
             }
-            
+
             page_proposals = []
-            for entry in root.findall('atom:entry', ns):
-                content = entry.find('atom:content', ns)
+            for entry in root.findall("atom:entry", ns):
+                content = entry.find("atom:content", ns)
                 if content is None:
                     continue
-                properties = content.find('m:properties', ns)
+                properties = content.find("m:properties", ns)
                 if properties is None:
                     continue
-                
+
                 prop_data = {}
                 for child in properties:
                     tag_local = child.tag.replace(f"{{{ns['d']}}}", "")
                     prop_data[tag_local] = child.text
                 page_proposals.append(prop_data)
-            
+
             proposals.extend(page_proposals)
             logger.info(f"Parsed {len(page_proposals)} proposals from page {page_count}.")
 
             # Etsitään OData nextLink/seuraava sivu -elementtiä
             next_link = None
-            for link in root.findall('atom:link', ns):
-                if link.attrib.get('rel') == 'next':
-                    next_link = link.attrib.get('href')
+            for link in root.findall("atom:link", ns):
+                if link.attrib.get("rel") == "next":
+                    next_link = link.attrib.get("href")
                     break
-            
+
             if next_link:
                 if next_link.startswith("http"):
                     current_url = next_link

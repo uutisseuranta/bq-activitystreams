@@ -1,12 +1,13 @@
 # gcs_bronze.py
 import datetime
-from google.cloud import storage
 import json
-from gcp_logging import get_logger
-
 from typing import Optional
 
+from gcp_logging import get_logger
+from google.cloud import storage
+
 logger = get_logger("gcs-bronze-utils")
+
 
 def write_to_gcs_bronze(
     project_id: str,
@@ -15,7 +16,7 @@ def write_to_gcs_bronze(
     extension: str = "json",
     source_type: str = "user_json",
     etag: Optional[str] = None,
-    last_modified: Optional[str] = None
+    last_modified: Optional[str] = None,
 ) -> None:
     """Saves raw API response payload and meta.json metadata sidecar to GCS Bronze bucket."""
     try:
@@ -25,7 +26,7 @@ def write_to_gcs_bronze(
         bucket_name = f"{project_id}-bronze-{source}"
         bucket = client.bucket(bucket_name)
         time_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        
+
         # 1. Kirjoitetaan raakadata
         filename = f"{time_str}_raw.{extension}"
         blob = bucket.blob(filename)
@@ -42,7 +43,7 @@ def write_to_gcs_bronze(
             "extension": extension,
             "fetched_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "etag": etag,
-            "last_modified": last_modified
+            "last_modified": last_modified,
         }
         meta_blob.upload_from_string(json.dumps(meta_payload), content_type="application/json")
         logger.info(f"Metadata sidecar cached to GCS: gs://{bucket_name}/{meta_filename}")

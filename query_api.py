@@ -51,10 +51,7 @@ def manage_scheduler_job(action: str):
         job_name = "query-api-keep-warm"
 
         url = f"https://cloudscheduler.googleapis.com/v1/projects/{project}/locations/{region}/jobs/{job_name}:{action}"
-        headers = {
-            "Authorization": f"Bearer {credentials.token}",
-            "Content-Length": "0"
-        }
+        headers = {"Authorization": f"Bearer {credentials.token}", "Content-Length": "0"}
 
         r = httpx.post(url, headers=headers)
         logger.info(f"Cloud Scheduler job {action} response: {r.status_code} {r.text}")

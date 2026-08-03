@@ -9,13 +9,12 @@ import logging
 import os
 import re
 import sys
-import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 from bs4 import BeautifulSoup
-from google.cloud import bigquery, storage
 from gcs_bronze import write_to_gcs_bronze
+from google.cloud import bigquery
 
 
 # Määritellään lokitustaso
@@ -161,9 +160,9 @@ def get_or_discover_feed(
     return discovered
 
 
-
-
-def fetch_rss_feed(feed_url: str, timeout: int) -> Tuple[Optional[bytes], List[Dict[str, Any]], Optional[str], Optional[str]]:
+def fetch_rss_feed(
+    feed_url: str, timeout: int
+) -> Tuple[Optional[bytes], List[Dict[str, Any]], Optional[str], Optional[str]]:
     """Hakee RSS XML -syötteen ja parseroi itemit BeautifulSoupilla."""
     logger.info(f"Haetaan feed: {feed_url}")
     try:
@@ -246,7 +245,7 @@ def fetch_rss_feed(feed_url: str, timeout: int) -> Tuple[Optional[bytes], List[D
                 "summary": summary,
                 "published": published_dt,
                 "image_url": image_url,
-                "is_paywalled": is_paywalled
+                "is_paywalled": is_paywalled,
             }
         )
 
@@ -299,7 +298,9 @@ def build_as2_article(item: Dict[str, Any], source: str, domain: str) -> Dict[st
 
     if item.get("is_paywalled"):
         article_json["isAccessibleForFree"] = False
-        article_json["tag"] = [{"type": "Hashtag", "name": "#tilaajille", "href": "https://uutisseuranta.net/?tag=%23tilaajille"}]
+        article_json["tag"] = [
+            {"type": "Hashtag", "name": "#tilaajille", "href": "https://uutisseuranta.net/?tag=%23tilaajille"}
+        ]
     else:
         article_json["isAccessibleForFree"] = True
 
@@ -335,11 +336,7 @@ def get_existing_ids(bq_client: bigquery.Client, project: str, dataset: str, sou
         UNION DISTINCT
         SELECT id FROM `{project}.{dataset}.objects_pending` WHERE source IN UNNEST(@sources)
     """
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ArrayQueryParameter("sources", "STRING", sources)
-        ]
-    )
+    job_config = bigquery.QueryJobConfig(query_parameters=[bigquery.ArrayQueryParameter("sources", "STRING", sources)])
     try:
         query_job = bq_client.query(query, job_config=job_config)
         results = query_job.result()
@@ -381,7 +378,6 @@ def write_to_bigquery(bq_client: bigquery.Client, project: str, dataset: str, ar
     except Exception as e:
         logger.error(f"Virhe kirjoitettaessa pending-tauluun: {e}")
         raise e
-
 
 
 def update_last_fetched_timestamp(
@@ -475,7 +471,9 @@ def main() -> None:
         # Haetaan ja parsitaan feedin itemit ja arkistoidaan raakadata GCS:ään
         raw_xml, items, etag, last_modified = fetch_rss_feed(feed_url, timeout)
         if raw_xml:
-            write_to_gcs_bronze(project, feed_name, raw_xml, "xml", source_type="rss_atom", etag=etag, last_modified=last_modified)
+            write_to_gcs_bronze(
+                project, feed_name, raw_xml, "xml", source_type="rss_atom", etag=etag, last_modified=last_modified
+            )
         logger.info(f"Haku onnistui. Löydettiin {len(items)} parsinakelpoista artikkelia lähteestä '{feed_name}'.")
 
         new_count = 0

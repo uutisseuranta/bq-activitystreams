@@ -197,7 +197,13 @@ def main() -> None:
                 object_json["isAccessibleForFree"] = False
                 tags = object_json.get("tag", [])
                 if not any(isinstance(t, dict) and t.get("name") == "#tilaajille" for t in tags):
-                    tags.append({"type": "Hashtag", "name": "#tilaajille", "href": "https://uutisseuranta.net/?tag=%23tilaajille"})
+                    tags.append(
+                        {
+                            "type": "Hashtag",
+                            "name": "#tilaajille",
+                            "href": "https://uutisseuranta.net/?tag=%23tilaajille",
+                        }
+                    )
                     object_json["tag"] = tags
             elif is_free is True:
                 object_json["isAccessibleForFree"] = True
