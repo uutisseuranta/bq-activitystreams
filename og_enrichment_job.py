@@ -46,7 +46,9 @@ def main() -> None:
 
     bq_client = bigquery.Client(project=project)
 
-    # 1. Haetaan rikastamattomat rivit sekä päätaulusta että pending-taulusta
+    # 1. Haetaan rikastamattomat rivit sekä päätaulusta että pending-taulusta.
+    # Huom: source != 'user' -suodatin on poistettu (Päätös G-021), jotta myös käyttäjän lisäämät
+    # uutiset rikastetaan OpenGraph-tiedoilla muiden lähteiden tavoin.
     query = f"""
         SELECT id, object_json, 'main' as origin, source, published as received_at
         FROM `{project}.{dataset}.objects`

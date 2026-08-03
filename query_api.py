@@ -26,6 +26,15 @@ current_request = contextvars.ContextVar("current_request")
 last_user_activity = time.time()
 
 
+# Suodatin maksumuurillisille artikkeleille, joilta puuttuu arkistolinkki (Päätös G-020)
+PAYWALL_FILTER_SQL = """
+  AND NOT (
+    JSON_VALUE(object_json.isAccessibleForFree) = 'false'
+    AND JSON_VALUE(object_json.url_archive) IS NULL
+  )
+"""
+
+
 def manage_scheduler_job(action: str):
     try:
         import httpx
@@ -201,10 +210,7 @@ def get_total_items_cached(tags: List[str]) -> int:
         SELECT COUNT(*) AS c
         FROM `{PROJECT}.{DATASET}.objects`
         WHERE deleted = FALSE
-          AND NOT (
-            JSON_VALUE(object_json.isAccessibleForFree) = 'false'
-            AND JSON_VALUE(object_json.url_archive) IS NULL
-          )
+          {PAYWALL_FILTER_SQL}
           AND EXISTS (
             SELECT 1 FROM UNNEST(tags) t WHERE t IN UNNEST(@search_tags)
           )
@@ -275,10 +281,7 @@ def get_outbox(
               ) AS relevance
             FROM `{PROJECT}.{DATASET}.objects`
             WHERE deleted = FALSE
-              AND NOT (
-                JSON_VALUE(object_json.isAccessibleForFree) = 'false'
-                AND JSON_VALUE(object_json.url_archive) IS NULL
-              )
+              {PAYWALL_FILTER_SQL}
               AND EXISTS (
                 SELECT 1 FROM UNNEST(tags) t WHERE t IN UNNEST(@search_tags)
               )
@@ -304,10 +307,7 @@ def get_outbox(
               1 AS relevance
             FROM `{PROJECT}.{DATASET}.objects`
             WHERE deleted = FALSE
-              AND NOT (
-                JSON_VALUE(object_json.isAccessibleForFree) = 'false'
-                AND JSON_VALUE(object_json.url_archive) IS NULL
-              )
+              {PAYWALL_FILTER_SQL}
             ORDER BY published DESC NULLS LAST, updated DESC, like_count DESC, id ASC
             LIMIT @limit_n
         """

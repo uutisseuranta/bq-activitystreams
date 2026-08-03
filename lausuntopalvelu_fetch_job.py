@@ -6,6 +6,8 @@ import hashlib
 import json
 import os
 import sys
+import html
+from bs4 import BeautifulSoup
 import defusedxml.ElementTree as ET
 from typing import Any, Dict, List, Optional
 
@@ -86,13 +88,26 @@ def build_as2_article(prop: Dict[str, Any], source: str, domain: str) -> Dict[st
 
     org_name = prop.get("OrganizationName") or "Lausuntopalvelu"
 
+    # Siivotaan HTML-tagit ja unescapataan Goals-kenttä
+    goals = prop.get("Goals") or ""
+    if goals:
+        try:
+            soup = BeautifulSoup(goals, "html.parser")
+            clean_goals = soup.get_text(separator=" ")
+            clean_goals = " ".join(clean_goals.split()).strip()
+            summary = html.unescape(clean_goals)
+        except Exception:
+            summary = goals
+    else:
+        summary = f"Lausuntopyyntö palvelussa lausuntopalvelu.fi. Julkaisija: {org_name}."
+
     article_json = {
         "@context": "https://www.w3.org/ns/activitystreams",
         "type": "Article",
         "id": as2_id,
         "url": proposal_url,
         "name": prop.get("Name") or "Lausuntopyyntö",
-        "summary": prop.get("Goals") or f"Lausuntopyyntö palvelussa lausuntopalvelu.fi. Julkaisija: {org_name}.",
+        "summary": summary,
         "published": pub_str,
         "updated": pub_str,
         "attributedTo": {
@@ -124,7 +139,7 @@ def write_to_bigquery(bq_client: bigquery.Client, project: str, dataset: str, it
             "id": item["id"],
             "source": item["source"],
             "received_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            "object_json": json.dumps(item["object_json"])
+            "object_json": item["object_json"]
         })
 
     table_id = f"{project}.{dataset}.objects_pending"
