@@ -79,7 +79,7 @@ variable "rss_feeds" {
      {"name":"is","url":"https://www.is.fi/rss/tuoreimmat.xml"},
      {"name":"kauppalehti","url":"https://feeds.kauppalehti.fi/rss/main"},
      {"name":"valtioneuvosto","url":"https://valtioneuvosto.fi","autodiscover":true},
-     {"name":"test-hel-ninja","url":"https://www.test.hel.ninja/fi/uutiset/rss"}]
+     {"name":"hel-fi","url":"https://www.hel.fi/fi/uutiset/rss"}]
   EOT
 }
 
@@ -110,6 +110,6 @@ variable "rss_request_timeout" {
 variable "bronze_bucket_sources" {
   description = "Lista lähteistä, joille luodaan oma Bronze-tason GCS-bucket"
   type        = list(string)
-  default     = ["hs", "iltalehti", "is", "kauppalehti", "valtioneuvosto", "lausuntopalvelu", "ahjo", "hri", "user", "paatokset", "test-hel-ninja"]
+  default     = ["hs", "iltalehti", "is", "kauppalehti", "valtioneuvosto", "lausuntopalvelu", "ahjo", "hri", "user", "paatokset", "hel-fi"]
 }
 
