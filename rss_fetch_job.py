@@ -300,11 +300,15 @@ def build_as2_article(item: Dict[str, Any], source: str, domain: str) -> Dict[st
     if item["image_url"]:
         article_json["image"] = {"type": "Image", "url": item["image_url"]}
 
-    # Jos artikkeli on ilmainen, se on jo valmiiksi rikastettu (og_enriched=True),
-    # sillä se ei tarvitse Wayback Machine -arkistoa.
-    # Jos se on maksumuuritettu, pidetään og_enriched=False, jotta og-enrichment-job
-    # voi käydä etsimässä sille Wayback Machine -arkistolinkin.
-    og_enriched = not item.get("is_paywalled")
+    # Määritetään og_enriched arvo:
+    # 1. Jos artikkeli on maksumuuritettu, se piilotetaan uutisvirrasta, eikä sille haeta mitään taustalla (og_enriched=True).
+    # 2. Jos artikkeli on ilmainen ja sillä on jo kuva (saatu RSS:stä), se on valmis (og_enriched=True).
+    # 3. Jos artikkeli on ilmainen mutta kuva puuttuu (esim. Kauppalehti ei tarjoa kuvia RSS-virrassa),
+    #    og_enriched asetetaan Falseksi, jotta taustaprosessi (og-enrichment-job) käy hakemassa kuvan sivulta.
+    if item.get("is_paywalled"):
+        og_enriched = True
+    else:
+        og_enriched = bool(item["image_url"])
 
     return {
         "id": as2_id,
