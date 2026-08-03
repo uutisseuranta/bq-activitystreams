@@ -335,7 +335,7 @@ def write_to_bigquery(bq_client: bigquery.Client, project: str, dataset: str, ar
                     "id": art["id"],
                     "source": art["source"],
                     "received_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                    "object_json": json.dumps(art["object_json"]),
+                    "object_json": art["object_json"],
                 }
             )
         pending_table_id = f"{project}.{dataset}.objects_pending"
@@ -368,7 +368,7 @@ def write_to_bigquery(bq_client: bigquery.Client, project: str, dataset: str, ar
                 "source": art["source"],
                 "published": art["published"].isoformat(),
                 "updated": art["updated"].isoformat(),
-                "object_json": json.dumps(art["object_json"]),
+                "object_json": art["object_json"],
                 "og_enriched": art["og_enriched"],
             }
         )

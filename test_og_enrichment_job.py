@@ -62,7 +62,7 @@ class TestOgEnrichmentJob(unittest.TestCase):
         self.assertIsNone(rows_to_load[0]["og_enriched_error"])
 
         # Puretaan tallennettu JSON kenttätason validointia varten
-        saved_json = json.loads(rows_to_load[0]["object_json"])
+        saved_json = rows_to_load[0]["object_json"]
         self.assertEqual(saved_json["name"], "OG Otsikko (Pidempi teksti tässä)")
         self.assertEqual(saved_json["summary"], "Hieno rikastettu kuvaus")
         self.assertEqual(saved_json["image"]["url"], "https://example.com/kuva.jpg")

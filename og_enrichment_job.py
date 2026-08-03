@@ -190,7 +190,7 @@ def main() -> None:
                 {
                     "id": row_id,
                     "source": row_source,
-                    "object_json": json.dumps(object_json),
+                    "object_json": object_json,
                     "og_enriched": True,
                     "og_enriched_error": None,
                 }
@@ -203,7 +203,7 @@ def main() -> None:
                 {
                     "id": row_id,
                     "source": row_source,
-                    "object_json": json.dumps(object_json),
+                    "object_json": object_json,
                     "og_enriched": True,
                     "og_enriched_error": f"SSRF check failed: {pe}",
                 }
@@ -214,7 +214,7 @@ def main() -> None:
                 {
                     "id": row_id,
                     "source": row_source,
-                    "object_json": json.dumps(object_json),
+                    "object_json": object_json,
                     "og_enriched": True,
                     "og_enriched_error": f"Fetch/Parse error: {e}",
                 }
