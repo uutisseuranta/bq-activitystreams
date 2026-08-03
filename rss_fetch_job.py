@@ -10,7 +10,7 @@ import os
 import re
 import sys
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 from bs4 import BeautifulSoup
@@ -163,7 +163,7 @@ def get_or_discover_feed(
 
 
 
-def fetch_rss_feed(feed_url: str, timeout: int, project_id: Optional[str] = None, source: Optional[str] = None) -> List[Dict[str, Any]]:
+def fetch_rss_feed(feed_url: str, timeout: int) -> Tuple[Optional[bytes], List[Dict[str, Any]]]:
     """Hakee RSS XML -syötteen ja parseroi itemit BeautifulSoupilla."""
     logger.info(f"Haetaan feed: {feed_url}")
     try:
@@ -171,11 +171,7 @@ def fetch_rss_feed(feed_url: str, timeout: int, project_id: Optional[str] = None
         resp.raise_for_status()
     except Exception as e:
         logger.error(f"HTTP-virhe haettaessa feediä {feed_url}: {e}")
-        return []
-
-    # Tallennetaan GCS Bronzeen jos projekti ja lähde on annettu
-    if project_id and source:
-        write_to_gcs_bronze(project_id, source, resp.content, "xml")
+        return None, []
 
     # Parsitaan XML BeautifulSoupin xml-parserilla
     soup = BeautifulSoup(resp.content, "xml")
@@ -251,7 +247,7 @@ def fetch_rss_feed(feed_url: str, timeout: int, project_id: Optional[str] = None
             }
         )
 
-    return parsed_items
+    return resp.content, parsed_items
 
 
 def build_as2_article(item: Dict[str, Any], source: str, domain: str) -> Dict[str, Any]:
@@ -474,7 +470,9 @@ def main() -> None:
             feed_url = discovered_url
 
         # Haetaan ja parsitaan feedin itemit ja arkistoidaan raakadata GCS:ään
-        items = fetch_rss_feed(feed_url, timeout, project_id=project, source=feed_name)
+        raw_xml, items = fetch_rss_feed(feed_url, timeout)
+        if raw_xml:
+            write_to_gcs_bronze(project, feed_name, raw_xml, "xml", source_type="rss_atom")
         logger.info(f"Haku onnistui. Löydettiin {len(items)} parsinakelpoista artikkelia lähteestä '{feed_name}'.")
 
         new_count = 0

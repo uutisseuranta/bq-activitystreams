@@ -65,11 +65,15 @@ Kirjoittajat per taulu:
 | `og-enrichment-job` | `14 * * * *` | Kerran tunnissa (:14) |
 | `voikko-job` | `19 * * * *` | Kerran tunnissa (:19) |
 | `likes-and-updated-job` | `21 */2 * * *` | Joka toinen tunti (:21) |
+| `lausuntopalvelu-fetch-job` | `0 7 * * *` | Päivittäin klo 07:00 |
 
 Huom: `likes-and-updated-job` korvaa aiemmat erilliset `likes-sync-job` ja `activity-updated-job` -ajastukset. Molemmat laskennat ajetaan samassa Cloud Run Job -suorituksessa — ks. [Tykkäyslaskuri ja updated-aikaleima](#tykkäyslaskuri-ja-updated-aikaleima-1112).
 
 > [!NOTE]
 > **Kesäaika:** Cloud Scheduler käyttää Europe/Helsinki -aikavyöhykettä.
+
+> [!NOTE]
+> **Ajastusjärjestys:** `lausuntopalvelu-fetch-job` ajetaan klo 07:00, mikä ajoittuu aamun uutishakujen jälkeen. Tämä on sovittu operatiivinen käytäntö (uutiset ensin, sitten lausuntopyynnöt) eikä kooditason suora riippuvuus.
 
 ---
 

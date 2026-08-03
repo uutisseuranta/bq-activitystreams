@@ -414,7 +414,9 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
             if not url:
                 raise HTTPException(status_code=400, detail="Missing 'url' in Article.")
 
-            # SSRF- ja robots-tarkistus (pre-flight)
+            # Arkkitehtuuripäätös G-022: Uutislinkit (Article) tallennetaan pending-tauluun
+            # rikastusta varten, kun taas kommentit (Note) tallennetaan suoraan päätauluun,
+            # koska kommenteissa ei ole ulkoisia OpenGraph-metadatarasitteita.
             try:
                 if not validate_url_ip(url):
                     raise HTTPException(status_code=400, detail="Forbidden URL or invalid IP (SSRF protection).")
@@ -453,7 +455,7 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
 
             # Kirjoitetaan raaka JSON GCS Bronzeen
             raw_data = json.dumps(act_object, ensure_ascii=False).encode("utf-8")
-            write_to_gcs_bronze(PROJECT, "user", raw_data, "json")
+            write_to_gcs_bronze(PROJECT, "user", raw_data, "json", source_type="user_json")
 
             # Kirjoitetaan BigQuery objects_pending -tauluun odottamaan rikastusta
             pending_row = {

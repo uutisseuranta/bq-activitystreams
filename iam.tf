@@ -127,10 +127,6 @@ resource "google_cloud_run_v2_job_iam_member" "fetch_jobs_invoke_lausuntopalvelu
 }
 
 
-
-
-
-
 # ---------------------------------------------------------------------------
 # SA: backend (deploy-SA — käytetään vain CI/CD-deployssa, ei runtime)
 # ---------------------------------------------------------------------------

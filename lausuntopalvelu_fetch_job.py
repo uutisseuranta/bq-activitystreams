@@ -39,6 +39,19 @@ def parse_xml_date(date_str: str) -> Optional[datetime.datetime]:
 
 
 
+def get_last_fetched_timestamp(bq_client: bigquery.Client, project: str, dataset: str) -> Optional[str]:
+    """Retrieves the last fetched timestamp for Lausuntopalvelu from config table."""
+    query = f"SELECT value FROM `{project}.{dataset}.config` WHERE key = 'lausuntopalvelu.last_fetched_at'"
+    try:
+        query_job = bq_client.query(query)
+        results = list(query_job.result())
+        if results:
+            return results[0].value
+    except Exception as e:
+        logger.warning(f"Failed to fetch last_fetched_at from config: {e}")
+    return None
+
+
 def get_existing_ids(bq_client: bigquery.Client, project: str, dataset: str, source: str) -> set:
     """Fetches existing IDs in objects and objects_pending tables for the source."""
     query = f"""
@@ -183,8 +196,20 @@ def main() -> None:
     bq_client = bigquery.Client(project=project)
     existing_ids = get_existing_ids(bq_client, project, dataset, "lausuntopalvelu")
 
-    # Haetaan 100 uusinta lausuntopyyntöä OData API:sta XML-muodossa
-    api_url = "https://www.lausuntopalvelu.fi/api/v1/Lausuntopalvelu.svc/Proposals?$orderby=PublishedOn desc&$top=100"
+    # Haetaan edellisen onnistuneen haun aikaleima OData-suodatusta varten
+    last_fetched_raw = get_last_fetched_timestamp(bq_client, project, dataset)
+    filter_query = ""
+    if last_fetched_raw:
+        try:
+            dt = datetime.datetime.fromisoformat(last_fetched_raw).astimezone(datetime.timezone.utc)
+            dt_str = dt.strftime("%Y-%m-%dT%H:%M:%S")
+            filter_query = f"$filter=PublishedOn gt datetime'{dt_str}'&"
+            logger.info(f"Using OData filter window: PublishedOn > {dt_str}")
+        except Exception as e:
+            logger.warning(f"Failed to parse last_fetched_at: {e}")
+
+    # Haetaan lausuntopyynnöt OData API:sta XML-muodossa
+    api_url = f"https://www.lausuntopalvelu.fi/api/v1/Lausuntopalvelu.svc/Proposals?{filter_query}$orderby=PublishedOn desc&$top=100"
     logger.info(f"Querying Lausuntopalvelu API: {api_url}")
 
     try:
@@ -196,7 +221,7 @@ def main() -> None:
         sys.exit(1)
 
     raw_content = resp.content
-    write_to_gcs_bronze(project, "lausuntopalvelu", raw_content, "xml")
+    write_to_gcs_bronze(project, "lausuntopalvelu", raw_content, "xml", source_type="odata_xml")
 
     # Parsitaan XML Atom feed
     try:

@@ -50,7 +50,7 @@ def main() -> None:
     # Huom: source != 'user' -suodatin on poistettu (Päätös G-021), jotta myös käyttäjän lisäämät
     # uutiset rikastetaan OpenGraph-tiedoilla muiden lähteiden tavoin.
     query = f"""
-        SELECT id, object_json, 'main' as origin, source, COALESCE(published, updated, CURRENT_TIMESTAMP()) as received_at
+        SELECT id, object_json, 'main' as origin, source, COALESCE(published, updated) as received_at
         FROM `{project}.{dataset}.objects`
         WHERE (og_enriched = FALSE OR og_enriched IS NULL)
           AND deleted = FALSE
@@ -171,7 +171,7 @@ def main() -> None:
                 if not object_json.get("updated"):
                     object_json["updated"] = resolved_published
 
-            # Jos julkaisupäivää ei ole vieläkään määritetty, käytetään fallbackia (received_at tai nyt)
+            # Jos julkaisupäivää ei ole vieläkään määritetty, käytetään fallbackia (received_at)
             if not object_json.get("published"):
                 received_at = row.get("received_at")
                 if received_at:
@@ -179,11 +179,9 @@ def main() -> None:
                         fallback_pub = received_at.astimezone(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
                     else:
                         fallback_pub = str(received_at)
-                else:
-                    fallback_pub = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
-                object_json["published"] = fallback_pub
-                if not object_json.get("updated"):
-                    object_json["updated"] = fallback_pub
+                    object_json["published"] = fallback_pub
+                    if not object_json.get("updated"):
+                        object_json["updated"] = fallback_pub
 
             # updated: OG modified_time voittaa aina jos saatavilla
             if metadata.get("modified_time"):
