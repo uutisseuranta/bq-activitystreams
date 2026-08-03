@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 from gcp_logging import get_logger, send_ops_notification
 from google.cloud import bigquery, storage
+from gcs_bronze import write_to_gcs_bronze
 
 logger = get_logger("lausuntopalvelu-fetch-job")
 
@@ -36,20 +37,6 @@ def parse_xml_date(date_str: str) -> Optional[datetime.datetime]:
         return None
 
 
-def write_to_gcs_bronze(project_id: str, source: str, data: bytes, extension: str = "xml") -> None:
-    """Saves raw API response payload to GCS Bronze bucket."""
-    try:
-        client = storage.Client(project=project_id)
-        bucket_name = f"{project_id}-bronze-{source}"
-        bucket = client.bucket(bucket_name)
-        timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
-        filename = f"{timestamp}_raw.{extension}"
-        blob = bucket.blob(filename)
-        content_type = "application/xml" if extension == "xml" else "application/json"
-        blob.upload_from_string(data, content_type=content_type)
-        logger.info(f"Raw data cached to GCS: gs://{bucket_name}/{filename}")
-    except Exception as e:
-        logger.error(f"Failed to save raw data to GCS Bronze: {e}")
 
 
 def get_existing_ids(bq_client: bigquery.Client, project: str, dataset: str, source: str) -> set:
@@ -143,13 +130,7 @@ def write_to_bigquery(bq_client: bigquery.Client, project: str, dataset: str, it
         })
 
     table_id = f"{project}.{dataset}.objects_pending"
-    schema = [
-        bigquery.SchemaField("id", "STRING", mode="REQUIRED"),
-        bigquery.SchemaField("source", "STRING", mode="REQUIRED"),
-        bigquery.SchemaField("received_at", "TIMESTAMP", mode="REQUIRED"),
-        bigquery.SchemaField("object_json", "JSON", mode="NULLABLE")
-    ]
-    job_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND", schema=schema)
+    job_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND")
     try:
         load_job = bq_client.load_table_from_json(pending_rows, table_id, job_config=job_config)
         load_job.result()
@@ -201,7 +182,8 @@ def main() -> None:
     logger.info(f"Querying Lausuntopalvelu API: {api_url}")
 
     try:
-        resp = httpx.get(api_url, timeout=25, follow_redirects=True)
+        headers = {"User-Agent": "uutisseuranta-fetch-bot/1.0 (+https://uutisseuranta.net)"}
+        resp = httpx.get(api_url, headers=headers, timeout=25, follow_redirects=True)
         resp.raise_for_status()
     except Exception as e:
         logger.critical(f"Lausuntopalvelu API request failed: {e}")
@@ -241,10 +223,13 @@ def main() -> None:
     logger.info(f"Retrieved {len(proposals)} proposals from API. Processing...")
 
     new_articles = []
+    seen_this_run = set()
     for prop in proposals:
         as2_item = build_as2_article(prop, "lausuntopalvelu", domain)
-        if as2_item["id"] not in existing_ids:
+        art_id = as2_item["id"]
+        if art_id not in existing_ids and art_id not in seen_this_run:
             new_articles.append(as2_item)
+            seen_this_run.add(art_id)
 
     logger.info(f"Found {len(new_articles)} new proposals to insert.")
 

@@ -130,6 +130,7 @@ resource "google_cloud_scheduler_job" "lausuntopalvelu_fetch" {
   description      = "Ajaa lausuntopalvelu-fetch-jobin päivittäin klo 07:00 Helsinki-aikaa"
   schedule         = "0 7 * * *"
   time_zone        = "Europe/Helsinki"
+  # 320s: OData XML fetch with defusedxml parse; no per-article HTTP fetches
   attempt_deadline = "320s"
 
   retry_config {

@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 from bs4 import BeautifulSoup
 from google.cloud import bigquery, storage
+from gcs_bronze import write_to_gcs_bronze
 
 
 # Määritellään lokitustaso
@@ -160,21 +161,6 @@ def get_or_discover_feed(
     return discovered
 
 
-def write_to_gcs_bronze(project_id: str, source: str, data: bytes, extension: str = "xml") -> None:
-    """Tallentaa raakadata-arkiston GCS-bronze-ämpäriin."""
-    try:
-        client = storage.Client(project=project_id)
-        bucket_name = f"{project_id}-bronze-{source}"
-        bucket = client.bucket(bucket_name)
-        timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
-        filename = f"{timestamp}_raw.{extension}"
-        blob = bucket.blob(filename)
-        # Content type automaattisesti
-        content_type = "application/xml" if extension == "xml" else "application/json"
-        blob.upload_from_string(data, content_type=content_type)
-        logger.info(f"Tallennettu raakadata GCS:ään: gs://{bucket_name}/{filename}")
-    except Exception as e:
-        logger.error(f"Virhe tallennettaessa raakadataa GCS-bronzeen: {e}")
 
 
 def fetch_rss_feed(feed_url: str, timeout: int, project_id: Optional[str] = None, source: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -382,13 +368,7 @@ def write_to_bigquery(bq_client: bigquery.Client, project: str, dataset: str, ar
             }
         )
     pending_table_id = f"{project}.{dataset}.objects_pending"
-    pending_schema = [
-        bigquery.SchemaField("id", "STRING", mode="REQUIRED"),
-        bigquery.SchemaField("source", "STRING", mode="REQUIRED"),
-        bigquery.SchemaField("received_at", "TIMESTAMP", mode="REQUIRED"),
-        bigquery.SchemaField("object_json", "JSON", mode="NULLABLE"),
-    ]
-    pending_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND", schema=pending_schema)
+    pending_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND")
     try:
         load_job = bq_client.load_table_from_json(pending_rows, pending_table_id, job_config=pending_config)
         load_job.result()
@@ -468,6 +448,7 @@ def main() -> None:
     existing_ids = get_existing_ids(bq_client, project, dataset, feed_names)
 
     all_as2_articles = []
+    seen_this_run = set()
 
     for feed in feeds:
         feed_name = feed.get("name")
@@ -495,8 +476,10 @@ def main() -> None:
         # Muunnetaan AS2 Article -muotoon
         for item in items:
             as2_art = build_as2_article(item, feed_name, domain)
-            if as2_art["id"] not in existing_ids:
+            art_id = as2_art["id"]
+            if art_id not in existing_ids and art_id not in seen_this_run:
                 all_as2_articles.append(as2_art)
+                seen_this_run.add(art_id)
                 new_count += 1
         logger.info(f"Lisätty {new_count} uutta artikkelia lähteestä '{feed_name}' odottamaan latausta.")
 

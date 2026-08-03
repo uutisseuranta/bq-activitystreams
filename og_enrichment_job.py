@@ -197,7 +197,7 @@ def main() -> None:
                 if not any(isinstance(t, dict) and t.get("name") == "#tilaajille" for t in tags):
                     tags.append({"type": "Hashtag", "name": "#tilaajille", "href": "https://uutisseuranta.net/?tag=%23tilaajille"})
                     object_json["tag"] = tags
-            elif metadata.get("is_accessible_for_free") is True:
+            else:
                 object_json["isAccessibleForFree"] = True
 
             logger.info(f"Artikkeli {row_id} rikastettu onnistuneesti.")
@@ -214,6 +214,8 @@ def main() -> None:
         except PermissionError as pe:
             # og_parser.fetch_url_stream nostaa PermissionErrorin SSRF-validointivirheistä
             logger.warning(f"SSRF-validointivirhe haettaessa {url}: {pe}")
+            if "isAccessibleForFree" not in object_json:
+                object_json["isAccessibleForFree"] = True
             rows_to_load.append(
                 {
                     "id": row_id,
@@ -225,6 +227,8 @@ def main() -> None:
             )
         except Exception as e:
             logger.warning(f"Virhe haettaessa tai parsiessa URL {url}: {e}")
+            if "isAccessibleForFree" not in object_json:
+                object_json["isAccessibleForFree"] = True
             rows_to_load.append(
                 {
                     "id": row_id,

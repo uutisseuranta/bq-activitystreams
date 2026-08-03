@@ -369,7 +369,7 @@ WHEN NOT MATCHED THEN
 
 Toteutus siirretty erilliseen PR:ään. Ajastus: `0 3 * * *`. Base URL: `https://ahjo.hel.fi/api/v1` (uusi REST API, ks. #31).
 
-| AS2-kenttä | OpenAhjo-kenttä |
+| AS2-kenttä | OpenAhjo-kenttä (Vanha OpenAhjo, korvataan Ahjo REST API -mäppäyksellä) |
 |---|---|
 | `id` | `register_id` → IRI-muotoon |
 | `name` | `subject` |

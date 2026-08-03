@@ -111,5 +111,10 @@ variable "bronze_bucket_sources" {
   description = "Lista lähteistä, joille luodaan oma Bronze-tason GCS-bucket"
   type        = list(string)
   default     = ["hs", "iltalehti", "is", "kauppalehti", "valtioneuvosto", "lausuntopalvelu", "user", "paatokset", "hel-fi"]
+
+  validation {
+    condition     = contains(var.bronze_bucket_sources, "user")
+    error_message = "The bronze_bucket_sources list must always contain the 'user' source bucket."
+  }
 }
 

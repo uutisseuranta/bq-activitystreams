@@ -43,6 +43,7 @@ from google.auth.transport import requests as google_requests
 from google.cloud import bigquery, storage
 from google.oauth2 import id_token
 from og_parser import validate_url_ip, robots_check
+from gcs_bronze import write_to_gcs_bronze
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -50,20 +51,6 @@ from slowapi.util import get_remote_address
 logger = get_logger("write-api")
 
 
-def write_to_gcs_bronze(project_id: str, source: str, data: bytes, extension: str) -> None:
-    """Tallentaa raakadata-arkiston GCS-bronze-ämpäriin."""
-    try:
-        client = storage.Client(project=project_id)
-        bucket_name = f"{project_id}-bronze-{source}"
-        bucket = client.bucket(bucket_name)
-        timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
-        filename = f"{timestamp}_{source}.{extension}"
-        blob = bucket.blob(filename)
-        content_type = "application/json" if extension == "json" else "application/xml"
-        blob.upload_from_string(data, content_type=content_type)
-        logger.info(f"Tallennettu raakadata GCS:ään: gs://{bucket_name}/{filename}")
-    except Exception as e:
-        logger.error(f"Virhe tallennettaessa raakadataa GCS-bronzeen: {e}")
 
 
 def get_user_id(request: Request) -> str:
@@ -473,7 +460,7 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
                 "id": obj_id,
                 "source": "user",
                 "received_at": published_str,
-                "object_json": json.dumps({
+                "object_json": {
                     "@context": "https://www.w3.org/ns/activitystreams",
                     "type": "Article",
                     "id": obj_id,
@@ -481,23 +468,16 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
                     "name": act_object.get("name", ""),
                     "summary": act_object.get("summary", ""),
                     "attributedTo": {"type": "Person", "id": actor_id}
-                })
+                }
             }
 
             try:
                 bq_client.insert_rows_json(f"{PROJECT}.{SOCIAL_DATASET}.activities", [activities_row])
                 
-                # Batch load objects_pending-tauluun takaa vahvan konsistenssin
-                pending_table_id = f"{PROJECT}.{DATASET}.objects_pending"
-                pending_schema = [
-                    bigquery.SchemaField("id", "STRING", mode="REQUIRED"),
-                    bigquery.SchemaField("source", "STRING", mode="REQUIRED"),
-                    bigquery.SchemaField("received_at", "TIMESTAMP", mode="REQUIRED"),
-                    bigquery.SchemaField("object_json", "JSON", mode="NULLABLE"),
-                ]
-                pending_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND", schema=pending_schema)
-                load_job = bq_client.load_table_from_json([pending_row], pending_table_id, job_config=pending_config)
-                load_job.result()
+                # Streaming insert objects_pending-tauluun parhaan latenssin saavuttamiseksi API-kutsussa
+                errors = bq_client.insert_rows_json(f"{PROJECT}.{DATASET}.objects_pending", [pending_row])
+                if errors:
+                    raise Exception(f"BigQuery streaming insert errors: {errors}")
             except Exception as e:
                 logger.error(f"Virhe käyttäjän linkin tallennuksessa: {e}")
                 raise HTTPException(status_code=500, detail="Database write failed.")
