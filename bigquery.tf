@@ -49,12 +49,6 @@ resource "google_bigquery_dataset_iam_member" "write_api_bq_editor_main" {
   member     = "serviceAccount:${google_service_account.write_api.email}"
 }
 
-# og-scraper: kirjoitusoikeus activitystreams-datasettiin (og_cache)
-resource "google_bigquery_dataset_iam_member" "og_scraper_bq_editor_main" {
-  dataset_id = google_bigquery_dataset.main.dataset_id
-  role       = "roles/bigquery.dataEditor"
-  member     = "serviceAccount:${google_service_account.og_scraper.email}"
-}
 
 # Artikkelitaulu – RSS-syötteistä parsitut uutisartikkelit
 resource "google_bigquery_table" "articles" {
