@@ -29,13 +29,12 @@ Repositorio on nimetty uudelleen: `gcs-activitystreams` → `bq-activitystreams`
 ```
 https://activitystreams.uutisseuranta.net/
   └── GET /ap/outbox?tag=asuminen&n=50  ← Cloud Run (query-api) → BigQuery
-  └── POST /ap/scrape { url }           ← Cloud Run (og-scraper) → BigQuery
   └── POST /ap/activities               ← Cloud Run (write-api) → BigQuery
 
 Kirjoittajat per taulu:
 
-  activitystreams.objects          ← jobit #2 (RSS), #3 (Ahjo REST API), #4 (HRI), #97 (Lausuntopalvelu),
-                                       #8 (OG-scraper), kirjoituspalvelu #7 (kommentit)
+  activitystreams.objects          ← og-enrichment-job (rikastetut artikkelit, päätökset, datasetit),
+                                       kirjoituspalvelu #7 (kommentit)
                                       suora MERGE-kirjoitus, tavallinen taulu
                                       tags-sarakkeen omistaja: Voikko-job (#6)
                                       like_count-sarakkeen omistaja: likes-and-updated-job (#11/#12)
@@ -84,16 +83,15 @@ Ahjo-, HRI- ja Lausuntopalvelu-jobit ovat toisistaan riippumattomia. Ajastusjär
 
 | Job / palvelu | Tyyppi | Cron / endpoint | Kirjoittaa | Vastuu |
 |---|---|---|---|---|
-| `rss-fetch-job` | Cloud Run Job | `7,22,37,52 * * * *` | `activitystreams.objects` + GCS bronze | Uutissyötteet (RSS/Atom) |
-| `ahjo-fetch-job` | Cloud Run Job | `0 3 * * *` | `activitystreams.objects` + GCS bronze | Helsingin päätökset — Ahjo REST API |
-| `hri-fetch-job` | Cloud Run Job | `30 3 * * *` | `activitystreams.objects` + GCS bronze | HRI CKAN datasetit ja kategoriat |
-| `lausuntopalvelu-fetch-job` | Cloud Run Job | `0 4 * * *` | `activitystreams.objects` + GCS bronze | Lausuntopalvelun lausuntopyynnöt |
-| `og-enrichment-job` | Cloud Run Job | `14 * * * *` | `activitystreams.objects` | OG-metatietojen rikastus |
+| `rss-fetch-job` | Cloud Run Job | `7,22,37,52 * * * *` | `activitystreams.objects_pending` + GCS bronze | Uutissyötteet (RSS/Atom) |
+| `ahjo-fetch-job` | Cloud Run Job | `0 3 * * *` | `activitystreams.objects_pending` + GCS bronze | Helsingin päätökset — Ahjo REST API |
+| `hri-fetch-job` | Cloud Run Job | `30 3 * * *` | `activitystreams.objects_pending` + GCS bronze | HRI CKAN datasetit ja kategoriat |
+| `lausuntopalvelu-fetch-job` | Cloud Run Job | `0 4 * * *` | `activitystreams.objects_pending` + GCS bronze | Lausuntopalvelun lausuntopyynnöt |
+| `og-enrichment-job` | Cloud Run Job | `14 * * * *` | `activitystreams.objects` | OG-metatietojen rikastus ja siirto pending-taulusta |
 | `voikko-job` | Cloud Run Job | `19 * * * *` | `activitystreams.objects.tags*` | Lemmatisoidut tagit (Voikko) |
 | `likes-and-updated-job` | Cloud Run Job | `21 */2 * * *` | `activitystreams.objects.like_count, updated` | Tykkäyslaskuri + updated |
 | `query-api` | Cloud Run Service | `GET /ap/outbox` | — | AS2 outbox, lukupään API |
-| `og-scraper` | Cloud Run Service | `POST /ap/scrape` | `activitystreams.objects` | OG-scraper valikoiduille domaineille |
-| `write-api` | Cloud Run Service | `POST /ap/activities` | `activitystreams_social.*` | Käyttäjäaktiviteetit (kommentit, tykkäykset) |
+| `write-api` | Cloud Run Service | `POST /ap/activities` | `activitystreams_social.*` | Käyttäjäaktiviteetit (kommentit, tykkäykset) + `objects_pending` (käyttäjän linkit) |
 
 \* Voikko-job on `tags`-sarakkeen omistaja; muut jobit eivät koskaan kirjoita `tags`-kenttää.
 
@@ -170,7 +168,6 @@ Autentikaatio toteutetaan kahdella kerroksella Googlen zero trust -suositusten m
 | Palvelu | Cloud Run IAM | Sovellustason auth | Dataset | Perustelu |
 |---|---|---|---|---|
 | `query-api` (`GET /ap/outbox`) | `--allow-unauthenticated` | Ei | `activitystreams` | Avoin data — sama periaate kuin RSS-syötteet |
-| `og-scraper` (`POST /ap/scrape`) | `--allow-unauthenticated` | Ei | `activitystreams` | Avoin data — suojaus domain-whitelistilla ja rate limitingillä |
 | `write-api` (`POST /ap/activities`) | **`--no-allow-unauthenticated`** | **Google OIDC `id_token`** | `activitystreams_social` | Käyttäjäkohtainen sosiaalinen data |
 
 ### Gmail SSO ja kirjoituspalvelu (#7, #19)
@@ -257,7 +254,6 @@ API-rajapintojen kuormitusta ja BigQuery-kustannuksia suojataan FastAPI-sovelluk
 #### Rajoituspolitiikka ja rajat:
 - **`GET /ap/outbox` (query-api):** Dynaaminen rajoitus. Anonyymit pyynnöt on rajoitettu 60 pyyntöön minuutissa per IP-osoite. Autentikoiduille käyttäjille (OIDC JWT) raja on korotettu arvoon 120 pyyntöä minuutissa per käyttäjä (UID). Tarkistus suoritetaan sovelluksessa *ennen* BigQuery-kyselyn tekemistä, jotta estetään kyselykustannusten hallitsematon kasvu.
 - **`POST /ap/activities` (write-api):** Rajoitettu 30 pyyntöön minuutissa per käyttäjä (UID).
-- **`POST /ap/scrape` (og-scraper):** Rajoitettu 60 pyyntöön minuutissa per IP-osoite.
 - **Ylitystilanne:** API palauttaa HTTP-statuskoodin `429 Too Many Requests` ja `Retry-After`-otsakkeen, joka ilmaisee odotusajan sekunteina.
 
 > [!NOTE]
