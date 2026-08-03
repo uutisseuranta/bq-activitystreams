@@ -51,6 +51,7 @@ Edustaa uutisartikkelia, blogipostausta tai muuta itsenäistä tekstituotetta.
 | _uutisseuranta:reactionCount | `integer` |  | integer |  |  | Yhteenlaskettu reaktiomäärä (likes.totalItems + dislikes.totalItems). Neutraali nimitys: sisältää sekä Agree (Like) että Disagree (Dislike) -reaktiot. |  |
 | tag | `array` |  | [hashtag](#hashtag) |  |  | Artikkeliin liittyvät AS2 Hashtag-objektit (Voikko-jobin tuottamat morfologiset tagit) |  |
 | url_archive | `string` |  | string |  |  | Wayback Machine -arkistolinkki maksumuurin ohittamiseen |  |
+| license | `string` |  | string |  |  | Creative Commons tai muu lisenssi-IRI tai tekijänoikeusilmoitus |  |
 
 
 ---

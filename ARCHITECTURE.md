@@ -65,11 +65,15 @@ Kirjoittajat per taulu:
 | `og-enrichment-job` | `14 * * * *` | Kerran tunnissa (:14) |
 | `voikko-job` | `19 * * * *` | Kerran tunnissa (:19) |
 | `likes-and-updated-job` | `21 */2 * * *` | Joka toinen tunti (:21) |
+| `lausuntopalvelu-fetch-job` | `0 7 * * *` | Päivittäin klo 07:00 |
 
 Huom: `likes-and-updated-job` korvaa aiemmat erilliset `likes-sync-job` ja `activity-updated-job` -ajastukset. Molemmat laskennat ajetaan samassa Cloud Run Job -suorituksessa — ks. [Tykkäyslaskuri ja updated-aikaleima](#tykkäyslaskuri-ja-updated-aikaleima-1112).
 
 > [!NOTE]
 > **Kesäaika:** Cloud Scheduler käyttää Europe/Helsinki -aikavyöhykettä.
+
+> [!NOTE]
+> **Ajastusjärjestys:** `lausuntopalvelu-fetch-job` ajetaan klo 07:00, mikä ajoittuu aamun uutishakujen jälkeen. Tämä on sovittu operatiivinen käytäntö (uutiset ensin, sitten lausuntopyynnöt) eikä kooditason suora riippuvuus.
 
 ---
 
@@ -365,11 +369,11 @@ WHEN NOT MATCHED THEN
 
 ---
 
-## Cloud Run Job: OpenAhjo-päätökset (#3)
+## [Planned / Follow-up PR] Cloud Run Job: OpenAhjo-päätökset (#3)
 
-Ajastus: `0 3 * * *`. Base URL: `http://dev.hel.fi/openahjo/v1`.
+Toteutus siirretty erilliseen PR:ään. Ajastus: `0 3 * * *`. Base URL: `https://ahjo.hel.fi/api/v1` (uusi REST API, ks. #31).
 
-| AS2-kenttä | OpenAhjo-kenttä |
+| AS2-kenttä | OpenAhjo-kenttä (Vanha OpenAhjo, korvataan Ahjo REST API -mäppäyksellä) |
 |---|---|
 | `id` | `register_id` → IRI-muotoon |
 | `name` | `subject` |
@@ -378,9 +382,9 @@ Ajastus: `0 3 * * *`. Base URL: `http://dev.hel.fi/openahjo/v1`.
 
 ---
 
-## Cloud Run Job: HRI-datasetit (#4)
+## [Planned / Follow-up PR] Cloud Run Job: HRI-datasetit (#4)
 
-Ajastus: `30 3 * * *`. Base URL: `https://hri.fi/data/api/3/action/`. Datasetit tallennetaan AS2 `Document`-objekteina, kategoriat `OrderedCollection`-objekteina.
+Toteutus siirretty erilliseen PR:ään. Ajastus: `30 3 * * *`. Base URL: `https://hri.fi/data/api/3/action/`. Datasetit tallennetaan AS2 `Document`-objekteina, kategoriat `OrderedCollection`-objekteina.
 
 ---
 

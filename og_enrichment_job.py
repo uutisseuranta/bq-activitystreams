@@ -46,16 +46,20 @@ def main() -> None:
 
     bq_client = bigquery.Client(project=project)
 
-    # 1. Haetaan rikastamattomat rivit sekä päätaulusta että pending-taulusta
+    # 1. Haetaan rikastamattomat rivit sekä päätaulusta että pending-taulusta.
+    # Huom: source != 'user' -suodatin on poistettu (Päätös G-021), jotta myös käyttäjän lisäämät
+    # uutiset rikastetaan OpenGraph-tiedoilla muiden lähteiden tavoin.
     query = f"""
-        SELECT id, object_json, 'main' as origin, source
-        FROM `{project}.{dataset}.objects`
-        WHERE source != 'user'
-          AND (og_enriched = FALSE OR og_enriched IS NULL)
-          AND deleted = FALSE
-        UNION ALL
-        SELECT id, object_json, 'pending' as origin, source
-        FROM `{project}.{dataset}.objects_pending`
+        SELECT * FROM (
+            SELECT id, object_json, 'main' as origin, source, COALESCE(published, updated) as received_at
+            FROM `{project}.{dataset}.objects`
+            WHERE (og_enriched = FALSE OR og_enriched IS NULL)
+              AND deleted = FALSE
+            UNION ALL
+            SELECT id, object_json, 'pending' as origin, source, received_at
+            FROM `{project}.{dataset}.objects_pending`
+        )
+        ORDER BY received_at ASC
         LIMIT {batch_size}
     """
 
@@ -170,19 +174,32 @@ def main() -> None:
                 if not object_json.get("updated"):
                     object_json["updated"] = resolved_published
 
+            # Jos julkaisupäivää ei ole vieläkään määritetty, käytetään fallbackia (received_at)
+            if not object_json.get("published"):
+                received_at = row.get("received_at")
+                if received_at:
+                    if isinstance(received_at, datetime.datetime):
+                        fallback_pub = received_at.astimezone(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+                    else:
+                        fallback_pub = str(received_at)
+                    object_json["published"] = fallback_pub
+                    if not object_json.get("updated"):
+                        object_json["updated"] = fallback_pub
+
             # updated: OG modified_time voittaa aina jos saatavilla
             if metadata.get("modified_time"):
                 object_json["updated"] = metadata["modified_time"]
 
             # isAccessibleForFree: tallennetaan Schema.org maksumuuritieto (Päätös G-020)
             # Maksumuurillisille uutisille EI haeta arkistolinkkiä taustalla (ne suodatetaan automaattisesti pois).
-            if metadata.get("is_accessible_for_free") is False:
+            is_free = metadata.get("is_accessible_for_free")
+            if is_free is False:
                 object_json["isAccessibleForFree"] = False
                 tags = object_json.get("tag", [])
                 if not any(isinstance(t, dict) and t.get("name") == "#tilaajille" for t in tags):
                     tags.append({"type": "Hashtag", "name": "#tilaajille", "href": "https://uutisseuranta.net/?tag=%23tilaajille"})
                     object_json["tag"] = tags
-            elif metadata.get("is_accessible_for_free") is True:
+            elif is_free is True:
                 object_json["isAccessibleForFree"] = True
 
             logger.info(f"Artikkeli {row_id} rikastettu onnistuneesti.")

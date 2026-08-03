@@ -18,7 +18,7 @@ resource "google_cloud_run_v2_job" "rss_fetch" {
 
   template {
     template {
-      service_account = local.write_api_sa_email
+      service_account = local.fetch_jobs_sa_email
 
       containers {
         image   = "${local.image_base}/rss-fetch-job:latest"
@@ -42,7 +42,7 @@ resource "google_cloud_run_v2_job" "rss_fetch" {
         }
         env {
           name  = "SERVICE_ACCOUNT_EMAIL"
-          value = local.write_api_sa_email
+          value = local.fetch_jobs_sa_email
         }
         env {
           name  = "REQUEST_TIMEOUT"
@@ -65,7 +65,10 @@ resource "google_cloud_run_v2_job" "rss_fetch" {
     }
   }
 
-  depends_on = [google_artifact_registry_repository.jobs]
+  depends_on = [
+    google_artifact_registry_repository.jobs,
+    google_secret_manager_secret_iam_member.fetch_jobs_can_read_ops_token
+  ]
 }
 
 # ── voikko-job ─────────────────────────────────────────────────────────────
@@ -219,5 +222,53 @@ resource "google_cloud_run_v2_job" "likes_and_updated" {
     }
   }
 
-  depends_on = [google_artifact_registry_repository.jobs]
+}
+
+# ── lausuntopalvelu-fetch-job ──────────────────────────────────────────────
+resource "google_cloud_run_v2_job" "lausuntopalvelu_fetch" {
+  name     = "lausuntopalvelu-fetch-job"
+  location = var.region
+  project  = var.gcp_project
+
+  template {
+    template {
+      service_account = local.fetch_jobs_sa_email
+
+      containers {
+        image   = "${local.image_base}/lausuntopalvelu-fetch-job:latest"
+        command = ["python", "lausuntopalvelu_fetch_job.py"]
+
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset
+        }
+        env {
+          name  = "BQ_LOCATION"
+          value = var.region
+        }
+        env {
+          name  = "SERVICE_ACCOUNT_EMAIL"
+          value = local.fetch_jobs_sa_email
+        }
+        env {
+          name = "OPS_DISPATCH_TOKEN"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.ops_dispatch_token.secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [
+    google_artifact_registry_repository.jobs,
+    google_secret_manager_secret_iam_member.fetch_jobs_can_read_ops_token
+  ]
 }

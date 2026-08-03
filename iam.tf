@@ -63,23 +63,35 @@ resource "google_project_iam_member" "write_api_bq_user" {
   member  = "serviceAccount:${google_service_account.write_api.email}"
 }
 
-# og-scraper kutsuu write-apita Cloud Run IAM:n kautta
-resource "google_cloud_run_v2_service_iam_member" "og_scraper_can_invoke_write_api" {
-  project  = var.gcp_project
-  location = var.region
-  name     = google_cloud_run_v2_service.write_api.name
-  role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.og_scraper.email}"
+
+# ---------------------------------------------------------------------------
+# SA: fetch-jobs (Tiedonkeruu-jobit: lausuntopalvelu, ahjo, hri, rss)
+# ---------------------------------------------------------------------------
+
+resource "google_service_account" "fetch_jobs" {
+  account_id   = "sa-fetch-jobs"
+  display_name = "fetch-jobs"
+  description  = "ActivityStreams fetch-jobs: BQ-pending-kirjoitus + GCS bronze -kirjoitus"
+  project      = var.gcp_project
 }
 
-# Cloud Scheduler kutsuu Cloud Run -jobeja write_api-SA:n tokenilla.
+# bigquery.user: pakollinen projekti-tasolla kyselyjen ja latausten ajamiseen
+resource "google_project_iam_member" "fetch_jobs_bq_user" {
+  #checkov:skip=CKV_GCP_34: bigquery.user on pakollinen projekti-tason rooli
+  project = var.gcp_project
+  role    = "roles/bigquery.user"
+  member  = "serviceAccount:${google_service_account.fetch_jobs.email}"
+}
+
+
+# Cloud Scheduler kutsuu Cloud Run -jobeja fetch_jobs-SA:n tokenilla.
 # Jokaiselle jobille tarvitaan erillinen resource-tason binding.
-resource "google_cloud_run_v2_job_iam_member" "write_api_invoke_rss_fetch" {
+resource "google_cloud_run_v2_job_iam_member" "fetch_jobs_invoke_rss_fetch" {
   project  = var.gcp_project
   location = var.region
   name     = google_cloud_run_v2_job.rss_fetch.name
   role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.write_api.email}"
+  member   = "serviceAccount:${google_service_account.fetch_jobs.email}"
 }
 
 resource "google_cloud_run_v2_job_iam_member" "write_api_invoke_og_enrichment" {
@@ -106,24 +118,14 @@ resource "google_cloud_run_v2_job_iam_member" "write_api_invoke_likes_and_update
   member   = "serviceAccount:${google_service_account.write_api.email}"
 }
 
-# ---------------------------------------------------------------------------
-# SA: og-scraper (IAM-suojattu scraper)
-# ---------------------------------------------------------------------------
-
-resource "google_service_account" "og_scraper" {
-  account_id   = "sa-og-scraper"
-  display_name = "og-scraper"
-  description  = "ActivityStreams og-scraper: OG-metatiedot + og_cache-kirjoitus"
-  project      = var.gcp_project
+resource "google_cloud_run_v2_job_iam_member" "fetch_jobs_invoke_lausuntopalvelu_fetch" {
+  project  = var.gcp_project
+  location = var.region
+  name     = google_cloud_run_v2_job.lausuntopalvelu_fetch.name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.fetch_jobs.email}"
 }
 
-# bigquery.user: pakollinen projekti-tasolla
-resource "google_project_iam_member" "og_scraper_bq_user" {
-  #checkov:skip=CKV_GCP_34: bigquery.user on pakollinen projekti-tason rooli
-  project = var.gcp_project
-  role    = "roles/bigquery.user"
-  member  = "serviceAccount:${google_service_account.og_scraper.email}"
-}
 
 # ---------------------------------------------------------------------------
 # SA: backend (deploy-SA — käytetään vain CI/CD-deployssa, ei runtime)
@@ -195,14 +197,6 @@ resource "google_cloud_run_v2_service_iam_member" "write_api_all_authenticated_u
   member   = "allAuthenticatedUsers"
 }
 
-# Salli julkinen liikenne og-scraperille (avoin data)
-resource "google_cloud_run_v2_service_iam_member" "og_scraper_public" {
-  project  = var.gcp_project
-  location = var.region
-  name     = google_cloud_run_v2_service.og_scraper.name
-  role     = "roles/run.invoker"
-  member   = "allUsers"
-}
 
 # Sallitaan query-apille Cloud Scheduler -ajastimen hallinta (pausettaminen ja jatkaminen)
 resource "google_project_iam_member" "query_api_scheduler_admin" {

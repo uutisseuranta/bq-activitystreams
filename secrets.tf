@@ -57,3 +57,13 @@ resource "google_secret_manager_secret_iam_member" "write_api_can_read_ops_token
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.write_api.email}"
 }
+
+# fetch-jobs SA tarvitsee oikeuden lukea ops-dispatch-tokenin virheilmoituksia varten
+resource "google_secret_manager_secret_iam_member" "fetch_jobs_can_read_ops_token" {
+  secret_id = google_secret_manager_secret.ops_dispatch_token.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.fetch_jobs.email}"
+}
+
+
+

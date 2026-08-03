@@ -32,6 +32,7 @@ import base64
 import datetime
 import json
 import os
+import hashlib
 from typing import Any, Dict, Optional
 
 import ulid
@@ -39,13 +40,17 @@ from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from gcp_logging import get_logger
 from google.auth.transport import requests as google_requests
-from google.cloud import bigquery
+from google.cloud import bigquery, storage
 from google.oauth2 import id_token
+from og_parser import validate_url_ip, robots_check
+from gcs_bronze import write_to_gcs_bronze
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 logger = get_logger("write-api")
+
+
 
 
 def get_user_id(request: Request) -> str:
@@ -229,6 +234,22 @@ def get_object_by_id(obj_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def is_object_pending(obj_id: str) -> bool:
+    """Tarkistaa onko objekti jo odottamassa rikastusta objects_pending-taulussa."""
+    query = f"""
+        SELECT 1
+        FROM `{PROJECT}.{DATASET}.objects_pending`
+        WHERE id = @id LIMIT 1
+    """
+    job_config = bigquery.QueryJobConfig(query_parameters=[bigquery.ScalarQueryParameter("id", "STRING", obj_id)])
+    try:
+        rows = list(bq_client.query(query, job_config=job_config).result())
+        return len(rows) > 0
+    except Exception as e:
+        logger.error(f"Virhe tarkistettaessa pending-tilaa objektille {obj_id}: {e}")
+    return False
+
+
 def get_comments_count_by_actor(actor: str, object_id: str) -> int:
     """Laskee kuinka monta aktiviteettia tietty actor on tehnyt kyseiseen kohteeseen."""
     query = f"""
@@ -403,86 +424,177 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
             raise HTTPException(status_code=400, detail="Object must be a valid JSON object.")
 
         obj_type = act_object.get("type")
-        in_reply_to = act_object.get("inReplyTo")
 
-        if obj_type != "Note":
-            raise HTTPException(status_code=400, detail="Only 'Note' type objects are supported for Create.")
+        if obj_type == "Article":
+            url = act_object.get("url")
+            if not url:
+                raise HTTPException(status_code=400, detail="Missing 'url' in Article.")
 
-        if not in_reply_to:
-            raise HTTPException(status_code=400, detail="'inReplyTo' is required for comment creation.")
+            # Arkkitehtuuripäätös G-022: Uutislinkit (Article) tallennetaan pending-tauluun
+            # rikastusta varten, kun taas kommentit (Note) tallennetaan suoraan päätauluun,
+            # koska kommenteissa ei ole ulkoisia OpenGraph-metadatarasitteita.
+            try:
+                if not validate_url_ip(url):
+                    raise HTTPException(status_code=400, detail="Forbidden URL or invalid IP (SSRF protection).")
+                if not robots_check(url):
+                    raise HTTPException(status_code=400, detail="Access denied by robots.txt.")
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"URL validation failed: {e}")
 
-        parent = get_object_by_id(in_reply_to)
-        if not parent or parent["deleted"]:
-            raise HTTPException(status_code=404, detail="Parent object not found or deleted.")
+            # Generoidaan ID URL:n perusteella
+            input_str = f"user{url}"
+            url_hash = hashlib.sha256(input_str.encode("utf-8")).hexdigest()[:16]
+            obj_id = f"https://uutisseuranta.net/ap/objects/{url_hash}"
 
-        parent_type = parent["object_json"].get("type")
-        thread_root = None
+            # Estetään duplikaattien tallennus objects- tai objects_pending-tauluun
+            existing = get_object_by_id(obj_id)
+            if existing or is_object_pending(obj_id):
+                deterministic_act_id = f"https://activitystreams.uutisseuranta.net/ap/activities/creates/{url_hash}"
+                return Response(
+                    status_code=200,
+                    content=json.dumps({"id": deterministic_act_id, "object_id": obj_id}),
+                    media_type="application/json"
+                )
 
-        if parent_type == "Article":
-            thread_root = parent["id"]
-        elif parent_type == "Note":
-            parent_in_reply_to = parent["object_json"].get("inReplyTo")
-            grandparent = get_object_by_id(parent_in_reply_to) if parent_in_reply_to else None
-            if grandparent and grandparent["object_json"].get("type") == "Note":
-                raise HTTPException(status_code=400, detail="Reply thread depth limit exceeded (max 2 levels).")
-            thread_root = parent["object_json"].get("thread_root") or parent_in_reply_to
+            act_object["id"] = obj_id
+
+            act_id = f"https://activitystreams.uutisseuranta.net/ap/activities/creates/{ulid.new().str}"
+            activity["id"] = act_id
+            activity["object"] = act_object
+            activity["published"] = published_str
+
+            activities_row = {
+                "id": act_id,
+                "type": "Create",
+                "actor": actor_id,
+                "object_id": obj_id,
+                "object_type": "Article",
+                "object_json": json.dumps(activity),
+                "target_id": None,
+                "in_reply_to": None,
+                "thread_root": None,
+                "published": published_str,
+                "received_at": published_str,
+            }
+
+            # Kirjoitetaan raaka JSON GCS Bronzeen
+            raw_data = json.dumps(act_object, ensure_ascii=False).encode("utf-8")
+            write_to_gcs_bronze(PROJECT, "user", raw_data, "json", source_type="user_json")
+
+            # Kirjoitetaan BigQuery objects_pending -tauluun odottamaan rikastusta
+            pending_row = {
+                "id": obj_id,
+                "source": "user",
+                "received_at": published_str,
+                "object_json": json.dumps({
+                    "@context": "https://www.w3.org/ns/activitystreams",
+                    "type": "Article",
+                    "id": obj_id,
+                    "url": url,
+                    "name": act_object.get("name", ""),
+                    "summary": act_object.get("summary", ""),
+                    "published": published_str,
+                    "attributedTo": {"type": "Person", "id": actor_id}
+                })
+            }
+
+            try:
+                bq_client.insert_rows_json(f"{PROJECT}.{SOCIAL_DATASET}.activities", [activities_row])
+                
+                # Streaming insert objects_pending-tauluun parhaan latenssin saavuttamiseksi API-kutsussa
+                errors = bq_client.insert_rows_json(f"{PROJECT}.{DATASET}.objects_pending", [pending_row])
+                if errors:
+                    raise Exception(f"BigQuery streaming insert errors: {errors}")
+            except Exception as e:
+                logger.error(f"Virhe käyttäjän linkin tallennuksessa: {e}")
+                raise HTTPException(status_code=500, detail="Database write failed.")
+
+            return Response(
+                status_code=201, content=json.dumps({"id": act_id, "object_id": obj_id}), media_type="application/json"
+            )
+
+        elif obj_type == "Note":
+            in_reply_to = act_object.get("inReplyTo")
+            if not in_reply_to:
+                raise HTTPException(status_code=400, detail="'inReplyTo' is required for comment creation.")
+
+            parent = get_object_by_id(in_reply_to)
+            if not parent or parent["deleted"]:
+                raise HTTPException(status_code=404, detail="Parent object not found or deleted.")
+
+            parent_type = parent["object_json"].get("type")
+            thread_root = None
+
+            if parent_type == "Article":
+                thread_root = parent["id"]
+            elif parent_type == "Note":
+                parent_in_reply_to = parent["object_json"].get("inReplyTo")
+                grandparent = get_object_by_id(parent_in_reply_to) if parent_in_reply_to else None
+                if grandparent and grandparent["object_json"].get("type") == "Note":
+                    raise HTTPException(status_code=400, detail="Reply thread depth limit exceeded (max 2 levels).")
+                thread_root = parent["object_json"].get("thread_root") or parent_in_reply_to
+            else:
+                raise HTTPException(status_code=400, detail="Unsupported parent object type.")
+
+            obj_id = f"https://activitystreams.uutisseuranta.net/ap/objects/comments/{ulid.new().str}"
+            act_object["id"] = obj_id
+            act_object["published"] = published_str
+            act_object["attributedTo"] = actor_id
+            act_object["thread_root"] = thread_root
+
+            act_id = f"https://activitystreams.uutisseuranta.net/ap/activities/creates/{ulid.new().str}"
+            activity["id"] = act_id
+            activity["object"] = act_object
+            activity["published"] = published_str
+
+            activities_row = {
+                "id": act_id,
+                "type": "Create",
+                "actor": actor_id,
+                "object_id": obj_id,
+                "object_type": "Note",
+                "object_json": json.dumps(activity),
+                "target_id": None,
+                "in_reply_to": in_reply_to,
+                "thread_root": thread_root,
+                "published": published_str,
+                "received_at": published_str,
+            }
+
+            merge_query = f"""
+                MERGE `{PROJECT}.{DATASET}.objects` T
+                USING (SELECT @id AS id, @object_json AS object_json, @published AS published) S
+                ON T.id = S.id
+                WHEN MATCHED THEN UPDATE SET
+                  T.object_json = PARSE_JSON(S.object_json),
+                  T.updated = CURRENT_TIMESTAMP()
+                WHEN NOT MATCHED THEN INSERT
+                  (id, source, published, updated, tags, tags_enriched, like_count, dislike_count, deleted, object_json)
+                  VALUES (S.id, 'user', S.published, CURRENT_TIMESTAMP(), [], FALSE, 0, 0, FALSE, PARSE_JSON(S.object_json));
+            """
+            merge_config = bigquery.QueryJobConfig(
+                query_parameters=[
+                    bigquery.ScalarQueryParameter("id", "STRING", obj_id),
+                    bigquery.ScalarQueryParameter("object_json", "STRING", json.dumps(act_object)),
+                    bigquery.ScalarQueryParameter("published", "TIMESTAMP", datetime.datetime.now(datetime.timezone.utc)),
+                ]
+            )
+
+            try:
+                bq_client.insert_rows_json(f"{PROJECT}.{SOCIAL_DATASET}.activities", [activities_row])
+                bq_client.query(merge_query, job_config=merge_config).result()
+            except Exception as e:
+                logger.error(f"Virhe kommentin tallennuksessa: {e}")
+                raise HTTPException(status_code=500, detail="Database write failed.")
+
+            return Response(
+                status_code=201, content=json.dumps({"id": act_id, "object_id": obj_id}), media_type="application/json"
+            )
+
         else:
-            raise HTTPException(status_code=400, detail="Unsupported parent object type.")
-
-        obj_id = f"https://activitystreams.uutisseuranta.net/ap/objects/comments/{ulid.new().str}"
-        act_object["id"] = obj_id
-        act_object["published"] = published_str
-        act_object["attributedTo"] = actor_id
-        act_object["thread_root"] = thread_root
-
-        act_id = f"https://activitystreams.uutisseuranta.net/ap/activities/creates/{ulid.new().str}"
-        activity["id"] = act_id
-        activity["object"] = act_object
-        activity["published"] = published_str
-
-        activities_row = {
-            "id": act_id,
-            "type": "Create",
-            "actor": actor_id,
-            "object_id": obj_id,
-            "object_type": "Note",
-            "object_json": json.dumps(activity),
-            "target_id": None,
-            "in_reply_to": in_reply_to,
-            "thread_root": thread_root,
-            "published": published_str,
-            "received_at": published_str,
-        }
-
-        merge_query = f"""
-            MERGE `{PROJECT}.{DATASET}.objects` T
-            USING (SELECT @id AS id, @object_json AS object_json, @published AS published) S
-            ON T.id = S.id
-            WHEN MATCHED THEN UPDATE SET
-              T.object_json = PARSE_JSON(S.object_json),
-              T.updated = CURRENT_TIMESTAMP()
-            WHEN NOT MATCHED THEN INSERT
-              (id, source, published, updated, tags, tags_enriched, like_count, dislike_count, deleted, object_json)
-              VALUES (S.id, 'user', S.published, CURRENT_TIMESTAMP(), [], FALSE, 0, 0, FALSE, PARSE_JSON(S.object_json));
-        """
-        merge_config = bigquery.QueryJobConfig(
-            query_parameters=[
-                bigquery.ScalarQueryParameter("id", "STRING", obj_id),
-                bigquery.ScalarQueryParameter("object_json", "STRING", json.dumps(act_object)),
-                bigquery.ScalarQueryParameter("published", "TIMESTAMP", datetime.datetime.now(datetime.timezone.utc)),
-            ]
-        )
-
-        try:
-            bq_client.insert_rows_json(f"{PROJECT}.{SOCIAL_DATASET}.activities", [activities_row])
-            bq_client.query(merge_query, job_config=merge_config).result()
-        except Exception as e:
-            logger.error(f"Virhe kommentin tallennuksessa: {e}")
-            raise HTTPException(status_code=500, detail="Database write failed.")
-
-        return Response(
-            status_code=201, content=json.dumps({"id": act_id, "object_id": obj_id}), media_type="application/json"
-        )
+            raise HTTPException(status_code=400, detail="Unsupported object type for Create activity.")
 
     elif act_type == "Delete":
         obj_id = act_object if isinstance(act_object, str) else act_object.get("id")

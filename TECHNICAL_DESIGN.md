@@ -47,10 +47,11 @@ Uutissivustojen ohjelmallinen haku (scraping) rikastusprosessissa (`og_enrichmen
 *   **Välimuisti:** Palvelimen ylikuormituksen estämiseksi `robots.txt`-säännöt välimuistitetaan paikallisesti 24 tunniksi.
 *   **Kapasiteetin säästö:** Ladattavaa HTML-sivun kokoa rajoitetaan siten, että response-lukeminen keskeytetään heti, kun HTML-head-alue päättyy (max ~2 MB), mikä säästää sekä palvelimen että kohteiden verkkokapasiteettia.
 
-## Wayback Machine -arkistointi (Päätös L-013)
+## Wayback Machine -arkistointi (Päätökset L-013 ja G-020)
 
-Kun artikkeli haetaan tai se saa ensimmäisen tykkäyksen/kommentin, uutisen URL-osoite lähetetään arkistoitavaksi Internet Archiven Wayback Machineen (SPN2 API):
-*   **Wildcard-URL vs. Timestamp-URL:** Järjestelmä tallentaa ja palauttaa `url_archive`-kentässä aina wildcard-osoitteen muodossa `https://web.archive.org/web/*/{url}` kiinteän aikaleimaosoitteen sijaan.
-*   **Perustelu:** Wildcard-osoite ohjaa käyttäjän aina uusimpaan saatavilla olevaan versioon ilman tarvetta pollata SPN2-rajapintaa ja odottaa arkistoinnin valmistumista (mikä lisäisi API-latenssia ja taustaprosessien kompleksisuutta).
-*   **Fallback-käyttö:** Mikäli alkuperäinen sivu on tyhjä (redirect virhesivulle) tai palauttaa 404-virheen, uutisseuranta.github.io#24 käyttää tätä `url_archive`-linkkiä fallback-reittinä sisällön näyttämiseksi.
+Proaktiivinen arkistointi ja Wayback Machine -integraatio noudattavat seuraavia periaatteita:
+*   **Käyttäjäaktivoitu arkistointi (G-020):** Arkistolinkki (`url_archive`) haetaan ja tallennetaan BigQueryyn ainoastaan silloin, kun käyttäjä tekee aktiviteetin (klikkaus, kommentti, tykkäys) ilmaisartikkelille. Taustaprosessi (`og_enrichment_job.py`) ei hae tai pyydä arkistointia automaattisesti maksumuurillisille uutisille. Maksumuurilliset uutiset ilman arkistolinkkiä piilotetaan uutisvirrasta kokonaan.
+*   **Wildcard-URL vs. Timestamp-URL (L-013):** Järjestelmä tallentaa ja palauttaa `url_archive`-kentässä pääsääntöisesti wildcard-osoitteen muodossa `https://web.archive.org/web/*/{url}` kiinteän aikaleimaosoitteen sijaan.
+*   **Perustelu:** Wildcard-osoite ohjaa käyttäjän aina uusimpaan saatavilla olevaan versioon ilman tarvetta odottaa ja pollata SPN2-arkistoinnin valmistumista (mikä lisäisi taustaprosessien kompleksisuutta).
+*   **Fallback-käyttö:** Jos uutissivun ping-testi ilmoittaa sivun olevan alhaalla, `query_api.py` kysyy reaaliaikaisesti Wayback Availability API:sta lähintä snapshotia ja päivittää sen taustalla BigQueryyn.
 

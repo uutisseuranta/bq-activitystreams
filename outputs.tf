@@ -15,10 +15,6 @@ output "write_api_url" {
   value       = google_cloud_run_v2_service.write_api.uri
 }
 
-output "og_scraper_url" {
-  description = "og-scraper Cloud Run -palvelun URL"
-  value       = google_cloud_run_v2_service.og_scraper.uri
-}
 
 output "image_base" {
   description = "Artifact Registry -imagen peruspolku"
