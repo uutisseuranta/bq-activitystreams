@@ -109,6 +109,9 @@ def build_as2_article(prop: Dict[str, Any], source: str, domain: str) -> Dict[st
         "published": pub_str,
         "updated": pub_str,
         "attributedTo": {"type": "Organization", "name": org_name, "url": "https://www.lausuntopalvelu.fi"},
+        "tag": [
+            {"type": "Hashtag", "name": "#lausuntopyynto", "href": "https://uutisseuranta.net/?tag=%23lausuntopyynto"}
+        ],
         "license": None,
     }
 
