@@ -57,6 +57,7 @@ def main() -> None:
         UNION ALL
         SELECT id, object_json, 'pending' as origin, source, received_at
         FROM `{project}.{dataset}.objects_pending`
+        ORDER BY received_at ASC
         LIMIT {batch_size}
     """
 

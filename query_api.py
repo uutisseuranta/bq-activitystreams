@@ -28,6 +28,7 @@ last_user_activity = time.time()
 
 # Suodatin maksumuurillisille artikkeleille, joilta puuttuu arkistolinkki (Päätös G-020)
 # Käytetään SAFE_CASTia, koska JSON_VALUE palauttaa merkkijonon ja isAccessibleForFree on tallennettu booleanina.
+# Huom: Tämä on staattinen vakio eikä sisällä käyttäjäsyötettä, joten f-string-interpolaatio on täysin turvallista ilman parametrisointia.
 PAYWALL_FILTER_SQL = """
   AND NOT (
     SAFE_CAST(JSON_VALUE(object_json, '$.isAccessibleForFree') AS BOOL) = FALSE

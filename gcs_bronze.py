@@ -47,4 +47,5 @@ def write_to_gcs_bronze(
         meta_blob.upload_from_string(json.dumps(meta_payload), content_type="application/json")
         logger.info(f"Metadata sidecar cached to GCS: gs://{bucket_name}/{meta_filename}")
     except Exception as e:
+        # Best-effort: GCS bronze -kirjoitusvirhe ei estä BQ-kirjoitusta (Päätös L-017)
         logger.error(f"Failed to save raw data or metadata to GCS Bronze: {e}")

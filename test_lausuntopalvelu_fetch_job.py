@@ -153,3 +153,63 @@ class TestLausuntopalveluFetchJob(unittest.TestCase):
         args, _ = mock_write_bq.call_args
         self.assertEqual(len(args[3]), 2) # Two items total from two pages
 
+    @patch("lausuntopalvelu_fetch_job.httpx.get")
+    @patch("lausuntopalvelu_fetch_job.write_to_gcs_bronze")
+    @patch("lausuntopalvelu_fetch_job.bigquery.Client")
+    @patch("lausuntopalvelu_fetch_job.get_existing_ids", return_value=set())
+    @patch("lausuntopalvelu_fetch_job.get_last_fetched_timestamp", return_value=None)
+    @patch("lausuntopalvelu_fetch_job.write_to_bigquery")
+    @patch("lausuntopalvelu_fetch_job.update_last_fetched_timestamp")
+    def test_main_pagination_relative_next(self, mock_update, mock_write_bq, mock_last, mock_exist, mock_bq_class, mock_gcs, mock_get):
+        from lausuntopalvelu_fetch_job import main
+        import os
+        os.environ["GCP_PROJECT"] = "test-project"
+
+        # Mock page 1 with relative nextLink
+        xml_page1 = """<?xml version="1.0" encoding="utf-8"?>
+        <feed xmlns="http://www.w3.org/2005/Atom">
+          <link rel="next" href="Proposals?$top=100&amp;$skip=100" />
+          <entry>
+            <content type="application/xml">
+              <m:properties xmlns:m="http://schemas.microsoft.com/ado/2007/08/dataservices/metadata" xmlns:d="http://schemas.microsoft.com/ado/2007/08/dataservices">
+                <d:Id>1</d:Id>
+                <d:Name>Proposal 1</d:Name>
+              </m:properties>
+            </content>
+          </entry>
+        </feed>
+        """
+        xml_page2 = """<?xml version="1.0" encoding="utf-8"?>
+        <feed xmlns="http://www.w3.org/2005/Atom">
+          <entry>
+            <content type="application/xml">
+              <m:properties xmlns:m="http://schemas.microsoft.com/ado/2007/08/dataservices/metadata" xmlns:d="http://schemas.microsoft.com/ado/2007/08/dataservices">
+                <d:Id>2</d:Id>
+                <d:Name>Proposal 2</d:Name>
+              </m:properties>
+            </content>
+          </entry>
+        </feed>
+        """
+        
+        mock_resp1 = MagicMock()
+        mock_resp1.content = xml_page1.encode("utf-8")
+        mock_resp1.raise_for_status = MagicMock()
+
+        mock_resp2 = MagicMock()
+        mock_resp2.content = xml_page2.encode("utf-8")
+        mock_resp2.raise_for_status = MagicMock()
+
+        mock_get.side_effect = [mock_resp1, mock_resp2]
+
+        main()
+
+        self.assertEqual(mock_get.call_count, 2)
+        # Verify the second URL is prefixed with the base service URL
+        mock_get.assert_any_call(
+            "https://www.lausuntopalvelu.fi/api/v1/Lausuntopalvelu.svc/Proposals?$top=100&$skip=100",
+            headers={"User-Agent": "uutisseuranta-fetch-bot/1.0 (+https://uutisseuranta.net)"},
+            timeout=25,
+            follow_redirects=True
+        )
+

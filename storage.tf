@@ -24,7 +24,7 @@ resource "google_storage_bucket" "bronze_buckets" {
 # from the list would cause the plan phase to fail immediately with a key reference error.
 # This dependency is enforced by a contains() validation rule in variables.tf.
 resource "google_storage_bucket_iam_member" "write_api_bronze_creator" {
-  bucket   = try(google_storage_bucket.bronze_buckets["user"].name, "")
+  bucket   = google_storage_bucket.bronze_buckets["user"].name
   role     = "roles/storage.objectCreator"
   member   = "serviceAccount:${google_service_account.write_api.email}"
 }

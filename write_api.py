@@ -234,6 +234,22 @@ def get_object_by_id(obj_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def is_object_pending(obj_id: str) -> bool:
+    """Tarkistaa onko objekti jo odottamassa rikastusta objects_pending-taulussa."""
+    query = f"""
+        SELECT 1
+        FROM `{PROJECT}.{DATASET}.objects_pending`
+        WHERE id = @id LIMIT 1
+    """
+    job_config = bigquery.QueryJobConfig(query_parameters=[bigquery.ScalarQueryParameter("id", "STRING", obj_id)])
+    try:
+        rows = list(bq_client.query(query, job_config=job_config).result())
+        return len(rows) > 0
+    except Exception as e:
+        logger.error(f"Virhe tarkistettaessa pending-tilaa objektille {obj_id}: {e}")
+    return False
+
+
 def get_comments_count_by_actor(actor: str, object_id: str) -> int:
     """Laskee kuinka monta aktiviteettia tietty actor on tehnyt kyseiseen kohteeseen."""
     query = f"""
@@ -431,6 +447,16 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
             input_str = f"user{url}"
             url_hash = hashlib.sha256(input_str.encode("utf-8")).hexdigest()[:16]
             obj_id = f"https://uutisseuranta.net/ap/objects/{url_hash}"
+
+            # Estetään duplikaattien tallennus objects- tai objects_pending-tauluun
+            existing = get_object_by_id(obj_id)
+            if existing or is_object_pending(obj_id):
+                deterministic_act_id = f"https://activitystreams.uutisseuranta.net/ap/activities/creates/{url_hash}"
+                return Response(
+                    status_code=200,
+                    content=json.dumps({"id": deterministic_act_id, "object_id": obj_id}),
+                    media_type="application/json"
+                )
 
             act_object["id"] = obj_id
 
