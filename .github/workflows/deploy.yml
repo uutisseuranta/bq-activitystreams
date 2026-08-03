@@ -51,9 +51,6 @@ jobs:
           - service: write-api
             type: service
             args: "write_api:app,--host,0.0.0.0,--port,8080"
-          - service: og-scraper
-            type: service
-            args: "og_scraper:app,--host,0.0.0.0,--port,8080"
           - service: rss-fetch-job
             type: job
           - service: likes-and-updated-job
