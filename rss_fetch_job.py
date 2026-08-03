@@ -368,7 +368,13 @@ def write_to_bigquery(bq_client: bigquery.Client, project: str, dataset: str, ar
             }
         )
     pending_table_id = f"{project}.{dataset}.objects_pending"
-    pending_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND")
+    pending_schema = [
+        bigquery.SchemaField("id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("source", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("received_at", "TIMESTAMP", mode="REQUIRED"),
+        bigquery.SchemaField("object_json", "JSON", mode="NULLABLE"),
+    ]
+    pending_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND", schema=pending_schema)
     try:
         load_job = bq_client.load_table_from_json(pending_rows, pending_table_id, job_config=pending_config)
         load_job.result()

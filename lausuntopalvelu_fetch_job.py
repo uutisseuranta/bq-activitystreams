@@ -29,7 +29,7 @@ def parse_xml_date(date_str: str) -> Optional[datetime.datetime]:
             # Päivämäärä-edge-case (esim. "2026-08-03") -> lisätään T00:00:00
             clean_str += "T00:00:00"
         clean_str = clean_str.replace(" ", "T")
-        if "+" not in clean_str and "-" not in clean_str[10:]:
+        if len(clean_str) <= 19:
             # Jos ei aikavyöhykettä, oletetaan UTC
             clean_str += "+00:00"
         return datetime.datetime.fromisoformat(clean_str).astimezone(datetime.timezone.utc)
@@ -130,7 +130,13 @@ def write_to_bigquery(bq_client: bigquery.Client, project: str, dataset: str, it
         })
 
     table_id = f"{project}.{dataset}.objects_pending"
-    job_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND")
+    schema = [
+        bigquery.SchemaField("id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("source", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("received_at", "TIMESTAMP", mode="REQUIRED"),
+        bigquery.SchemaField("object_json", "JSON", mode="NULLABLE")
+    ]
+    job_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND", schema=schema)
     try:
         load_job = bq_client.load_table_from_json(pending_rows, table_id, job_config=job_config)
         load_job.result()

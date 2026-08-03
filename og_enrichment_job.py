@@ -191,13 +191,14 @@ def main() -> None:
 
             # isAccessibleForFree: tallennetaan Schema.org maksumuuritieto (Päätös G-020)
             # Maksumuurillisille uutisille EI haeta arkistolinkkiä taustalla (ne suodatetaan automaattisesti pois).
-            if metadata.get("is_accessible_for_free") is False:
+            is_free = metadata.get("is_accessible_for_free")
+            if is_free is False:
                 object_json["isAccessibleForFree"] = False
                 tags = object_json.get("tag", [])
                 if not any(isinstance(t, dict) and t.get("name") == "#tilaajille" for t in tags):
                     tags.append({"type": "Hashtag", "name": "#tilaajille", "href": "https://uutisseuranta.net/?tag=%23tilaajille"})
                     object_json["tag"] = tags
-            else:
+            elif is_free is True:
                 object_json["isAccessibleForFree"] = True
 
             logger.info(f"Artikkeli {row_id} rikastettu onnistuneesti.")
@@ -214,8 +215,6 @@ def main() -> None:
         except PermissionError as pe:
             # og_parser.fetch_url_stream nostaa PermissionErrorin SSRF-validointivirheistä
             logger.warning(f"SSRF-validointivirhe haettaessa {url}: {pe}")
-            if "isAccessibleForFree" not in object_json:
-                object_json["isAccessibleForFree"] = True
             rows_to_load.append(
                 {
                     "id": row_id,
@@ -227,8 +226,6 @@ def main() -> None:
             )
         except Exception as e:
             logger.warning(f"Virhe haettaessa tai parsiessa URL {url}: {e}")
-            if "isAccessibleForFree" not in object_json:
-                object_json["isAccessibleForFree"] = True
             rows_to_load.append(
                 {
                     "id": row_id,

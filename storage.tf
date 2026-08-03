@@ -19,6 +19,8 @@ resource "google_storage_bucket" "bronze_buckets" {
   }
 }
 
+# write_api_bronze_creator relies on the presence of the "user" key in var.bronze_bucket_sources.
+# This dependency is enforced by a contains() validation rule in variables.tf.
 resource "google_storage_bucket_iam_member" "write_api_bronze_creator" {
   bucket   = google_storage_bucket.bronze_buckets["user"].name
   role     = "roles/storage.objectCreator"

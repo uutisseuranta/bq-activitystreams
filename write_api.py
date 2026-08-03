@@ -460,7 +460,7 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
                 "id": obj_id,
                 "source": "user",
                 "received_at": published_str,
-                "object_json": {
+                "object_json": json.dumps({
                     "@context": "https://www.w3.org/ns/activitystreams",
                     "type": "Article",
                     "id": obj_id,
@@ -468,7 +468,7 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
                     "name": act_object.get("name", ""),
                     "summary": act_object.get("summary", ""),
                     "attributedTo": {"type": "Person", "id": actor_id}
-                }
+                })
             }
 
             try:
