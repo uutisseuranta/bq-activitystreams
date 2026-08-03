@@ -365,9 +365,9 @@ WHEN NOT MATCHED THEN
 
 ---
 
-## Cloud Run Job: OpenAhjo-päätökset (#3)
+## [Planned / Follow-up PR] Cloud Run Job: OpenAhjo-päätökset (#3)
 
-Ajastus: `0 3 * * *`. Base URL: `http://dev.hel.fi/openahjo/v1`.
+Toteutus siirretty erilliseen PR:ään. Ajastus: `0 3 * * *`. Base URL: `http://dev.hel.fi/openahjo/v1`.
 
 | AS2-kenttä | OpenAhjo-kenttä |
 |---|---|
@@ -378,9 +378,9 @@ Ajastus: `0 3 * * *`. Base URL: `http://dev.hel.fi/openahjo/v1`.
 
 ---
 
-## Cloud Run Job: HRI-datasetit (#4)
+## [Planned / Follow-up PR] Cloud Run Job: HRI-datasetit (#4)
 
-Ajastus: `30 3 * * *`. Base URL: `https://hri.fi/data/api/3/action/`. Datasetit tallennetaan AS2 `Document`-objekteina, kategoriat `OrderedCollection`-objekteina.
+Toteutus siirretty erilliseen PR:ään. Ajastus: `30 3 * * *`. Base URL: `https://hri.fi/data/api/3/action/`. Datasetit tallennetaan AS2 `Document`-objekteina, kategoriat `OrderedCollection`-objekteina.
 
 ---
 
