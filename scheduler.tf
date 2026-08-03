@@ -146,27 +146,6 @@ resource "google_cloud_scheduler_job" "lausuntopalvelu_fetch" {
   }
 }
 
-resource "google_cloud_scheduler_job" "ahjo_fetch" {
-  name             = "ahjo-fetch-job-trigger"
-  region           = var.scheduler_region
-  project          = var.gcp_project
-  description      = "Ajaa ahjo-fetch-jobin päivittäin klo 06:00 Helsinki-aikaa"
-  schedule         = "0 6 * * *"
-  time_zone        = "Europe/Helsinki"
-  attempt_deadline = "320s"
 
-  retry_config {
-    retry_count = 2
-  }
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.gcp_project}/jobs/${google_cloud_run_v2_job.ahjo_fetch.name}:run"
-
-    oauth_token {
-      service_account_email = local.fetch_jobs_sa_email
-    }
-  }
-}
 
 

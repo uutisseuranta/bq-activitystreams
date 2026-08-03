@@ -65,20 +65,5 @@ resource "google_secret_manager_secret_iam_member" "fetch_jobs_can_read_ops_toke
   member    = "serviceAccount:${google_service_account.fetch_jobs.email}"
 }
 
-# Luodaan ahjo-api-key salaisuus Ahjo REST API -rajapintaa varten
-resource "google_secret_manager_secret" "ahjo_api_key" {
-  secret_id = "ahjo-api-key"
-
-  replication {
-    auto {}
-  }
-}
-
-# Vain fetch-jobs SA:lla on oikeus lukea ahjo-api-key (write-api ei tarvitse sitä)
-resource "google_secret_manager_secret_iam_member" "fetch_jobs_can_read_ahjo_key" {
-  secret_id = google_secret_manager_secret.ahjo_api_key.secret_id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.fetch_jobs.email}"
-}
 
 
