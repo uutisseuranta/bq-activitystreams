@@ -51,7 +51,7 @@ def main() -> None:
         SELECT id, object_json, 'main' as origin, source
         FROM `{project}.{dataset}.objects`
         WHERE source != 'user'
-          AND (og_enriched = FALSE OR og_enriched IS NULL OR JSON_VALUE(object_json, '$.isAccessibleForFree') IS NULL)
+          AND (og_enriched = FALSE OR og_enriched IS NULL)
           AND deleted = FALSE
         UNION ALL
         SELECT id, object_json, 'pending' as origin, source
