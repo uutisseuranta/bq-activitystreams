@@ -486,7 +486,18 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
 
             try:
                 bq_client.insert_rows_json(f"{PROJECT}.{SOCIAL_DATASET}.activities", [activities_row])
-                bq_client.insert_rows_json(f"{PROJECT}.{DATASET}.objects_pending", [pending_row])
+                
+                # Batch load objects_pending-tauluun takaa vahvan konsistenssin
+                pending_table_id = f"{PROJECT}.{DATASET}.objects_pending"
+                pending_schema = [
+                    bigquery.SchemaField("id", "STRING", mode="REQUIRED"),
+                    bigquery.SchemaField("source", "STRING", mode="REQUIRED"),
+                    bigquery.SchemaField("received_at", "TIMESTAMP", mode="REQUIRED"),
+                    bigquery.SchemaField("object_json", "JSON", mode="NULLABLE"),
+                ]
+                pending_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND", schema=pending_schema)
+                load_job = bq_client.load_table_from_json([pending_row], pending_table_id, job_config=pending_config)
+                load_job.result()
             except Exception as e:
                 logger.error(f"Virhe käyttäjän linkin tallennuksessa: {e}")
                 raise HTTPException(status_code=500, detail="Database write failed.")

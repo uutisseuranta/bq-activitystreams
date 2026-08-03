@@ -6,6 +6,8 @@ import hashlib
 import json
 import os
 import sys
+import html
+from bs4 import BeautifulSoup
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -94,13 +96,26 @@ def build_as2_article(package: Dict[str, Any], source: str, domain: str) -> Dict
     # Lisenssi
     license_url = package.get("license_url") or "https://creativecommons.org/licenses/by/4.0/deed.fi"
 
+    # Siivotaan HTML-tagit ja unescapataan merkit notes-kentästä
+    notes = package.get("notes") or ""
+    if notes:
+        try:
+            soup = BeautifulSoup(notes, "html.parser")
+            clean_notes = soup.get_text(separator=" ")
+            clean_notes = " ".join(clean_notes.split()).strip()
+            summary = html.unescape(clean_notes)
+        except Exception:
+            summary = notes
+    else:
+        summary = "Helsinki Region Infoshare avoin aineisto."
+
     article_json = {
         "@context": "https://www.w3.org/ns/activitystreams",
         "type": "Article",
         "id": as2_id,
         "url": dataset_url,
         "name": package.get("title") or package.get("name") or "HRI Aineisto",
-        "summary": package.get("notes") or "Helsinki Region Infoshare avoin aineisto.",
+        "summary": summary,
         "published": pub_str,
         "updated": upd_str,
         "attributedTo": {

@@ -18,7 +18,7 @@ resource "google_cloud_run_v2_job" "rss_fetch" {
 
   template {
     template {
-      service_account = local.write_api_sa_email
+      service_account = local.fetch_jobs_sa_email
 
       containers {
         image   = "${local.image_base}/rss-fetch-job:latest"
@@ -42,7 +42,7 @@ resource "google_cloud_run_v2_job" "rss_fetch" {
         }
         env {
           name  = "SERVICE_ACCOUNT_EMAIL"
-          value = local.write_api_sa_email
+          value = local.fetch_jobs_sa_email
         }
         env {
           name  = "REQUEST_TIMEOUT"
@@ -229,7 +229,7 @@ resource "google_cloud_run_v2_job" "lausuntopalvelu_fetch" {
 
   template {
     template {
-      service_account = local.write_api_sa_email
+      service_account = local.fetch_jobs_sa_email
 
       containers {
         image   = "${local.image_base}/lausuntopalvelu-fetch-job:latest"
@@ -249,7 +249,7 @@ resource "google_cloud_run_v2_job" "lausuntopalvelu_fetch" {
         }
         env {
           name  = "SERVICE_ACCOUNT_EMAIL"
-          value = local.write_api_sa_email
+          value = local.fetch_jobs_sa_email
         }
         env {
           name = "OPS_DISPATCH_TOKEN"
@@ -275,7 +275,7 @@ resource "google_cloud_run_v2_job" "ahjo_fetch" {
 
   template {
     template {
-      service_account = local.write_api_sa_email
+      service_account = local.fetch_jobs_sa_email
 
       containers {
         image   = "${local.image_base}/ahjo-fetch-job:latest"
@@ -295,7 +295,7 @@ resource "google_cloud_run_v2_job" "ahjo_fetch" {
         }
         env {
           name  = "SERVICE_ACCOUNT_EMAIL"
-          value = local.write_api_sa_email
+          value = local.fetch_jobs_sa_email
         }
         env {
           name = "AHJO_API_KEY"
@@ -330,7 +330,7 @@ resource "google_cloud_run_v2_job" "hri_fetch" {
 
   template {
     template {
-      service_account = local.write_api_sa_email
+      service_account = local.fetch_jobs_sa_email
 
       containers {
         image   = "${local.image_base}/hri-fetch-job:latest"
@@ -350,7 +350,7 @@ resource "google_cloud_run_v2_job" "hri_fetch" {
         }
         env {
           name  = "SERVICE_ACCOUNT_EMAIL"
-          value = local.write_api_sa_email
+          value = local.fetch_jobs_sa_email
         }
         env {
           name = "OPS_DISPATCH_TOKEN"

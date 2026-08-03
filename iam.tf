@@ -64,14 +64,34 @@ resource "google_project_iam_member" "write_api_bq_user" {
 }
 
 
-# Cloud Scheduler kutsuu Cloud Run -jobeja write_api-SA:n tokenilla.
+# ---------------------------------------------------------------------------
+# SA: fetch-jobs (Tiedonkeruu-jobit: lausuntopalvelu, ahjo, hri, rss)
+# ---------------------------------------------------------------------------
+
+resource "google_service_account" "fetch_jobs" {
+  account_id   = "sa-fetch-jobs"
+  display_name = "fetch-jobs"
+  description  = "ActivityStreams fetch-jobs: BQ-pending-kirjoitus + GCS bronze -kirjoitus"
+  project      = var.gcp_project
+}
+
+# bigquery.user: pakollinen projekti-tasolla kyselyjen ja latausten ajamiseen
+resource "google_project_iam_member" "fetch_jobs_bq_user" {
+  #checkov:skip=CKV_GCP_34: bigquery.user on pakollinen projekti-tason rooli
+  project = var.gcp_project
+  role    = "roles/bigquery.user"
+  member  = "serviceAccount:${google_service_account.fetch_jobs.email}"
+}
+
+
+# Cloud Scheduler kutsuu Cloud Run -jobeja fetch_jobs-SA:n tokenilla.
 # Jokaiselle jobille tarvitaan erillinen resource-tason binding.
-resource "google_cloud_run_v2_job_iam_member" "write_api_invoke_rss_fetch" {
+resource "google_cloud_run_v2_job_iam_member" "fetch_jobs_invoke_rss_fetch" {
   project  = var.gcp_project
   location = var.region
   name     = google_cloud_run_v2_job.rss_fetch.name
   role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.write_api.email}"
+  member   = "serviceAccount:${google_service_account.fetch_jobs.email}"
 }
 
 resource "google_cloud_run_v2_job_iam_member" "write_api_invoke_og_enrichment" {
@@ -98,28 +118,28 @@ resource "google_cloud_run_v2_job_iam_member" "write_api_invoke_likes_and_update
   member   = "serviceAccount:${google_service_account.write_api.email}"
 }
 
-resource "google_cloud_run_v2_job_iam_member" "write_api_invoke_lausuntopalvelu_fetch" {
+resource "google_cloud_run_v2_job_iam_member" "fetch_jobs_invoke_lausuntopalvelu_fetch" {
   project  = var.gcp_project
   location = var.region
   name     = google_cloud_run_v2_job.lausuntopalvelu_fetch.name
   role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.write_api.email}"
+  member   = "serviceAccount:${google_service_account.fetch_jobs.email}"
 }
 
-resource "google_cloud_run_v2_job_iam_member" "write_api_invoke_ahjo_fetch" {
+resource "google_cloud_run_v2_job_iam_member" "fetch_jobs_invoke_ahjo_fetch" {
   project  = var.gcp_project
   location = var.region
   name     = google_cloud_run_v2_job.ahjo_fetch.name
   role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.write_api.email}"
+  member   = "serviceAccount:${google_service_account.fetch_jobs.email}"
 }
 
-resource "google_cloud_run_v2_job_iam_member" "write_api_invoke_hri_fetch" {
+resource "google_cloud_run_v2_job_iam_member" "fetch_jobs_invoke_hri_fetch" {
   project  = var.gcp_project
   location = var.region
   name     = google_cloud_run_v2_job.hri_fetch.name
   role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.write_api.email}"
+  member   = "serviceAccount:${google_service_account.fetch_jobs.email}"
 }
 
 

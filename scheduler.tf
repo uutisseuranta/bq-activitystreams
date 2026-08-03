@@ -34,7 +34,7 @@ resource "google_cloud_scheduler_job" "rss_fetch" {
     uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.gcp_project}/jobs/${google_cloud_run_v2_job.rss_fetch.name}:run"
 
     oauth_token {
-      service_account_email = local.write_api_sa_email
+      service_account_email = local.fetch_jobs_sa_email
     }
   }
 }
@@ -141,7 +141,7 @@ resource "google_cloud_scheduler_job" "lausuntopalvelu_fetch" {
     uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.gcp_project}/jobs/${google_cloud_run_v2_job.lausuntopalvelu_fetch.name}:run"
 
     oauth_token {
-      service_account_email = local.write_api_sa_email
+      service_account_email = local.fetch_jobs_sa_email
     }
   }
 }
@@ -164,7 +164,7 @@ resource "google_cloud_scheduler_job" "ahjo_fetch" {
     uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.gcp_project}/jobs/${google_cloud_run_v2_job.ahjo_fetch.name}:run"
 
     oauth_token {
-      service_account_email = local.write_api_sa_email
+      service_account_email = local.fetch_jobs_sa_email
     }
   }
 }
@@ -187,7 +187,7 @@ resource "google_cloud_scheduler_job" "hri_fetch" {
     uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.gcp_project}/jobs/${google_cloud_run_v2_job.hri_fetch.name}:run"
 
     oauth_token {
-      service_account_email = local.write_api_sa_email
+      service_account_email = local.fetch_jobs_sa_email
     }
   }
 }

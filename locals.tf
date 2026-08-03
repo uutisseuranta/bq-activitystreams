@@ -22,4 +22,5 @@ locals {
   # deploy-SA (backend) käytetään vain CI/CD:ssä + WIF-bindingissä.
   query_api_sa_email  = google_service_account.query_api.email
   write_api_sa_email  = google_service_account.write_api.email
+  fetch_jobs_sa_email = google_service_account.fetch_jobs.email
 }

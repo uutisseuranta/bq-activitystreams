@@ -26,3 +26,10 @@ resource "google_storage_bucket_iam_member" "write_api_bronze_creator" {
   member   = "serviceAccount:${google_service_account.write_api.email}"
 }
 
+resource "google_storage_bucket_iam_member" "fetch_jobs_bronze_creator" {
+  for_each = google_storage_bucket.bronze_buckets
+  bucket   = each.value.name
+  role     = "roles/storage.objectCreator"
+  member   = "serviceAccount:${google_service_account.fetch_jobs.email}"
+}
+

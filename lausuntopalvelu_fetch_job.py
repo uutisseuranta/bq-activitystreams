@@ -22,6 +22,10 @@ def parse_xml_date(date_str: str) -> Optional[datetime.datetime]:
         return None
     try:
         clean_str = date_str.replace("Z", "+00:00")
+        if "T" not in clean_str and " " not in clean_str:
+            # Päivämäärä-edge-case (esim. "2026-08-03") -> lisätään T00:00:00
+            clean_str += "T00:00:00"
+        clean_str = clean_str.replace(" ", "T")
         if "+" not in clean_str and "-" not in clean_str[10:]:
             # Jos ei aikavyöhykettä, oletetaan UTC
             clean_str += "+00:00"
