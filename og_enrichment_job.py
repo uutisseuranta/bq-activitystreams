@@ -50,13 +50,15 @@ def main() -> None:
     # Huom: source != 'user' -suodatin on poistettu (Päätös G-021), jotta myös käyttäjän lisäämät
     # uutiset rikastetaan OpenGraph-tiedoilla muiden lähteiden tavoin.
     query = f"""
-        SELECT id, object_json, 'main' as origin, source, COALESCE(published, updated) as received_at
-        FROM `{project}.{dataset}.objects`
-        WHERE (og_enriched = FALSE OR og_enriched IS NULL)
-          AND deleted = FALSE
-        UNION ALL
-        SELECT id, object_json, 'pending' as origin, source, received_at
-        FROM `{project}.{dataset}.objects_pending`
+        SELECT * FROM (
+            SELECT id, object_json, 'main' as origin, source, COALESCE(published, updated) as received_at
+            FROM `{project}.{dataset}.objects`
+            WHERE (og_enriched = FALSE OR og_enriched IS NULL)
+              AND deleted = FALSE
+            UNION ALL
+            SELECT id, object_json, 'pending' as origin, source, received_at
+            FROM `{project}.{dataset}.objects_pending`
+        )
         ORDER BY received_at ASC
         LIMIT {batch_size}
     """
