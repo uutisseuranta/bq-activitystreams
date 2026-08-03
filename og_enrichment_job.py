@@ -50,7 +50,7 @@ def main() -> None:
     # Huom: source != 'user' -suodatin on poistettu (Päätös G-021), jotta myös käyttäjän lisäämät
     # uutiset rikastetaan OpenGraph-tiedoilla muiden lähteiden tavoin.
     query = f"""
-        SELECT id, object_json, 'main' as origin, source, published as received_at
+        SELECT id, object_json, 'main' as origin, source, COALESCE(published, updated, CURRENT_TIMESTAMP()) as received_at
         FROM `{project}.{dataset}.objects`
         WHERE (og_enriched = FALSE OR og_enriched IS NULL)
           AND deleted = FALSE

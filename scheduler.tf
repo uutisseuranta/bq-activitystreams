@@ -145,7 +145,3 @@ resource "google_cloud_scheduler_job" "lausuntopalvelu_fetch" {
     }
   }
 }
-
-
-
-

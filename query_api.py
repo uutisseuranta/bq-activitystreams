@@ -29,8 +29,8 @@ last_user_activity = time.time()
 # Suodatin maksumuurillisille artikkeleille, joilta puuttuu arkistolinkki (Päätös G-020)
 PAYWALL_FILTER_SQL = """
   AND NOT (
-    JSON_VALUE(object_json.isAccessibleForFree) = 'false'
-    AND JSON_VALUE(object_json.url_archive) IS NULL
+    JSON_VALUE(object_json, '$.isAccessibleForFree') = 'false'
+    AND JSON_VALUE(object_json, '$.url_archive') IS NULL
   )
 """
 

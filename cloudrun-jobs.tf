@@ -272,7 +272,3 @@ resource "google_cloud_run_v2_job" "lausuntopalvelu_fetch" {
     google_secret_manager_secret_iam_member.fetch_jobs_can_read_ops_token
   ]
 }
-
-
-
-

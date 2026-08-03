@@ -367,7 +367,7 @@ WHEN NOT MATCHED THEN
 
 ## [Planned / Follow-up PR] Cloud Run Job: OpenAhjo-päätökset (#3)
 
-Toteutus siirretty erilliseen PR:ään. Ajastus: `0 3 * * *`. Base URL: `http://dev.hel.fi/openahjo/v1`.
+Toteutus siirretty erilliseen PR:ään. Ajastus: `0 3 * * *`. Base URL: `https://ahjo.hel.fi/api/v1` (uusi REST API, ks. #31).
 
 | AS2-kenttä | OpenAhjo-kenttä |
 |---|---|

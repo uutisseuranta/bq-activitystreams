@@ -115,7 +115,7 @@ def build_as2_article(prop: Dict[str, Any], source: str, domain: str) -> Dict[st
             "name": org_name,
             "url": "https://www.lausuntopalvelu.fi"
         },
-        "license": "https://www.lausuntopalvelu.fi/FI/Help/TermsOfService"
+        "license": None
     }
 
     return {
@@ -139,7 +139,7 @@ def write_to_bigquery(bq_client: bigquery.Client, project: str, dataset: str, it
             "id": item["id"],
             "source": item["source"],
             "received_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            "object_json": item["object_json"]
+            "object_json": json.dumps(item["object_json"])
         })
 
     table_id = f"{project}.{dataset}.objects_pending"

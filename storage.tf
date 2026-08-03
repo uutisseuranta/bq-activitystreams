@@ -20,8 +20,7 @@ resource "google_storage_bucket" "bronze_buckets" {
 }
 
 resource "google_storage_bucket_iam_member" "write_api_bronze_creator" {
-  for_each = google_storage_bucket.bronze_buckets
-  bucket   = each.value.name
+  bucket   = google_storage_bucket.bronze_buckets["user"].name
   role     = "roles/storage.objectCreator"
   member   = "serviceAccount:${google_service_account.write_api.email}"
 }
