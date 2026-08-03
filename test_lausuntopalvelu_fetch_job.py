@@ -61,6 +61,8 @@ class TestLausuntopalveluFetchJob(unittest.TestCase):
         self.assertEqual(obj["name"], "Test Proposal")
         self.assertEqual(obj["summary"], "These are goals")
         self.assertIsNone(obj["license"])
+        self.assertEqual(len(obj["tag"]), 1)
+        self.assertEqual(obj["tag"][0]["name"], "#lausuntopyynto")
 
     def test_get_existing_ids(self):
         from lausuntopalvelu_fetch_job import get_existing_ids
