@@ -225,8 +225,23 @@ def fetch_rss_feed(feed_url: str, timeout: int) -> List[Dict[str, Any]]:
                 if ch_url:
                     image_url = ch_url.text.strip()
 
+        # 4. Maksumuurin tunnistus kategorioista (Tilaajille / Plus / Premium)
+        is_paywalled = False
+        categories = item.find_all("category")
+        for cat in categories:
+            if cat.text and cat.text.strip().lower() in ("tilaajille", "plus", "premium"):
+                is_paywalled = True
+                break
+
         parsed_items.append(
-            {"title": title, "link": link, "summary": summary, "published": published_dt, "image_url": image_url}
+            {
+                "title": title,
+                "link": link,
+                "summary": summary,
+                "published": published_dt,
+                "image_url": image_url,
+                "is_paywalled": is_paywalled
+            }
         )
 
     return parsed_items
@@ -276,8 +291,20 @@ def build_as2_article(item: Dict[str, Any], source: str, domain: str) -> Dict[st
         "attributedTo": {"type": "Organization", "name": publisher_name, "url": publisher_url},
     }
 
+    if item.get("is_paywalled"):
+        article_json["isAccessibleForFree"] = False
+        article_json["tag"] = [{"type": "Hashtag", "name": "#tilaajille", "href": "https://uutisseuranta.net/?tag=%23tilaajille"}]
+    else:
+        article_json["isAccessibleForFree"] = True
+
     if item["image_url"]:
         article_json["image"] = {"type": "Image", "url": item["image_url"]}
+
+    # Jos artikkeli on ilmainen, se on jo valmiiksi rikastettu (og_enriched=True),
+    # sillä se ei tarvitse Wayback Machine -arkistoa.
+    # Jos se on maksumuuritettu, pidetään og_enriched=False, jotta og-enrichment-job
+    # voi käydä etsimässä sille Wayback Machine -arkistolinkin.
+    og_enriched = not item.get("is_paywalled")
 
     return {
         "id": as2_id,
@@ -285,6 +312,7 @@ def build_as2_article(item: Dict[str, Any], source: str, domain: str) -> Dict[st
         "published": item["published"],
         "updated": item["published"],
         "object_json": article_json,
+        "og_enriched": og_enriched,
     }
 
 
@@ -341,6 +369,7 @@ def write_to_bigquery(bq_client: bigquery.Client, project: str, dataset: str, ar
                 "published": art["published"].isoformat(),
                 "updated": art["updated"].isoformat(),
                 "object_json": json.dumps(art["object_json"]),
+                "og_enriched": art["og_enriched"],
             }
         )
 
@@ -351,6 +380,7 @@ def write_to_bigquery(bq_client: bigquery.Client, project: str, dataset: str, ar
         bigquery.SchemaField("published", "TIMESTAMP", mode="REQUIRED"),
         bigquery.SchemaField("updated", "TIMESTAMP", mode="NULLABLE"),
         bigquery.SchemaField("object_json", "JSON", mode="NULLABLE"),
+        bigquery.SchemaField("og_enriched", "BOOLEAN", mode="NULLABLE"),
     ]
 
     job_config = bigquery.LoadJobConfig(write_disposition="WRITE_TRUNCATE", schema=schema)
@@ -369,10 +399,11 @@ def write_to_bigquery(bq_client: bigquery.Client, project: str, dataset: str, ar
                 T.object_json = S.object_json,
                 T.published   = S.published,
                 T.updated     = S.updated,
-                T.source      = S.source
+                T.source      = S.source,
+                T.og_enriched = COALESCE(S.og_enriched, T.og_enriched)
         WHEN NOT MATCHED THEN
-            INSERT (id, source, published, updated, tags, tags_enriched, like_count, deleted, object_json)
-            VALUES (S.id, S.source, S.published, S.updated, [], FALSE, 0, FALSE, S.object_json)
+            INSERT (id, source, published, updated, tags, tags_enriched, like_count, deleted, og_enriched, object_json)
+            VALUES (S.id, S.source, S.published, S.updated, [], FALSE, 0, FALSE, S.og_enriched, S.object_json)
     """
 
     try:
