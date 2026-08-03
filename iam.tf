@@ -134,13 +134,6 @@ resource "google_cloud_run_v2_job_iam_member" "fetch_jobs_invoke_ahjo_fetch" {
   member   = "serviceAccount:${google_service_account.fetch_jobs.email}"
 }
 
-resource "google_cloud_run_v2_job_iam_member" "fetch_jobs_invoke_hri_fetch" {
-  project  = var.gcp_project
-  location = var.region
-  name     = google_cloud_run_v2_job.hri_fetch.name
-  role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_service_account.fetch_jobs.email}"
-}
 
 
 

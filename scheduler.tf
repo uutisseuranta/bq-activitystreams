@@ -169,26 +169,4 @@ resource "google_cloud_scheduler_job" "ahjo_fetch" {
   }
 }
 
-resource "google_cloud_scheduler_job" "hri_fetch" {
-  name             = "hri-fetch-job-trigger"
-  region           = var.scheduler_region
-  project          = var.gcp_project
-  description      = "Ajaa hri-fetch-jobin päivittäin klo 06:30 Helsinki-aikaa"
-  schedule         = "30 6 * * *"
-  time_zone        = "Europe/Helsinki"
-  attempt_deadline = "320s"
-
-  retry_config {
-    retry_count = 2
-  }
-
-  http_target {
-    http_method = "POST"
-    uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.gcp_project}/jobs/${google_cloud_run_v2_job.hri_fetch.name}:run"
-
-    oauth_token {
-      service_account_email = local.fetch_jobs_sa_email
-    }
-  }
-}
 
