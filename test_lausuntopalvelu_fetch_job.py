@@ -3,7 +3,8 @@ import datetime
 import unittest
 from unittest.mock import MagicMock, patch
 
-from lausuntopalvelu_fetch_job import parse_xml_date, build_as2_article
+from lausuntopalvelu_fetch_job import build_as2_article, parse_xml_date
+
 
 class TestLausuntopalveluFetchJob(unittest.TestCase):
     def test_parse_xml_date_len_under_19(self):
@@ -46,15 +47,15 @@ class TestLausuntopalveluFetchJob(unittest.TestCase):
             "Name": "Test Proposal",
             "PublishedOn": "2026-08-03T12:00:00",
             "Goals": "<p>These are goals</p>",
-            "OrganizationName": "Ministry of Justice"
+            "OrganizationName": "Ministry of Justice",
         }
         res = build_as2_article(prop, "lausuntopalvelu", "example.com")
         self.assertTrue(res["id"].startswith("https://example.com/ap/objects/"))
-        self.assertEqual(len(res["id"]), 31 + 16) # 31 chars for prefix + 16 chars hash
+        self.assertEqual(len(res["id"]), 31 + 16)  # 31 chars for prefix + 16 chars hash
         self.assertEqual(res["source"], "lausuntopalvelu")
         self.assertIsNotNone(res["published"])
         self.assertEqual(res["published"].year, 2026)
-        
+
         obj = res["object_json"]
         self.assertEqual(obj["type"], "Article")
         self.assertEqual(obj["name"], "Test Proposal")
@@ -63,6 +64,7 @@ class TestLausuntopalveluFetchJob(unittest.TestCase):
 
     def test_get_existing_ids(self):
         from lausuntopalvelu_fetch_job import get_existing_ids
+
         mock_bq = MagicMock()
         mock_row1 = MagicMock()
         mock_row1.id = "id1"
@@ -76,6 +78,7 @@ class TestLausuntopalveluFetchJob(unittest.TestCase):
 
     def test_get_last_fetched_timestamp(self):
         from lausuntopalvelu_fetch_job import get_last_fetched_timestamp
+
         mock_bq = MagicMock()
         mock_row = MagicMock()
         mock_row.value = "2026-08-03T12:00:00Z"
@@ -86,13 +89,16 @@ class TestLausuntopalveluFetchJob(unittest.TestCase):
 
     def test_write_to_bigquery(self):
         from lausuntopalvelu_fetch_job import write_to_bigquery
+
         mock_bq = MagicMock()
-        items = [{
-            "id": "123",
-            "source": "lausuntopalvelu",
-            "published": datetime.datetime.now(datetime.timezone.utc),
-            "object_json": {"name": "test"}
-        }]
+        items = [
+            {
+                "id": "123",
+                "source": "lausuntopalvelu",
+                "published": datetime.datetime.now(datetime.timezone.utc),
+                "object_json": {"name": "test"},
+            }
+        ]
         write_to_bigquery(mock_bq, "project", "dataset", items)
         mock_bq.load_table_from_json.assert_called_once()
 
@@ -103,9 +109,13 @@ class TestLausuntopalveluFetchJob(unittest.TestCase):
     @patch("lausuntopalvelu_fetch_job.get_last_fetched_timestamp", return_value=None)
     @patch("lausuntopalvelu_fetch_job.write_to_bigquery")
     @patch("lausuntopalvelu_fetch_job.update_last_fetched_timestamp")
-    def test_main_pagination(self, mock_update, mock_write_bq, mock_last, mock_exist, mock_bq_class, mock_gcs, mock_get):
-        from lausuntopalvelu_fetch_job import main
+    def test_main_pagination(
+        self, mock_update, mock_write_bq, mock_last, mock_exist, mock_bq_class, mock_gcs, mock_get
+    ):
         import os
+
+        from lausuntopalvelu_fetch_job import main
+
         os.environ["GCP_PROJECT"] = "test-project"
 
         # Mock page 1 with nextLink and page 2 without nextLink
@@ -134,7 +144,7 @@ class TestLausuntopalveluFetchJob(unittest.TestCase):
           </entry>
         </feed>
         """
-        
+
         mock_resp1 = MagicMock()
         mock_resp1.content = xml_page1.encode("utf-8")
         mock_resp1.raise_for_status = MagicMock()
@@ -151,7 +161,7 @@ class TestLausuntopalveluFetchJob(unittest.TestCase):
         self.assertEqual(mock_gcs.call_count, 2)
         mock_write_bq.assert_called_once()
         args, _ = mock_write_bq.call_args
-        self.assertEqual(len(args[3]), 2) # Two items total from two pages
+        self.assertEqual(len(args[3]), 2)  # Two items total from two pages
 
     @patch("lausuntopalvelu_fetch_job.httpx.get")
     @patch("lausuntopalvelu_fetch_job.write_to_gcs_bronze")
@@ -160,9 +170,13 @@ class TestLausuntopalveluFetchJob(unittest.TestCase):
     @patch("lausuntopalvelu_fetch_job.get_last_fetched_timestamp", return_value=None)
     @patch("lausuntopalvelu_fetch_job.write_to_bigquery")
     @patch("lausuntopalvelu_fetch_job.update_last_fetched_timestamp")
-    def test_main_pagination_relative_next(self, mock_update, mock_write_bq, mock_last, mock_exist, mock_bq_class, mock_gcs, mock_get):
-        from lausuntopalvelu_fetch_job import main
+    def test_main_pagination_relative_next(
+        self, mock_update, mock_write_bq, mock_last, mock_exist, mock_bq_class, mock_gcs, mock_get
+    ):
         import os
+
+        from lausuntopalvelu_fetch_job import main
+
         os.environ["GCP_PROJECT"] = "test-project"
 
         # Mock page 1 with relative nextLink
@@ -191,7 +205,7 @@ class TestLausuntopalveluFetchJob(unittest.TestCase):
           </entry>
         </feed>
         """
-        
+
         mock_resp1 = MagicMock()
         mock_resp1.content = xml_page1.encode("utf-8")
         mock_resp1.raise_for_status = MagicMock()
@@ -210,6 +224,5 @@ class TestLausuntopalveluFetchJob(unittest.TestCase):
             "https://www.lausuntopalvelu.fi/api/v1/Lausuntopalvelu.svc/Proposals?$top=100&$skip=100",
             headers={"User-Agent": "uutisseuranta-fetch-bot/1.0 (+https://uutisseuranta.net)"},
             timeout=25,
-            follow_redirects=True
+            follow_redirects=True,
         )
-

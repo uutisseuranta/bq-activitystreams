@@ -120,8 +120,6 @@ def fetch_url_stream_with_headers(
                         content_bytes = content_bytes[:max_bytes]
                         break
 
-
-
                 headers_dict = dict(response.headers)
                 return bytes(content_bytes), headers_dict
 
@@ -250,7 +248,9 @@ def parse_og_metadata(html_content: bytes, default_url: str) -> Dict[str, Any]:
     for script in soup.find_all("script", type="application/ld+json"):
         try:
             data = json.loads(script.string or "")
-            items = data if isinstance(data, list) else (data.get("@graph", [data]) if isinstance(data, dict) else [data])
+            items = (
+                data if isinstance(data, list) else (data.get("@graph", [data]) if isinstance(data, dict) else [data])
+            )
             for item in items:
                 if not isinstance(item, dict):
                     continue

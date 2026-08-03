@@ -451,7 +451,7 @@ class TestQueryApiRegressions(unittest.TestCase):
     @patch("query_api.verify_google_token")
     @patch("query_api.bq_client")
     def test_outbox_with_auth_header_invalid(self, mock_bq, mock_verify):
-        mock_verify.return_value = None # Epäonnistunut Google & Firebase -tunniste
+        mock_verify.return_value = None  # Epäonnistunut Google & Firebase -tunniste
         response = self.client.get("/ap/outbox?tag=politiikka", headers={"Authorization": "Bearer invalid-token"})
         self.assertEqual(response.status_code, 200)
 
@@ -472,10 +472,12 @@ class TestQueryApiRegressions(unittest.TestCase):
     @patch("query_api.bq_client")
     def test_outbox_with_mock_auth_success(self, mock_bq):
         with patch.dict(os.environ, {"ALLOW_MOCK_AUTH": "true"}):
+
             def query_side_effect(sql, job_config=None):
                 if "COUNT(*) AS c" in sql:
                     return create_mock_query_job([{"c": 1}])
                 return create_mock_query_job([])
+
             mock_bq.query.side_effect = query_side_effect
             response = self.client.get("/ap/outbox?tag=politiikka", headers={"Authorization": "Bearer mock-test"})
             self.assertEqual(response.status_code, 200)

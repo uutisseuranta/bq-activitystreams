@@ -605,19 +605,14 @@ class TestAddActivity(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
         from write_api import limiter
+
         limiter.enabled = False
         self.valid_payload = {
             "@context": "https://www.w3.org/ns/activitystreams",
             "type": "Add",
             "actor": "https://uutisseuranta.net/users/test-user",
-            "object": {
-                "type": "Hashtag",
-                "name": "#tiede"
-            },
-            "target": {
-                "type": "Article",
-                "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/hs/123"
-            }
+            "object": {"type": "Hashtag", "name": "#tiede"},
+            "target": {"type": "Article", "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/hs/123"},
         }
 
     @patch("write_api.bq_client")
@@ -632,8 +627,8 @@ class TestAddActivity(unittest.TestCase):
             "object_json": {
                 "type": "Article",
                 "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/hs/123",
-                "tag": []
-            }
+                "tag": [],
+            },
         }
         mock_bq.insert_rows_json.return_value = []
         mock_bq.query.return_value.result.return_value = None
@@ -658,8 +653,8 @@ class TestAddActivity(unittest.TestCase):
             "object_json": {
                 "type": "Article",
                 "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/hs/123",
-                "tag": []
-            }
+                "tag": [],
+            },
         }
         mock_bq.insert_rows_json.return_value = []
         mock_bq.query.return_value.result.return_value = None
@@ -683,10 +678,8 @@ class TestAddActivity(unittest.TestCase):
             "object_json": {
                 "type": "Article",
                 "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/hs/123",
-                "tag": [
-                    {"type": "Hashtag", "name": "#tiede", "href": "https://..."}
-                ]
-            }
+                "tag": [{"type": "Hashtag", "name": "#tiede", "href": "https://..."}],
+            },
         }
 
         response = self.client.post(
@@ -707,4 +700,3 @@ class TestAddActivity(unittest.TestCase):
             headers={"Authorization": "Bearer mock-test"},
         )
         self.assertEqual(response.status_code, 404)
-
