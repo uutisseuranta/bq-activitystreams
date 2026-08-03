@@ -131,10 +131,11 @@ resource "google_cloud_scheduler_job" "lausuntopalvelu_fetch" {
   schedule         = "0 7 * * *"
   time_zone        = "Europe/Helsinki"
   # 320s: OData XML fetch with defusedxml parse; no per-article HTTP fetches
+  # Huom: retry_count = 1 estää Cloud Scheduler -aikakatkaisun (30 min) jos sivutus kestää pitkään
   attempt_deadline = "320s"
 
   retry_config {
-    retry_count = 2
+    retry_count = 1
   }
 
   http_target {

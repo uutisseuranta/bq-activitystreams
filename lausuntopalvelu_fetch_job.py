@@ -210,48 +210,75 @@ def main() -> None:
 
     # Haetaan lausuntopyynnöt OData API:sta XML-muodossa
     api_url = f"https://www.lausuntopalvelu.fi/api/v1/Lausuntopalvelu.svc/Proposals?{filter_query}$orderby=PublishedOn desc&$top=100"
-    logger.info(f"Querying Lausuntopalvelu API: {api_url}")
+    
+    proposals = []
+    current_url = api_url
+    page_count = 1
 
-    try:
-        headers = {"User-Agent": "uutisseuranta-fetch-bot/1.0 (+https://uutisseuranta.net)"}
-        resp = httpx.get(api_url, headers=headers, timeout=25, follow_redirects=True)
-        resp.raise_for_status()
-    except Exception as e:
-        logger.critical(f"Lausuntopalvelu API request failed: {e}")
-        sys.exit(1)
+    while current_url:
+        logger.info(f"Querying Lausuntopalvelu API page {page_count}: {current_url}")
+        try:
+            headers = {"User-Agent": "uutisseuranta-fetch-bot/1.0 (+https://uutisseuranta.net)"}
+            resp = httpx.get(current_url, headers=headers, timeout=25, follow_redirects=True)
+            resp.raise_for_status()
+        except Exception as e:
+            logger.critical(f"Lausuntopalvelu API request failed on page {page_count}: {e}")
+            sys.exit(1)
 
-    raw_content = resp.content
-    write_to_gcs_bronze(project, "lausuntopalvelu", raw_content, "xml", source_type="odata_xml")
+        raw_content = resp.content
+        write_to_gcs_bronze(project, "lausuntopalvelu", raw_content, "xml", source_type="odata_xml")
 
-    # Parsitaan XML Atom feed
-    try:
-        root = ET.fromstring(raw_content)
-        ns = {
-            'atom': 'http://www.w3.org/2005/Atom',
-            'm': 'http://schemas.microsoft.com/ado/2007/08/dataservices/metadata',
-            'd': 'http://schemas.microsoft.com/ado/2007/08/dataservices'
-        }
-        
-        proposals = []
-        for entry in root.findall('atom:entry', ns):
-            content = entry.find('atom:content', ns)
-            if content is None:
-                continue
-            properties = content.find('m:properties', ns)
-            if properties is None:
-                continue
+        # Parsitaan XML Atom feed
+        try:
+            root = ET.fromstring(raw_content)
+            ns = {
+                'atom': 'http://www.w3.org/2005/Atom',
+                'm': 'http://schemas.microsoft.com/ado/2007/08/dataservices/metadata',
+                'd': 'http://schemas.microsoft.com/ado/2007/08/dataservices'
+            }
             
-            prop_data = {}
-            for child in properties:
-                tag_local = child.tag.replace(f"{{{ns['d']}}}", "")
-                prop_data[tag_local] = child.text
-            proposals.append(prop_data)
+            page_proposals = []
+            for entry in root.findall('atom:entry', ns):
+                content = entry.find('atom:content', ns)
+                if content is None:
+                    continue
+                properties = content.find('m:properties', ns)
+                if properties is None:
+                    continue
+                
+                prop_data = {}
+                for child in properties:
+                    tag_local = child.tag.replace(f"{{{ns['d']}}}", "")
+                    prop_data[tag_local] = child.text
+                page_proposals.append(prop_data)
             
-    except Exception as e:
-        logger.critical(f"Failed to parse XML response: {e}")
-        sys.exit(1)
+            proposals.extend(page_proposals)
+            logger.info(f"Parsed {len(page_proposals)} proposals from page {page_count}.")
 
-    logger.info(f"Retrieved {len(proposals)} proposals from API. Processing...")
+            # Etsitään OData nextLink/seuraava sivu -elementtiä
+            next_link = None
+            for link in root.findall('atom:link', ns):
+                if link.attrib.get('rel') == 'next':
+                    next_link = link.attrib.get('href')
+                    break
+            
+            if next_link:
+                if next_link.startswith("http"):
+                    current_url = next_link
+                else:
+                    current_url = f"https://www.lausuntopalvelu.fi/api/v1/Lausuntopalvelu.svc/{next_link}"
+                page_count += 1
+                if page_count > 10:
+                    logger.warning("Reached maximum page limit (10). Truncating proposals.")
+                    break
+            else:
+                current_url = None
+
+        except Exception as e:
+            logger.critical(f"Failed to parse XML response on page {page_count}: {e}")
+            sys.exit(1)
+
+    logger.info(f"Retrieved {len(proposals)} proposals in total. Processing...")
 
     new_articles = []
     seen_this_run = set()

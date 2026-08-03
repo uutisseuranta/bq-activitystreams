@@ -36,7 +36,7 @@ class TestRssFetchJob(unittest.TestCase):
         mock_response.raise_for_status = MagicMock()
 
         with patch("httpx.get", return_value=mock_response):
-            raw, parsed = rss_fetch_job.fetch_rss_feed("https://www.hs.fi/rss/tuoreimmat.xml", timeout=10)
+            raw, parsed, etag, last_modified = rss_fetch_job.fetch_rss_feed("https://www.hs.fi/rss/tuoreimmat.xml", timeout=10)
 
         self.assertEqual(len(parsed), 1)
         self.assertEqual(
@@ -67,7 +67,7 @@ class TestRssFetchJob(unittest.TestCase):
         mock_response.raise_for_status = MagicMock()
 
         with patch("httpx.get", return_value=mock_response):
-            raw, parsed = rss_fetch_job.fetch_rss_feed("https://example.com/rss", timeout=10)
+            raw, parsed, etag, last_modified = rss_fetch_job.fetch_rss_feed("https://example.com/rss", timeout=10)
 
         self.assertEqual(len(parsed), 1)
         self.assertEqual(parsed[0]["image_url"], "https://example.com/thumb.jpg")
@@ -94,7 +94,7 @@ class TestRssFetchJob(unittest.TestCase):
         mock_response.raise_for_status = MagicMock()
 
         with patch("httpx.get", return_value=mock_response):
-            raw, parsed = rss_fetch_job.fetch_rss_feed("https://example.com/rss", timeout=10)
+            raw, parsed, etag, last_modified = rss_fetch_job.fetch_rss_feed("https://example.com/rss", timeout=10)
 
         self.assertEqual(len(parsed), 1)
         self.assertEqual(parsed[0]["image_url"], "https://example.com/enclosure.jpg")

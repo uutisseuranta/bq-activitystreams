@@ -49,9 +49,25 @@ resource "google_bigquery_dataset_iam_member" "write_api_bq_editor_main" {
   member     = "serviceAccount:${google_service_account.write_api.email}"
 }
 
-# fetch-jobs: kirjoitusoikeus activitystreams-datasettiin (objects_pending ja config)
-resource "google_bigquery_dataset_iam_member" "fetch_jobs_bq_editor_main" {
+# fetch-jobs: lukuoikeus datasettiin (monien taulujen lukemista ja hakuja varten)
+resource "google_bigquery_dataset_iam_member" "fetch_jobs_bq_viewer_main" {
   dataset_id = google_bigquery_dataset.main.dataset_id
+  role       = "roles/bigquery.dataViewer"
+  member     = "serviceAccount:${google_service_account.fetch_jobs.email}"
+}
+
+# fetch-jobs: kirjoitusoikeus objects_pending-tauluun
+resource "google_bigquery_table_iam_member" "fetch_jobs_pending_editor" {
+  dataset_id = google_bigquery_dataset.main.dataset_id
+  table_id   = "objects_pending"
+  role       = "roles/bigquery.dataEditor"
+  member     = "serviceAccount:${google_service_account.fetch_jobs.email}"
+}
+
+# fetch-jobs: kirjoitusoikeus config-tauluun
+resource "google_bigquery_table_iam_member" "fetch_jobs_config_editor" {
+  dataset_id = google_bigquery_dataset.main.dataset_id
+  table_id   = "config"
   role       = "roles/bigquery.dataEditor"
   member     = "serviceAccount:${google_service_account.fetch_jobs.email}"
 }
