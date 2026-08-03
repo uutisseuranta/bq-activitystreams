@@ -91,6 +91,10 @@
     "url_archive": {
       "type": "string",
       "description": "Wayback Machine -arkistolinkki maksumuurin ohittamiseen"
+    },
+    "license": {
+      "type": "string",
+      "description": "Creative Commons tai muu lisenssi-IRI tai tekijänoikeusilmoitus"
     }
   },
   "required": ["@context", "type", "id", "name", "url", "published"],

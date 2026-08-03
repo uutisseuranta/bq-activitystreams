@@ -219,5 +219,152 @@ resource "google_cloud_run_v2_job" "likes_and_updated" {
     }
   }
 
+}
+
+# ── lausuntopalvelu-fetch-job ──────────────────────────────────────────────
+resource "google_cloud_run_v2_job" "lausuntopalvelu_fetch" {
+  name     = "lausuntopalvelu-fetch-job"
+  location = var.region
+  project  = var.gcp_project
+
+  template {
+    template {
+      service_account = local.write_api_sa_email
+
+      containers {
+        image   = "${local.image_base}/lausuntopalvelu-fetch-job:latest"
+        command = ["python", "lausuntopalvelu_fetch_job.py"]
+
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset
+        }
+        env {
+          name  = "BQ_LOCATION"
+          value = var.region
+        }
+        env {
+          name  = "SERVICE_ACCOUNT_EMAIL"
+          value = local.write_api_sa_email
+        }
+        env {
+          name = "OPS_DISPATCH_TOKEN"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.ops_dispatch_token.secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+    }
+  }
+
   depends_on = [google_artifact_registry_repository.jobs]
 }
+
+# ── ahjo-fetch-job ─────────────────────────────────────────────────────────
+resource "google_cloud_run_v2_job" "ahjo_fetch" {
+  name     = "ahjo-fetch-job"
+  location = var.region
+  project  = var.gcp_project
+
+  template {
+    template {
+      service_account = local.write_api_sa_email
+
+      containers {
+        image   = "${local.image_base}/ahjo-fetch-job:latest"
+        command = ["python", "ahjo_fetch_job.py"]
+
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset
+        }
+        env {
+          name  = "BQ_LOCATION"
+          value = var.region
+        }
+        env {
+          name  = "SERVICE_ACCOUNT_EMAIL"
+          value = local.write_api_sa_email
+        }
+        env {
+          name = "AHJO_API_KEY"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.ahjo_api_key.secret_id
+              version = "latest"
+            }
+          }
+        }
+        env {
+          name = "OPS_DISPATCH_TOKEN"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.ops_dispatch_token.secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [google_artifact_registry_repository.jobs]
+}
+
+# ── hri-fetch-job ──────────────────────────────────────────────────────────
+resource "google_cloud_run_v2_job" "hri_fetch" {
+  name     = "hri-fetch-job"
+  location = var.region
+  project  = var.gcp_project
+
+  template {
+    template {
+      service_account = local.write_api_sa_email
+
+      containers {
+        image   = "${local.image_base}/hri-fetch-job:latest"
+        command = ["python", "hri_fetch_job.py"]
+
+        env {
+          name  = "GCP_PROJECT"
+          value = var.gcp_project
+        }
+        env {
+          name  = "BQ_DATASET"
+          value = var.bq_dataset
+        }
+        env {
+          name  = "BQ_LOCATION"
+          value = var.region
+        }
+        env {
+          name  = "SERVICE_ACCOUNT_EMAIL"
+          value = local.write_api_sa_email
+        }
+        env {
+          name = "OPS_DISPATCH_TOKEN"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.ops_dispatch_token.secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [google_artifact_registry_repository.jobs]
+}
+

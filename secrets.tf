@@ -57,3 +57,20 @@ resource "google_secret_manager_secret_iam_member" "write_api_can_read_ops_token
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.write_api.email}"
 }
+
+# Luodaan ahjo-api-key salaisuus Ahjo REST API -rajapintaa varten
+resource "google_secret_manager_secret" "ahjo_api_key" {
+  secret_id = "ahjo-api-key"
+
+  replication {
+    auto {}
+  }
+}
+
+# Vain write-api SA:lla on oikeus lukea ahjo-api-key
+resource "google_secret_manager_secret_iam_member" "write_api_can_read_ahjo_key" {
+  secret_id = google_secret_manager_secret.ahjo_api_key.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.write_api.email}"
+}
+

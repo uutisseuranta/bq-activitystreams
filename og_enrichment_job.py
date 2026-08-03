@@ -48,13 +48,12 @@ def main() -> None:
 
     # 1. Haetaan rikastamattomat rivit sekä päätaulusta että pending-taulusta
     query = f"""
-        SELECT id, object_json, 'main' as origin, source
+        SELECT id, object_json, 'main' as origin, source, published as received_at
         FROM `{project}.{dataset}.objects`
-        WHERE source != 'user'
-          AND (og_enriched = FALSE OR og_enriched IS NULL)
+        WHERE (og_enriched = FALSE OR og_enriched IS NULL)
           AND deleted = FALSE
         UNION ALL
-        SELECT id, object_json, 'pending' as origin, source
+        SELECT id, object_json, 'pending' as origin, source, received_at
         FROM `{project}.{dataset}.objects_pending`
         LIMIT {batch_size}
     """
@@ -169,6 +168,20 @@ def main() -> None:
                 object_json["published"] = resolved_published
                 if not object_json.get("updated"):
                     object_json["updated"] = resolved_published
+
+            # Jos julkaisupäivää ei ole vieläkään määritetty, käytetään fallbackia (received_at tai nyt)
+            if not object_json.get("published"):
+                received_at = row.get("received_at")
+                if received_at:
+                    if isinstance(received_at, datetime.datetime):
+                        fallback_pub = received_at.astimezone(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+                    else:
+                        fallback_pub = str(received_at)
+                else:
+                    fallback_pub = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+                object_json["published"] = fallback_pub
+                if not object_json.get("updated"):
+                    object_json["updated"] = fallback_pub
 
             # updated: OG modified_time voittaa aina jos saatavilla
             if metadata.get("modified_time"):

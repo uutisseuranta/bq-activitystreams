@@ -122,3 +122,73 @@ resource "google_cloud_scheduler_job" "query_api_keep_warm" {
     uri         = "${google_cloud_run_v2_service.query_api.uri}/ap/keep-warm"
   }
 }
+
+resource "google_cloud_scheduler_job" "lausuntopalvelu_fetch" {
+  name             = "lausuntopalvelu-fetch-job-trigger"
+  region           = var.scheduler_region
+  project          = var.gcp_project
+  description      = "Ajaa lausuntopalvelu-fetch-jobin päivittäin klo 07:00 Helsinki-aikaa"
+  schedule         = "0 7 * * *"
+  time_zone        = "Europe/Helsinki"
+  attempt_deadline = "320s"
+
+  retry_config {
+    retry_count = 2
+  }
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.gcp_project}/jobs/${google_cloud_run_v2_job.lausuntopalvelu_fetch.name}:run"
+
+    oauth_token {
+      service_account_email = local.write_api_sa_email
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "ahjo_fetch" {
+  name             = "ahjo-fetch-job-trigger"
+  region           = var.scheduler_region
+  project          = var.gcp_project
+  description      = "Ajaa ahjo-fetch-jobin päivittäin klo 06:00 Helsinki-aikaa"
+  schedule         = "0 6 * * *"
+  time_zone        = "Europe/Helsinki"
+  attempt_deadline = "320s"
+
+  retry_config {
+    retry_count = 2
+  }
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.gcp_project}/jobs/${google_cloud_run_v2_job.ahjo_fetch.name}:run"
+
+    oauth_token {
+      service_account_email = local.write_api_sa_email
+    }
+  }
+}
+
+resource "google_cloud_scheduler_job" "hri_fetch" {
+  name             = "hri-fetch-job-trigger"
+  region           = var.scheduler_region
+  project          = var.gcp_project
+  description      = "Ajaa hri-fetch-jobin päivittäin klo 06:30 Helsinki-aikaa"
+  schedule         = "30 6 * * *"
+  time_zone        = "Europe/Helsinki"
+  attempt_deadline = "320s"
+
+  retry_config {
+    retry_count = 2
+  }
+
+  http_target {
+    http_method = "POST"
+    uri         = "https://${var.region}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${var.gcp_project}/jobs/${google_cloud_run_v2_job.hri_fetch.name}:run"
+
+    oauth_token {
+      service_account_email = local.write_api_sa_email
+    }
+  }
+}
+

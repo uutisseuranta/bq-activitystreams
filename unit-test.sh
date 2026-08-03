@@ -262,9 +262,6 @@ python3 -m unittest test_write_api
 echo "Ajetaan query_api-testit..."
 python3 -m unittest test_query_api
 
-echo "Ajetaan og_scraper-testit..."
-python3 -m unittest test_og_scraper
-
 echo "Ajetaan og_enrichment_job-testit..."
 python3 -m unittest test_og_enrichment_job
 

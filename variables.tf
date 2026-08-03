@@ -105,3 +105,10 @@ variable "rss_request_timeout" {
   type        = string
   default     = "10"
 }
+
+variable "bronze_bucket_sources" {
+  description = "Lista lähteistä, joille luodaan oma Bronze-tason GCS-bucket"
+  type        = list(string)
+  default     = ["hs", "iltalehti", "is", "kauppalehti", "valtioneuvosto", "lausuntopalvelu", "ahjo", "hri", "user", "paatokset"]
+}
+

@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 from bs4 import BeautifulSoup
-from google.cloud import bigquery
+from google.cloud import bigquery, storage
 
 
 # Määritellään lokitustaso
@@ -160,7 +160,24 @@ def get_or_discover_feed(
     return discovered
 
 
-def fetch_rss_feed(feed_url: str, timeout: int) -> List[Dict[str, Any]]:
+def write_to_gcs_bronze(project_id: str, source: str, data: bytes, extension: str = "xml") -> None:
+    """Tallentaa raakadata-arkiston GCS-bronze-ämpäriin."""
+    try:
+        client = storage.Client(project=project_id)
+        bucket_name = f"{project_id}-bronze-{source}"
+        bucket = client.bucket(bucket_name)
+        timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
+        filename = f"{timestamp}_raw.{extension}"
+        blob = bucket.blob(filename)
+        # Content type automaattisesti
+        content_type = "application/xml" if extension == "xml" else "application/json"
+        blob.upload_from_string(data, content_type=content_type)
+        logger.info(f"Tallennettu raakadata GCS:ään: gs://{bucket_name}/{filename}")
+    except Exception as e:
+        logger.error(f"Virhe tallennettaessa raakadataa GCS-bronzeen: {e}")
+
+
+def fetch_rss_feed(feed_url: str, timeout: int, project_id: Optional[str] = None, source: Optional[str] = None) -> List[Dict[str, Any]]:
     """Hakee RSS XML -syötteen ja parseroi itemit BeautifulSoupilla."""
     logger.info(f"Haetaan feed: {feed_url}")
     try:
@@ -169,6 +186,10 @@ def fetch_rss_feed(feed_url: str, timeout: int) -> List[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"HTTP-virhe haettaessa feediä {feed_url}: {e}")
         return []
+
+    # Tallennetaan GCS Bronzeen jos projekti ja lähde on annettu
+    if project_id and source:
+        write_to_gcs_bronze(project_id, source, resp.content, "xml")
 
     # Parsitaan XML BeautifulSoupin xml-parserilla
     soup = BeautifulSoup(resp.content, "xml")
@@ -320,105 +341,60 @@ def build_as2_article(item: Dict[str, Any], source: str, domain: str) -> Dict[st
     }
 
 
+def get_existing_ids(bq_client: bigquery.Client, project: str, dataset: str, source: str) -> set:
+    """Hakee olemassa olevat uutistunnukset päätaulusta ja pending-taulusta kyseiselle lähteelle."""
+    query = f"""
+        SELECT id FROM `{project}.{dataset}.objects` WHERE source = @source
+        UNION DISTINCT
+        SELECT id FROM `{project}.{dataset}.objects_pending` WHERE source = @source
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("source", "STRING", source)
+        ]
+    )
+    try:
+        query_job = bq_client.query(query, job_config=job_config)
+        results = query_job.result()
+        return {row.id for row in results}
+    except Exception as e:
+        logger.warning(f"Virhe haettaessa olemassa olevia tunnuksia: {e}")
+        return set()
+
+
 def write_to_bigquery(bq_client: bigquery.Client, project: str, dataset: str, articles: List[Dict[str, Any]]) -> None:
-    """Tallentaa AS2-artikkelit BigQueryyn: päätauluun ja päivämäärättömät pending-tauluun."""
+    """Tallentaa kaikki uudet AS2-artikkelit objects_pending-tauluun odottamaan rikastusta."""
     if not articles:
         logger.info("Ei uusia artikkeleita tallennettavaksi.")
         return
 
-    # Erotellaan julkaistut ja pending-artikkelit
-    published_articles = [a for a in articles if a["published"] is not None]
-    pending_articles = [a for a in articles if a["published"] is None]
-
-    if pending_articles:
-        logger.info(f"Ladataan {len(pending_articles)} päivämäärätöntä artikkelia pending-tauluun...")
-        pending_rows = []
-        for art in pending_articles:
-            pending_rows.append(
-                {
-                    "id": art["id"],
-                    "source": art["source"],
-                    "received_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                    "object_json": art["object_json"],
-                }
-            )
-        pending_table_id = f"{project}.{dataset}.objects_pending"
-        pending_schema = [
-            bigquery.SchemaField("id", "STRING", mode="REQUIRED"),
-            bigquery.SchemaField("source", "STRING", mode="REQUIRED"),
-            bigquery.SchemaField("received_at", "TIMESTAMP", mode="REQUIRED"),
-            bigquery.SchemaField("object_json", "JSON", mode="NULLABLE"),
-        ]
-        pending_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND", schema=pending_schema)
-        try:
-            load_job = bq_client.load_table_from_json(pending_rows, pending_table_id, job_config=pending_config)
-            load_job.result()
-            logger.info("Päivämäärättömät artikkelit lisätty pending-tauluun.")
-        except Exception as e:
-            logger.error(f"Virhe kirjoitettaessa pending-tauluun: {e}")
-
-    if not published_articles:
-        return
-
-    # Luodaan uniikki temp-taulu tälle suoritukselle
-    temp_table_id = f"{project}.{dataset}.objects_temp_{uuid.uuid4().hex}"
-
-    # Muunnetaan datetime ISO-merkkijonoksi ja object_json JSON-yhteensopivaksi
-    rows_to_load = []
-    for art in published_articles:
-        rows_to_load.append(
+    logger.info(f"Ladataan {len(articles)} artikkelia pending-tauluun...")
+    pending_rows = []
+    for art in articles:
+        pending_rows.append(
             {
                 "id": art["id"],
                 "source": art["source"],
-                "published": art["published"].isoformat(),
-                "updated": art["updated"].isoformat(),
-                "object_json": art["object_json"],
-                "og_enriched": art["og_enriched"],
+                "received_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "object_json": json.dumps(art["object_json"]),
             }
         )
-
-    # Temp-taulun latausskeema
-    schema = [
+    pending_table_id = f"{project}.{dataset}.objects_pending"
+    pending_schema = [
         bigquery.SchemaField("id", "STRING", mode="REQUIRED"),
         bigquery.SchemaField("source", "STRING", mode="REQUIRED"),
-        bigquery.SchemaField("published", "TIMESTAMP", mode="REQUIRED"),
-        bigquery.SchemaField("updated", "TIMESTAMP", mode="NULLABLE"),
+        bigquery.SchemaField("received_at", "TIMESTAMP", mode="REQUIRED"),
         bigquery.SchemaField("object_json", "JSON", mode="NULLABLE"),
-        bigquery.SchemaField("og_enriched", "BOOLEAN", mode="NULLABLE"),
     ]
-
-    job_config = bigquery.LoadJobConfig(write_disposition="WRITE_TRUNCATE", schema=schema)
-
-    logger.info(f"Ladataan {len(rows_to_load)} riviä väliaikaistauluun {temp_table_id}")
-    load_job = bq_client.load_table_from_json(rows_to_load, temp_table_id, job_config=job_config)
-    load_job.result()  # Odotetaan latauksen valmistumista
-
-    # Suoritetaan MERGE varsinaiseen tauluun.
-    # Tärkeää: tags, tags_enriched, like_count ja deleted jätetään MATCHED-päivityksen ulkopuolelle
-    merge_query = f"""
-        MERGE `{project}.{dataset}.objects` T
-        USING `{temp_table_id}` S ON T.id = S.id
-        WHEN MATCHED AND S.updated > T.updated THEN
-            UPDATE SET
-                T.object_json = S.object_json,
-                T.published   = S.published,
-                T.updated     = S.updated,
-                T.source      = S.source,
-                T.og_enriched = COALESCE(S.og_enriched, T.og_enriched)
-        WHEN NOT MATCHED THEN
-            INSERT (id, source, published, updated, tags, tags_enriched, like_count, deleted, og_enriched, object_json)
-            VALUES (S.id, S.source, S.published, S.updated, [], FALSE, 0, FALSE, S.og_enriched, S.object_json)
-    """
-
+    pending_config = bigquery.LoadJobConfig(write_disposition="WRITE_APPEND", schema=pending_schema)
     try:
-        logger.info("Suoritetaan BigQuery MERGE-operaatio varsinaiseen objects-tauluun...")
-        query_job = bq_client.query(merge_query)
-        query_job.result()
-        logger.info("MERGE suoritettu onnistuneesti.")
-    finally:
-        # Aina siivotaan väliaikaistaulu suorituksen jälkeen
-        logger.info(f"Poistetaan väliaikaistaulu {temp_table_id}")
-        bq_client.delete_table(temp_table_id, not_found_ok=True)
+        load_job = bq_client.load_table_from_json(pending_rows, pending_table_id, job_config=pending_config)
+        load_job.result()
+        logger.info(f"{len(articles)} artikkelia lisätty pending-tauluun.")
+    except Exception as e:
+        logger.error(f"Virhe kirjoitettaessa pending-tauluun: {e}")
+        raise e
+
 
 
 def update_last_fetched_timestamp(
@@ -504,14 +480,21 @@ def main() -> None:
                 continue
             feed_url = discovered_url
 
-        # Haetaan ja parsitaan feedin itemit
-        items = fetch_rss_feed(feed_url, timeout)
+        # Haetaan ja parsitaan feedin itemit ja arkistoidaan raakadata GCS:ään
+        items = fetch_rss_feed(feed_url, timeout, project_id=project, source=feed_name)
         logger.info(f"Haku onnistui. Löydettiin {len(items)} parsinakelpoista artikkelia lähteestä '{feed_name}'.")
+
+        # Haetaan olemassa olevat ID:t duplikaattien estämiseksi objects_pending-taulussa
+        existing_ids = get_existing_ids(bq_client, project, dataset, feed_name)
+        new_count = 0
 
         # Muunnetaan AS2 Article -muotoon
         for item in items:
             as2_art = build_as2_article(item, feed_name, domain)
-            all_as2_articles.append(as2_art)
+            if as2_art["id"] not in existing_ids:
+                all_as2_articles.append(as2_art)
+                new_count += 1
+        logger.info(f"Lisätty {new_count} uutta artikkelia lähteestä '{feed_name}' odottamaan latausta.")
 
     # Kirjoitetaan BigQueryyn
     try:

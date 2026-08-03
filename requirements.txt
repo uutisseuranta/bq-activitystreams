@@ -11,3 +11,5 @@ lxml>=4.9.0
 pydantic>=2.0.0
 libvoikko>=1.9.0
 defusedxml>=0.7.1
+google-cloud-storage>=2.10.0
+
