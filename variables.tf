@@ -73,9 +73,9 @@ variable "max_instance_count" {
 variable "rss_feeds" {
   description = "JSON-lista RSS-syötteistä rss-fetch-jobille"
   type        = string
+  # Huom: "hel-fi"-nimi tuottaa GCS-bucket-nimen uutisseuranta-activitystreams-bronze-hel-fi.
+  # Tämä on sallittu GCS-nimi ja vastaa täsmällisesti rss_feeds:n name-kenttää.
   default     = <<-EOT
-    # Huom: "hel-fi"-nimi tuottaa GCS-bucket-nimen uutisseuranta-activitystreams-bronze-hel-fi.
-    # Tämä on sallittu GCS-nimi ja vastaa täsmällisesti rss_feeds:n name-kenttää.
     [{"name":"hs","url":"https://www.hs.fi/rss/tuoreimmat.xml"},
      {"name":"iltalehti","url":"https://www.iltalehti.fi/rss/uutiset.xml"},
      {"name":"is","url":"https://www.is.fi/rss/tuoreimmat.xml"},
