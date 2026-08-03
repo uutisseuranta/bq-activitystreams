@@ -467,6 +467,7 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
                     "url": url,
                     "name": act_object.get("name", ""),
                     "summary": act_object.get("summary", ""),
+                    "published": published_str,
                     "attributedTo": {"type": "Person", "id": actor_id}
                 })
             }
