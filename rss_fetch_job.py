@@ -341,16 +341,18 @@ def build_as2_article(item: Dict[str, Any], source: str, domain: str) -> Dict[st
     }
 
 
-def get_existing_ids(bq_client: bigquery.Client, project: str, dataset: str, source: str) -> set:
-    """Hakee olemassa olevat uutistunnukset päätaulusta ja pending-taulusta kyseiselle lähteelle."""
+def get_existing_ids(bq_client: bigquery.Client, project: str, dataset: str, sources: List[str]) -> set:
+    """Hakee olemassa olevat uutistunnukset päätaulusta ja pending-taulusta annetuille lähteille yhdellä kyselyllä."""
+    if not sources:
+        return set()
     query = f"""
-        SELECT id FROM `{project}.{dataset}.objects` WHERE source = @source
+        SELECT id FROM `{project}.{dataset}.objects` WHERE source IN UNNEST(@sources)
         UNION DISTINCT
-        SELECT id FROM `{project}.{dataset}.objects_pending` WHERE source = @source
+        SELECT id FROM `{project}.{dataset}.objects_pending` WHERE source IN UNNEST(@sources)
     """
     job_config = bigquery.QueryJobConfig(
         query_parameters=[
-            bigquery.ScalarQueryParameter("source", "STRING", source)
+            bigquery.ArrayQueryParameter("sources", "STRING", sources)
         ]
     )
     try:
@@ -461,6 +463,10 @@ def main() -> None:
 
     bq_client = bigquery.Client(project=project)
 
+    # Haetaan olemassa olevat ID:t kaikille lähteille yhdellä kertaa
+    feed_names = [f.get("name") for f in feeds if f.get("name")]
+    existing_ids = get_existing_ids(bq_client, project, dataset, feed_names)
+
     all_as2_articles = []
 
     for feed in feeds:
@@ -484,8 +490,6 @@ def main() -> None:
         items = fetch_rss_feed(feed_url, timeout, project_id=project, source=feed_name)
         logger.info(f"Haku onnistui. Löydettiin {len(items)} parsinakelpoista artikkelia lähteestä '{feed_name}'.")
 
-        # Haetaan olemassa olevat ID:t duplikaattien estämiseksi objects_pending-taulussa
-        existing_ids = get_existing_ids(bq_client, project, dataset, feed_name)
         new_count = 0
 
         # Muunnetaan AS2 Article -muotoon

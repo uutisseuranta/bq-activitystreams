@@ -42,6 +42,7 @@ from gcp_logging import get_logger
 from google.auth.transport import requests as google_requests
 from google.cloud import bigquery, storage
 from google.oauth2 import id_token
+from og_parser import validate_url_ip, robots_check
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -425,6 +426,17 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
             url = act_object.get("url")
             if not url:
                 raise HTTPException(status_code=400, detail="Missing 'url' in Article.")
+
+            # SSRF- ja robots-tarkistus (pre-flight)
+            try:
+                if not validate_url_ip(url):
+                    raise HTTPException(status_code=400, detail="Forbidden URL or invalid IP (SSRF protection).")
+                if not robots_check(url):
+                    raise HTTPException(status_code=400, detail="Access denied by robots.txt.")
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"URL validation failed: {e}")
 
             # Generoidaan ID URL:n perusteella
             input_str = f"user{url}"

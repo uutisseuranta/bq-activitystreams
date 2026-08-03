@@ -6,7 +6,7 @@ import hashlib
 import json
 import os
 import sys
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 from typing import Any, Dict, List, Optional
 
 import httpx

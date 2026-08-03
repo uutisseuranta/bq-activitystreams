@@ -193,18 +193,10 @@ def main() -> None:
     headers = {}
     if api_key:
         headers["X-API-Key"] = api_key
-        # OAuth / Bearer fallback
-        headers["Authorization"] = f"Bearer {api_key}"
 
     try:
         # Haetaan uusimmat päätökset (lisätään parametreja jos uusi API tukee, esim. limit=100)
         resp = httpx.get(f"{api_url}?limit=100", headers=headers, timeout=20, follow_redirects=True)
-        # Jos uusi API osoite antaa 404, kokeillaan helsinki-openapi fallbackia
-        if resp.status_code == 404:
-            fallback_url = "https://helsinki-openapi.api.hel.fi/v1/decisions?limit=100"
-            logger.info(f"Ahjo API returned 404, trying fallback: {fallback_url}")
-            resp = httpx.get(fallback_url, headers=headers, timeout=20, follow_redirects=True)
-            
         resp.raise_for_status()
     except Exception as e:
         logger.critical(f"Ahjo API request failed: {e}")

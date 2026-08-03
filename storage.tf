@@ -5,7 +5,7 @@ resource "google_storage_bucket" "bronze_buckets" {
   for_each      = toset(var.bronze_bucket_sources)
   name          = "${var.gcp_project}-bronze-${each.key}"
   location      = var.region
-  force_destroy = true # Kehitys-/testiympäristössä sallitaan helppo siivous
+  # force_destroy poistettu tuotannon tietoturvan vuoksi (default: false)
 
   uniform_bucket_level_access = true
 
