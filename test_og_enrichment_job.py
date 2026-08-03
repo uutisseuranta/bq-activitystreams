@@ -102,6 +102,28 @@ class TestOgEnrichmentJob(unittest.TestCase):
         args, _ = mock_bq.load_table_from_json.call_args
         rows_to_load = args[0]
         self.assertIn("SSRF check failed", rows_to_load[0]["og_enriched_error"])
+        # isAccessibleForFree must be absent on error
+        self.assertNotIn("isAccessibleForFree", rows_to_load[0]["object_json"])
+
+    @patch("og_enrichment_job.bigquery.Client")
+    @patch("og_enrichment_job.og_parser")
+    def test_enrichment_generic_fetch_error(self, mock_parser, mock_bq_class):
+        mock_bq = _make_bq_mock(
+            mock_bq_class,
+            '{"id": "01H7Y", "type": "Article", "url": "https://example.com/uutinen"}',
+        )
+
+        mock_parser.robots_check.return_value = True
+        mock_parser.fetch_url_stream.side_effect = Exception("Generic connection failure")
+
+        main()
+
+        mock_bq.load_table_from_json.assert_called_once()
+        args, _ = mock_bq.load_table_from_json.call_args
+        rows_to_load = args[0]
+        self.assertIn("Fetch/Parse error", rows_to_load[0]["og_enriched_error"])
+        # isAccessibleForFree must be absent on error
+        self.assertNotIn("isAccessibleForFree", rows_to_load[0]["object_json"])
 
     @patch("og_enrichment_job.bigquery.Client")
     def test_enrichment_no_unenriched_rows(self, mock_bq_class):

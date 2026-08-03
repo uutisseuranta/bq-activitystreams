@@ -254,7 +254,7 @@ print("\nKaikki yksikkötestit läpäisty ✓")
 EOF
 
 echo "Ajetaan jaetut ja lib-testit..."
-python3 -m unittest test_og_parser test_gcp_logging test_as2_contract test_voikko_job test_rss_fetch_job
+python3 -m unittest test_og_parser test_gcp_logging test_as2_contract test_voikko_job test_rss_fetch_job test_lausuntopalvelu_fetch_job
 
 echo "Ajetaan write_api-testit..."
 python3 -m unittest test_write_api
