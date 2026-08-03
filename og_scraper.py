@@ -192,7 +192,7 @@ def scrape_url(request: Request, req: ScrapeRequest, response: Response):
             'scraped' AS source,
             @published AS published,
             @updated AS updated,
-            SAFE_CAST(@object_json AS JSON) AS object_json
+            SAFE.PARSE_JSON(@object_json) AS object_json
         ) S ON T.id = S.id
         WHEN MATCHED AND T.source = 'scraped' THEN
           UPDATE SET
