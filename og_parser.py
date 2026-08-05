@@ -205,9 +205,13 @@ def parse_og_metadata(html_content: bytes, default_url: str) -> Dict[str, Any]:
         "published_time": None,
         "modified_time": None,
         "is_accessible_for_free": None,
+        "k5a_paid": None,
+        "k5a_paywall": None,
     }
 
     is_accessible_for_free: Optional[bool] = None
+    k5a_paid: Optional[str] = None
+    k5a_paywall: Optional[str] = None
 
     for meta in soup.find_all("meta"):
         property_attr = meta.get("property", "").lower()
@@ -234,11 +238,20 @@ def parse_og_metadata(html_content: bytes, default_url: str) -> Dict[str, Any]:
         elif name_attr == "description" and not metadata["description"]:
             metadata["description"] = content
 
-        # Meta-tason maksumuuritunnistus
-        if "paywall" in name_attr and content.lower() in ("true", "yes", "1", "paid", "locked"):
+        # Alma Median (Kauppalehti jne.) omat metatagit
+        if "k5a:paid" in (name_attr, property_attr):
+            k5a_paid = content.strip()
+        elif "k5a:paywall" in (name_attr, property_attr):
+            k5a_paywall = content.strip().lower()
+
+        # Meta-tason maksumuuritunnistus (tarkistetaan sekä name- että property-attribuutit)
+        if any("paywall" in attr for attr in (name_attr, property_attr)) and content.lower() in ("true", "yes", "1", "paid", "locked"):
             is_accessible_for_free = False
-        elif name_attr == "article:content_tier" and content.lower() in ("locked", "metered", "paywall"):
+        elif any(attr == "article:content_tier" for attr in (name_attr, property_attr)) and content.lower() in ("locked", "metered", "paywall"):
             is_accessible_for_free = False
+
+    if k5a_paywall == "locked":
+        is_accessible_for_free = False
 
     # 2. Etsitään JSON-LD-lohkoja (Schema.org)
     import json
@@ -286,6 +299,8 @@ def parse_og_metadata(html_content: bytes, default_url: str) -> Dict[str, Any]:
         metadata["modified_time"] = json_ld_modified
 
     metadata["is_accessible_for_free"] = is_accessible_for_free
+    metadata["k5a_paid"] = k5a_paid
+    metadata["k5a_paywall"] = k5a_paywall
 
     # Fallback otsikolle jos og:title puuttuu
     if not metadata["title"]:

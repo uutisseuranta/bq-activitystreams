@@ -193,6 +193,22 @@ def main() -> None:
             # isAccessibleForFree: tallennetaan Schema.org maksumuuritieto (Päätös G-020)
             # Maksumuurillisille uutisille EI haeta arkistolinkkiä taustalla (ne suodatetaan automaattisesti pois).
             is_free = metadata.get("is_accessible_for_free")
+
+            # Jos artikkeli on k5a:paid = "1" mutta k5a:paywall = "open", se on tällä hetkellä ilmainen (isAccessibleForFree = True).
+            # Mutta koska se on maksullinen sisältö, käynnistetään sille heti proaktiivinen Wayback Machine -arkistointi.
+            if metadata.get("k5a_paid") == "1" and metadata.get("k5a_paywall") == "open":
+                is_free = True
+                object_json["url_archive"] = f"https://web.archive.org/web/*/{url}"
+                try:
+                    import httpx
+                    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
+                    # Tehdään nopea taustakutsu Wayback Machineen. Asetetaan lyhyt timeout jottei ajo viivästyisi.
+                    # Standardi SPN2-aloituskutsu on GET/POST /save/{url} -osoitteeseen.
+                    httpx.get(f"https://web.archive.org/save/{url}", headers=headers, timeout=3.0)
+                    logger.info(f"Proaktiivinen arkistointipyyntö lähetetty Wayback Machineen: {url}")
+                except Exception as e:
+                    logger.warning(f"Proaktiivisen arkistoinnin käynnistys epäonnistui uutiselle {url}: {e}")
+
             if is_free is False:
                 object_json["isAccessibleForFree"] = False
                 tags = object_json.get("tag", [])
