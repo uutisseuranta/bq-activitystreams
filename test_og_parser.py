@@ -67,6 +67,56 @@ class TestOgParser(unittest.TestCase):
         self.assertEqual(metadata["description"], "Meta Description")
         self.assertEqual(metadata["image"], None)
 
+    def test_parse_og_metadata_k5a_paywall_locked(self):
+        html = b"""
+        <html>
+        <head>
+          <meta property="k5a:paywall" content="locked" />
+          <meta property="k5a:paid" content="1" />
+        </head>
+        <body></body>
+        </html>
+        """
+        metadata = og_parser.parse_og_metadata(html, "https://example.com/req")
+        self.assertEqual(metadata["k5a_paywall"], "locked")
+        self.assertEqual(metadata["k5a_paid"], "1")
+        self.assertEqual(metadata["is_accessible_for_free"], False)
+
+    def test_parse_og_metadata_k5a_paywall_open(self):
+        html = b"""
+        <html>
+        <head>
+          <meta property="k5a:paywall" content="open" />
+          <meta property="k5a:paid" content="1" />
+          <script type="application/ld+json">
+          {
+            "@context": "https://schema.org",
+            "@type": "NewsArticle",
+            "isAccessibleForFree": true
+          }
+          </script>
+        </head>
+        <body></body>
+        </html>
+        """
+        metadata = og_parser.parse_og_metadata(html, "https://example.com/req")
+        self.assertEqual(metadata["k5a_paywall"], "open")
+        self.assertEqual(metadata["k5a_paid"], "1")
+        # should remain True because paywall is open and JSON-LD says true
+        self.assertEqual(metadata["is_accessible_for_free"], True)
+
+    def test_parse_og_metadata_property_attributes(self):
+        html = b"""
+        <html>
+        <head>
+          <meta property="article:content_tier" content="locked" />
+        </head>
+        <body></body>
+        </html>
+        """
+        metadata = og_parser.parse_og_metadata(html, "https://example.com/req")
+        self.assertEqual(metadata["is_accessible_for_free"], False)
+
     @patch("og_parser.fetch_url_stream")
     def test_robots_check_allow(self, mock_fetch):
         # robots.txt sallii kaiken
