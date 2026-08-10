@@ -619,16 +619,16 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
         for obj_id in object_ids:
             act_id = f"https://activitystreams.uutisseuranta.net/ap/activities/reads/{ulid.new().str}"
             act_ids.append(act_id)
-            
+
             activity_payload = {
                 "@context": "https://www.w3.org/ns/activitystreams",
                 "id": act_id,
                 "type": "Read",
                 "actor": actor_id,
                 "object": obj_id,
-                "published": published_str
+                "published": published_str,
             }
-            
+
             activities_row = {
                 "id": act_id,
                 "type": "Read",
@@ -655,7 +655,7 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
         return Response(
             status_code=201,
             content=json.dumps({"id": act_ids[0] if len(act_ids) == 1 else act_ids}),
-            media_type="application/json"
+            media_type="application/json",
         )
 
     elif act_type == "Delete":

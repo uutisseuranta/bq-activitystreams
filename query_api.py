@@ -20,10 +20,12 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
+
 class OutboxRequest(BaseModel):
     tag: Optional[List[str]] = None
     n: int = 50
     seen_ids: Optional[List[str]] = None
+
 
 logger = get_logger("query-api")
 
@@ -599,7 +601,7 @@ def post_outbox(
     return Response(
         content=json.dumps(response_json, ensure_ascii=False),
         media_type="application/activity+json; charset=utf-8",
-        headers=headers
+        headers=headers,
     )
 
 
