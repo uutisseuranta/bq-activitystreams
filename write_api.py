@@ -598,6 +598,66 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
         else:
             raise HTTPException(status_code=400, detail="Unsupported object type for Create activity.")
 
+    elif act_type == "Read":
+        if isinstance(act_object, list):
+            object_ids = act_object
+        else:
+            object_ids = [act_object]
+
+        if len(object_ids) > 500:
+            raise HTTPException(status_code=400, detail="'object' list cannot exceed 500 items.")
+
+        for obj_id in object_ids:
+            if not isinstance(obj_id, str) or not obj_id.strip():
+                raise HTTPException(status_code=422, detail="'object_id' must be a non-empty string")
+            if len(obj_id) > 2048:
+                raise HTTPException(status_code=422, detail="object_id exceeds maximum length of 2048 characters")
+
+        received_at_str = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+        activities_rows = []
+        act_ids = []
+        for obj_id in object_ids:
+            act_id = f"https://activitystreams.uutisseuranta.net/ap/activities/reads/{ulid.new().str}"
+            act_ids.append(act_id)
+            
+            activity_payload = {
+                "@context": "https://www.w3.org/ns/activitystreams",
+                "id": act_id,
+                "type": "Read",
+                "actor": actor_id,
+                "object": obj_id,
+                "published": published_str
+            }
+            
+            activities_row = {
+                "id": act_id,
+                "type": "Read",
+                "actor": actor_id,
+                "object_id": obj_id,
+                "object_type": "Article",
+                "object_json": json.dumps(activity_payload),
+                "target_id": None,
+                "in_reply_to": None,
+                "thread_root": None,
+                "published": published_str,
+                "received_at": received_at_str,
+            }
+            activities_rows.append(activities_row)
+
+        try:
+            errors = bq_client.insert_rows_json(f"{PROJECT}.{SOCIAL_DATASET}.activities", activities_rows)
+            if errors:
+                raise Exception(f"BigQuery streaming insert errors: {errors}")
+        except Exception as e:
+            logger.error(f"Virhe Read-aktiviteettien tallennuksessa: {e}")
+            raise HTTPException(status_code=500, detail="Database write failed.")
+
+        return Response(
+            status_code=201,
+            content=json.dumps({"id": act_ids[0] if len(act_ids) == 1 else act_ids}),
+            media_type="application/json"
+        )
+
     elif act_type == "Delete":
         obj_id = act_object if isinstance(act_object, str) else act_object.get("id")
         if not obj_id:
