@@ -89,5 +89,30 @@ if ! echo "$IAM_POLICY" | grep -q "serviceAccount:${SA_EMAIL}"; then
 fi
 echo "  ✓ Palvelutili ja IAM OK"
 
+# 7. Query API HTTP Test: POST /ap/outbox
+echo "Tarkistetaan Query API HTTP-päätepiste (POST /ap/outbox) ..."
+QUERY_URL=$(gcloud run services describe query-api \
+    --region="${REGION}" \
+    --project="${PROJECT}" \
+    --format="value(status.url)" 2>/dev/null) || {
+    echo "HUOMAUTUS: query-api Cloud Run -palvelua ei löytynyt, ohitetaan HTTP-savutesti."
+    QUERY_URL=""
+}
+
+if [ -n "$QUERY_URL" ]; then
+    HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+        -X POST "${QUERY_URL}/ap/outbox" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer mock-test" \
+        -d '{"n": 5, "seen_ids": []}')
+    
+    echo "  HTTP status: ${HTTP_STATUS}"
+    if [ "$HTTP_STATUS" -ne 200 ] && [ "$HTTP_STATUS" -ne 401 ] && [ "$HTTP_STATUS" -ne 403 ]; then
+        echo "VIRHE: POST /ap/outbox palautti virhekoodin ${HTTP_STATUS}"
+        exit 1
+    fi
+    echo "  ✓ query-api POST /ap/outbox HTTP-savutesti OK"
+fi
+
 echo ""
 echo "Kaikki live smoke testit läpäisty ✓"
