@@ -700,3 +700,129 @@ class TestAddActivity(unittest.TestCase):
             headers={"Authorization": "Bearer mock-test"},
         )
         self.assertEqual(response.status_code, 404)
+
+
+class TestReadActivity(unittest.TestCase):
+    """
+    Testit Read-tyyppisen aktiviteetin käsittelylle.
+    """
+
+    def setUp(self):
+        self.client = TestClient(app)
+
+    @patch("write_api.bq_client")
+    def test_read_batch_success_and_explosion(self, mock_bq):
+        mock_bq.insert_rows_json.return_value = []
+        payload = {
+            "type": "Read",
+            "object": ["https://example.com/art1", "https://example.com/art2", "https://example.com/art3"]
+        }
+        response = self.client.post(
+            "/ap/inbox",
+            json=payload,
+            headers={"Authorization": "Bearer mock-test"}
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertIn("id", response.json())
+        
+        # Verify that insert_rows_json was called once with a list of 3 exploded rows
+        mock_bq.insert_rows_json.assert_called_once()
+        inserted_rows = mock_bq.insert_rows_json.call_args[0][1]
+        self.assertEqual(len(inserted_rows), 3)
+        self.assertEqual(inserted_rows[0]["object_id"], "https://example.com/art1")
+        self.assertEqual(inserted_rows[1]["object_id"], "https://example.com/art2")
+        self.assertEqual(inserted_rows[2]["object_id"], "https://example.com/art3")
+
+    @patch("write_api.bq_client")
+    def test_read_single_string_object(self, mock_bq):
+        mock_bq.insert_rows_json.return_value = []
+        payload = {
+            "type": "Read",
+            "object": "https://example.com/art1"
+        }
+        response = self.client.post(
+            "/ap/inbox",
+            json=payload,
+            headers={"Authorization": "Bearer mock-test"}
+        )
+        self.assertEqual(response.status_code, 201)
+        
+        mock_bq.insert_rows_json.assert_called_once()
+        inserted_rows = mock_bq.insert_rows_json.call_args[0][1]
+        self.assertEqual(len(inserted_rows), 1)
+        self.assertEqual(inserted_rows[0]["object_id"], "https://example.com/art1")
+
+    @patch("write_api.bq_client")
+    def test_read_activity_unknown_object_returns_200(self, mock_bq):
+        mock_bq.insert_rows_json.return_value = []
+        payload = {
+            "type": "Read",
+            "object": "https://example.com/unknown-art"
+        }
+        # Unknown objects should return 200/201 (since read state is valid even if article is archived/deleted)
+        response = self.client.post(
+            "/ap/inbox",
+            json=payload,
+            headers={"Authorization": "Bearer mock-test"}
+        )
+        self.assertEqual(response.status_code, 201)
+
+    @patch("write_api.bq_client")
+    def test_read_activity_duplicates_succeed(self, mock_bq):
+        mock_bq.insert_rows_json.return_value = []
+        payload = {
+            "type": "Read",
+            "object": ["https://example.com/art1", "https://example.com/art1"]
+        }
+        response = self.client.post(
+            "/ap/inbox",
+            json=payload,
+            headers={"Authorization": "Bearer mock-test"}
+        )
+        self.assertEqual(response.status_code, 201)
+        
+        inserted_rows = mock_bq.insert_rows_json.call_args[0][1]
+        self.assertEqual(len(inserted_rows), 2)
+        self.assertEqual(inserted_rows[0]["object_id"], "https://example.com/art1")
+        self.assertEqual(inserted_rows[1]["object_id"], "https://example.com/art1")
+
+    def test_read_batch_size_exceeded_returns_400(self):
+        payload = {
+            "type": "Read",
+            "object": [f"https://example.com/{i}" for i in range(501)]
+        }
+        response = self.client.post(
+            "/ap/inbox",
+            json=payload,
+            headers={"Authorization": "Bearer mock-test"}
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("cannot exceed 500 items", response.json()["detail"])
+
+    def test_read_empty_string_returns_422(self):
+        payload = {
+            "type": "Read",
+            "object": ["https://example.com/art1", ""]
+        }
+        response = self.client.post(
+            "/ap/inbox",
+            json=payload,
+            headers={"Authorization": "Bearer mock-test"}
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("must be a non-empty string", response.json()["detail"])
+
+    def test_read_long_object_id_returns_422(self):
+        long_id = "https://example.com/" + "a" * 2030
+        payload = {
+            "type": "Read",
+            "object": long_id
+        }
+        response = self.client.post(
+            "/ap/inbox",
+            json=payload,
+            headers={"Authorization": "Bearer mock-test"}
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("exceeds maximum length of 2048 characters", response.json()["detail"])
+

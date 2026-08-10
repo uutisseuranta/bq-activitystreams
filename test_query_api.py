@@ -481,3 +481,178 @@ class TestQueryApiRegressions(unittest.TestCase):
             mock_bq.query.side_effect = query_side_effect
             response = self.client.get("/ap/outbox?tag=politiikka", headers={"Authorization": "Bearer mock-test"})
             self.assertEqual(response.status_code, 200)
+
+
+@patch.dict(os.environ, {"ALLOW_MOCK_AUTH": "true"})
+class TestPostOutbox(unittest.TestCase):
+    """
+    Testit POST /ap/outbox -päätepisteelle ja seen-suodatukselle.
+    """
+
+    def setUp(self):
+        self.client = TestClient(app)
+
+    @patch("query_api.bq_client")
+    def test_post_outbox_anonymous_without_seen_ids(self, mock_bq):
+        def query_side_effect(sql, job_config=None):
+            if "COUNT(*) AS c" in sql:
+                return create_mock_query_job([{"c": 0}])
+            return create_mock_query_job([])
+        mock_bq.query.side_effect = query_side_effect
+
+        response = self.client.post("/ap/outbox", json={"tag": ["politiikka"], "n": 10})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["cache-control"], "private, no-store")
+
+    @patch("query_api.bq_client")
+    def test_post_outbox_anonymous_with_seen_ids(self, mock_bq):
+        def query_side_effect(sql, job_config=None):
+            self.assertIn("o.id NOT IN UNNEST(@seen_ids)", sql)
+            if "COUNT(*) AS c" in sql:
+                return create_mock_query_job([{"c": 0}])
+            return create_mock_query_job([])
+        mock_bq.query.side_effect = query_side_effect
+
+        response = self.client.post(
+            "/ap/outbox",
+            json={"tag": ["politiikka"], "n": 10, "seen_ids": ["id1", "id2"]}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["meta"]["seen_ids_applied"], 2)
+
+    @patch("query_api.bq_client")
+    def test_post_outbox_anonymous_with_empty_seen_ids(self, mock_bq):
+        def query_side_effect(sql, job_config=None):
+            self.assertNotIn("o.id NOT IN UNNEST(@seen_ids)", sql)
+            if "COUNT(*) AS c" in sql:
+                return create_mock_query_job([{"c": 0}])
+            return create_mock_query_job([])
+        mock_bq.query.side_effect = query_side_effect
+
+        response = self.client.post(
+            "/ap/outbox",
+            json={"tag": ["politiikka"], "n": 10, "seen_ids": []}
+        )
+        self.assertEqual(response.status_code, 200)
+        # Empty list should not add meta tags or filter
+        self.assertNotIn("meta", response.json())
+
+    @patch("query_api.bq_client")
+    def test_post_outbox_anonymous_missing_seen_ids_key(self, mock_bq):
+        def query_side_effect(sql, job_config=None):
+            self.assertNotIn("o.id NOT IN UNNEST(@seen_ids)", sql)
+            if "COUNT(*) AS c" in sql:
+                return create_mock_query_job([{"c": 0}])
+            return create_mock_query_job([])
+        mock_bq.query.side_effect = query_side_effect
+
+        # No seen_ids key in JSON payload at all
+        response = self.client.post(
+            "/ap/outbox",
+            json={"tag": ["politiikka"], "n": 10}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("meta", response.json())
+
+    @patch("query_api.bq_client")
+    def test_post_outbox_authenticated_token_based(self, mock_bq):
+        def query_side_effect(sql, job_config=None):
+            self.assertIn("LEFT JOIN (", sql)
+            self.assertIn("WHERE actor = @actor_id AND type = 'Read'", sql)
+            self.assertIn("max_received_at", sql)
+            if "COUNT(*) AS c" in sql:
+                return create_mock_query_job([{"c": 0}])
+            return create_mock_query_job([])
+        mock_bq.query.side_effect = query_side_effect
+
+        response = self.client.post(
+            "/ap/outbox",
+            json={"n": 10},
+            headers={"Authorization": "Bearer mock-test"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["meta"]["filtered_by"], "token")
+
+    @patch("query_api.bq_client")
+    def test_post_outbox_authenticated_with_seen_ids_ignored(self, mock_bq):
+        def query_side_effect(sql, job_config=None):
+            self.assertNotIn("o.id NOT IN UNNEST(@seen_ids)", sql)
+            if "COUNT(*) AS c" in sql:
+                return create_mock_query_job([{"c": 0}])
+            return create_mock_query_job([])
+        mock_bq.query.side_effect = query_side_effect
+
+        response = self.client.post(
+            "/ap/outbox",
+            json={"n": 10, "seen_ids": ["id1"]},
+            headers={"Authorization": "Bearer mock-test"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["meta"]["filtered_by"], "token")
+        self.assertTrue(response.json()["meta"]["seen_ids_ignored"])
+
+    @patch("query_api.bq_client")
+    def test_post_outbox_anonymous_seen_ids_truncation(self, mock_bq):
+        def query_side_effect(sql, job_config=None):
+            if "COUNT(*) AS c" in sql:
+                return create_mock_query_job([{"c": 0}])
+            return create_mock_query_job([])
+        mock_bq.query.side_effect = query_side_effect
+
+        large_list = [f"id-{i}" for i in range(12000)]
+        response = self.client.post(
+            "/ap/outbox",
+            json={"n": 10, "seen_ids": large_list}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["meta"]["seen_ids_applied"], 10000)
+        self.assertEqual(response.json()["meta"]["seen_ids_received"], 12000)
+
+    @patch("query_api.bq_client")
+    def test_post_outbox_invalid_n_returns_400(self, mock_bq):
+        response = self.client.post("/ap/outbox", json={"n": 501})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("must be between 1 and 500", response.json()["detail"])
+
+    @patch("query_api.bq_client")
+    def test_post_outbox_resurface_when_updated_gt_received_at(self, mock_bq):
+        mock_row = {
+            "id": "https://activitystreams.uutisseuranta.net/ap/objects/articles/art1",
+            "source": "rss",
+            "published": datetime.datetime(2026, 7, 3, 10, 0, tzinfo=datetime.timezone.utc),
+            "updated": datetime.datetime(2026, 7, 3, 12, 0, tzinfo=datetime.timezone.utc),
+            "like_count": 0,
+            "dislike_count": 0,
+            "object_json": '{"id": "https://example.com/art1", "type": "Article", "name": "Test uutinen"}',
+        }
+        def query_side_effect(sql, job_config=None):
+            if "COUNT(*) AS c" in sql:
+                return create_mock_query_job([{"c": 1}])
+            return create_mock_query_job([mock_row])
+        mock_bq.query.side_effect = query_side_effect
+
+        response = self.client.post(
+            "/ap/outbox",
+            json={"n": 10},
+            headers={"Authorization": "Bearer mock-test"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()["orderedItems"]), 1)
+
+    @patch("query_api.bq_client")
+    def test_post_outbox_resurface_boundary_equal_timestamp_does_not_resurface(self, mock_bq):
+        def query_side_effect(sql, job_config=None):
+            self.assertIn("o.updated > s.max_received_at", sql)
+            if "COUNT(*) AS c" in sql:
+                return create_mock_query_job([{"c": 0}])
+            return create_mock_query_job([])
+        mock_bq.query.side_effect = query_side_effect
+
+        response = self.client.post(
+            "/ap/outbox",
+            json={"n": 10},
+            headers={"Authorization": "Bearer mock-test"}
+        )
+        self.assertEqual(response.status_code, 200)
+
+

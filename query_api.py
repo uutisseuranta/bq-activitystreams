@@ -8,6 +8,13 @@ import time
 import urllib.parse
 from typing import Any, Dict, List, Optional
 
+from pydantic import BaseModel
+
+class OutboxRequest(BaseModel):
+    tag: Optional[List[str]] = None
+    n: int = 50
+    seen_ids: Optional[List[str]] = None
+
 import httpx
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -405,6 +412,197 @@ def get_outbox(
     # (application/ld+json; profile="..." olisi tiukempi AS2, mutta activity+json on laajemmin tuettu)
     return Response(
         content=json.dumps(response_json, ensure_ascii=False), media_type="application/activity+json; charset=utf-8"
+    )
+
+
+@app.post("/ap/outbox")
+@limiter.limit(get_outbox_limit)
+def post_outbox(
+    request: Request,
+    body: OutboxRequest,
+    background_tasks: BackgroundTasks,
+    authorization: Optional[str] = Header(None),
+):
+    global last_user_activity
+    now = time.time()
+    if now - last_user_activity > 7200:
+        background_tasks.add_task(manage_scheduler_job, "resume")
+    last_user_activity = now
+
+    sub = verify_auth_token_optional(authorization)
+
+    n = body.n
+    if n <= 0 or n > 500:
+        raise HTTPException(status_code=400, detail="Parameter 'n' must be between 1 and 500.")
+
+    seen_ids = body.seen_ids
+    meta = {}
+
+    seen_ids_len = len(seen_ids) if seen_ids else 0
+    if seen_ids and seen_ids_len > 10000:
+        seen_ids = seen_ids[:10000]
+        meta["seen_ids_applied"] = 10000
+        meta["seen_ids_received"] = seen_ids_len
+
+    if sub:
+        if seen_ids_len > 0:
+            logger.warning(f"Seen ids passed for authenticated user {sub}; ignoring and using token-based filtering.")
+            meta["filtered_by"] = "token"
+            meta["seen_ids_ignored"] = True
+        else:
+            meta["filtered_by"] = "token"
+    else:
+        if seen_ids_len > 0 and "seen_ids_applied" not in meta:
+            meta["seen_ids_applied"] = seen_ids_len
+            meta["seen_ids_received"] = seen_ids_len
+
+    search_tags = []
+    if body.tag:
+        for t in body.tag:
+            val = t.strip().lower()
+            if val:
+                if not val.startswith("#"):
+                    val = f"#{val}"
+                search_tags.append(val)
+
+    logger.info(f"Outbox-haku (POST) tageilla: {search_tags or 'KAIKKI'}, koko n: {n}, auth: {sub is not None}")
+
+    actor_id = f"https://activitystreams.uutisseuranta.net/ap/users/{sub}" if sub else None
+
+    select_fields = """
+        o.id,
+        o.source,
+        o.published,
+        o.updated,
+        o.like_count,
+        o.dislike_count,
+        o.object_json
+    """
+
+    query_params = [
+        bigquery.ScalarQueryParameter("limit_n", "INT64", n),
+    ]
+
+    if sub:
+        join_clause = f"""
+            LEFT JOIN (
+              SELECT object_id, MAX(received_at) as max_received_at
+              FROM `{PROJECT}.{SOCIAL_DATASET}.activities`
+              WHERE actor = @actor_id AND type = 'Read'
+              GROUP BY object_id
+            ) s ON o.id = s.object_id
+        """
+        where_auth = "AND (s.object_id IS NULL OR o.updated > s.max_received_at)"
+        query_params.append(bigquery.ScalarQueryParameter("actor_id", "STRING", actor_id))
+    else:
+        join_clause = ""
+        if seen_ids:
+            where_auth = "AND o.id NOT IN UNNEST(@seen_ids)"
+            query_params.append(bigquery.ArrayQueryParameter("seen_ids", "STRING", seen_ids))
+        else:
+            where_auth = ""
+
+    if search_tags:
+        query = f"""
+            SELECT
+              {select_fields},
+              (
+                SELECT COUNT(*)
+                FROM UNNEST(o.tags) t
+                WHERE t IN UNNEST(@search_tags)
+              ) AS relevance
+            FROM `{PROJECT}.{DATASET}.objects` o
+            {join_clause}
+            WHERE o.deleted = FALSE
+              {PAYWALL_FILTER_SQL}
+              AND EXISTS (
+                SELECT 1 FROM UNNEST(o.tags) t WHERE t IN UNNEST(@search_tags)
+              )
+              {where_auth}
+            ORDER BY relevance DESC, o.like_count DESC, o.updated DESC, o.published DESC NULLS LAST, o.id ASC
+            LIMIT @limit_n
+        """
+        query_params.append(bigquery.ArrayQueryParameter("search_tags", "STRING", search_tags))
+    else:
+        query = f"""
+            SELECT
+              {select_fields},
+              1 AS relevance
+            FROM `{PROJECT}.{DATASET}.objects` o
+            {join_clause}
+            WHERE o.deleted = FALSE
+              {PAYWALL_FILTER_SQL}
+              {where_auth}
+            ORDER BY o.published DESC NULLS LAST, o.updated DESC, o.like_count DESC, o.id ASC
+            LIMIT @limit_n
+        """
+
+    job_config = bigquery.QueryJobConfig(query_parameters=query_params)
+
+    try:
+        logger.info(f"Suoritetaan kysely: {query}")
+        query_job = bq_client.query(query, job_config=job_config)
+        rows = list(query_job.result())
+        logger.info(f"Kysely palautti {len(rows)} riviä.")
+    except Exception as e:
+        logger.error(f"BigQuery-haku epäonnistui: {e}")
+        raise HTTPException(status_code=500, detail="Database query failed.")
+
+    ordered_items = []
+    for row in rows:
+        obj_json_raw = row["object_json"]
+        if not obj_json_raw:
+            continue
+
+        try:
+            obj = json.loads(obj_json_raw) if isinstance(obj_json_raw, str) else obj_json_raw
+            obj["@context"] = [
+                "https://www.w3.org/ns/activitystreams",
+                {"_uutisseuranta": "https://uutisseuranta.net/ns#", "dislikes": "_uutisseuranta:dislikes"},
+            ]
+
+            like_cnt = row["like_count"] or 0
+            dislike_cnt = row["dislike_count"] or 0
+
+            obj["likes"] = {"type": "Collection", "totalItems": like_cnt}
+            obj["dislikes"] = {"type": "Collection", "totalItems": dislike_cnt}
+            obj["_uutisseuranta:reactionCount"] = like_cnt + dislike_cnt
+
+            if row["updated"]:
+                updated_dt = row["updated"]
+                if isinstance(updated_dt, datetime.datetime):
+                    obj["updated"] = updated_dt.isoformat().replace("+00:00", "Z")
+                else:
+                    obj["updated"] = str(updated_dt)
+
+            ordered_items.append(obj)
+        except Exception as e:
+            logger.error(f"Virhe objektin {row['id']} parsimisessa: {e}")
+
+    total_items = get_total_items_cached(search_tags)
+
+    base_url = "https://activitystreams.uutisseuranta.net/ap/outbox"
+    tag_params = "&".join(f"tag={urllib.parse.quote(t)}" for t in search_tags)
+    self_url = f"{base_url}?{tag_params}&n={n}"
+
+    response_json = {
+        "@context": "https://www.w3.org/ns/activitystreams",
+        "type": "OrderedCollection",
+        "id": self_url,
+        "totalItems": total_items,
+        "orderedItems": ordered_items,
+    }
+    if meta:
+        response_json["meta"] = meta
+
+    headers = {
+        "Cache-Control": "private, no-store"  # CDN does not cache POST; this prevents browser caching of personal feed.
+    }
+
+    return Response(
+        content=json.dumps(response_json, ensure_ascii=False),
+        media_type="application/activity+json; charset=utf-8",
+        headers=headers
     )
 
 

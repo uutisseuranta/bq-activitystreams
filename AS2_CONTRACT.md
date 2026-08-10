@@ -70,7 +70,31 @@ Uuden aihetunnisteen (Hashtag) lisäämiseksi uutisartikkelille lähetetään `P
 }
 ```
 
+### Uutisten merkitseminen luetuiksi (`Read`-aktiviteetti)
+Kun uutinen luetaan, lähetetään `POST` `/ap/inbox`-osoitteeseen `Read`-aktiviteetti. Rajapinta tukee erien lähettämistä (batching) suorituskyvyn parantamiseksi:
+```json
+{
+  "@context": "https://www.w3.org/ns/activitystreams",
+  "type": "Read",
+  "actor": "https://uutisseuranta.net/users/{uid}",
+  "object": [
+    "https://uutisseuranta.net/ap/objects/id1",
+    "https://uutisseuranta.net/ap/objects/id2"
+  ]
+}
+```
+* **Normalisointi**: Kirjoitusrajapinta hyväksyy `object`-kentässä sekä yksittäisen merkkijonon (yksi ID) että listan (useita ID-osoitteita).
+* **Rajoitukset**:
+  - `object`-lista voi sisältää enintään **500 ID:tä** per kutsu. Tämän ylitys palauttaa `400 Bad Request`.
+  - Jokaisen ID:n on oltava ei-tyhjä merkkijono ja enintään **2048 merkkiä** pitkä. Virheelliset ID-arvot palauttavat `422 Unprocessable Entity`.
+  - Jos taulussa havaitaan duplikaatteja (esim. verkon retryistä johtuen), ne käsitellään append-only -semantiikalla ja poistetaan kyselyvaiheessa `MAX(received_at)` -aggregaatiolla.
+
 ## 5. Hallitut poikkeamat standardista
+- **POST /ap/outbox -kyselypoikkeama**: W3C ActivityPub -spesifikaation [§6.1](https://www.w3.org/TR/activitypub/#client-to-server-interactions) mukaan `POST` outboxiin edustaa uuden aktiviteetin luomista (client-to-server submission). Tässä toteutuksessa `POST /ap/outbox` on kuitenkin **puhdas kyselyoperaatio (client-to-server query)**, jolla haetaan uutisia siten että käyttäjän jo lukemat uutiset suodatetaan pois tietokantatasolla ilman pitkien URL-listojen lähettämistä GET-parametreissa.
+  - Vastaus sisältää aina `Cache-Control: private, no-store` -otsikkeen estämään selaimen välimuistituksen personalisoidulle uutisvirralle.
+  - Autentikoiduilla käyttäjillä kysely ohittaa body-datassa annetun `seen_ids`-listan varoituksella (tietokannan palvelinpuolen tila on autoritatiivinen) ja palauttaa `"meta": {"filtered_by": "token", "seen_ids_ignored": true}`.
+  - Anonyymeillä käyttäjillä body-datan `seen_ids`-listaa käytetään suodattamiseen. Lista on rajoitettu enintään **10 000** alkioon; jos raja ylittyy, lista leikataan hiljaa uusimpiin ja vastaukseen lisätään `"meta": {"seen_ids_applied": 10000, "seen_ids_received": <n>}`.
+
 - **Undo Like -poikkeama:** Järjestelmä toteuttaa toggle-reaktiologiikan (Like ↔ Dislike) poistamalla vanhan reaktion tietokannasta ja lisäämällä uuden. Tästä ei luoda erillistä AS2 `Undo`-aktiviteettia lokiin historiatiedon anonymisoinnin säilyttämiseksi.
 - **OrderedCollectionPage -poikkeama (Päätös L-009):** `GET /ap/outbox` käyttää omaa hakumallia eikä AS2 `OrderedCollectionPage` + `next`/`prev` -linkkikenttiä. Tämä on tehty yksinkertaisuuden ja BigQuery-pohjaisen suorituskyvyn vuoksi, koska järjestelmä ei federoidu ulkoisiin AP-palvelimiin.
 
