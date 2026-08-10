@@ -498,6 +498,7 @@ class TestPostOutbox(unittest.TestCase):
             if "COUNT(*) AS c" in sql:
                 return create_mock_query_job([{"c": 0}])
             return create_mock_query_job([])
+
         mock_bq.query.side_effect = query_side_effect
 
         response = self.client.post("/ap/outbox", json={"tag": ["politiikka"], "n": 10})
@@ -511,12 +512,10 @@ class TestPostOutbox(unittest.TestCase):
             if "COUNT(*) AS c" in sql:
                 return create_mock_query_job([{"c": 0}])
             return create_mock_query_job([])
+
         mock_bq.query.side_effect = query_side_effect
 
-        response = self.client.post(
-            "/ap/outbox",
-            json={"tag": ["politiikka"], "n": 10, "seen_ids": ["id1", "id2"]}
-        )
+        response = self.client.post("/ap/outbox", json={"tag": ["politiikka"], "n": 10, "seen_ids": ["id1", "id2"]})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["meta"]["seen_ids_applied"], 2)
 
@@ -527,12 +526,10 @@ class TestPostOutbox(unittest.TestCase):
             if "COUNT(*) AS c" in sql:
                 return create_mock_query_job([{"c": 0}])
             return create_mock_query_job([])
+
         mock_bq.query.side_effect = query_side_effect
 
-        response = self.client.post(
-            "/ap/outbox",
-            json={"tag": ["politiikka"], "n": 10, "seen_ids": []}
-        )
+        response = self.client.post("/ap/outbox", json={"tag": ["politiikka"], "n": 10, "seen_ids": []})
         self.assertEqual(response.status_code, 200)
         # Empty list should not add meta tags or filter
         self.assertNotIn("meta", response.json())
@@ -544,13 +541,11 @@ class TestPostOutbox(unittest.TestCase):
             if "COUNT(*) AS c" in sql:
                 return create_mock_query_job([{"c": 0}])
             return create_mock_query_job([])
+
         mock_bq.query.side_effect = query_side_effect
 
         # No seen_ids key in JSON payload at all
-        response = self.client.post(
-            "/ap/outbox",
-            json={"tag": ["politiikka"], "n": 10}
-        )
+        response = self.client.post("/ap/outbox", json={"tag": ["politiikka"], "n": 10})
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("meta", response.json())
 
@@ -563,13 +558,10 @@ class TestPostOutbox(unittest.TestCase):
             if "COUNT(*) AS c" in sql:
                 return create_mock_query_job([{"c": 0}])
             return create_mock_query_job([])
+
         mock_bq.query.side_effect = query_side_effect
 
-        response = self.client.post(
-            "/ap/outbox",
-            json={"n": 10},
-            headers={"Authorization": "Bearer mock-test"}
-        )
+        response = self.client.post("/ap/outbox", json={"n": 10}, headers={"Authorization": "Bearer mock-test"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["meta"]["filtered_by"], "token")
 
@@ -580,12 +572,11 @@ class TestPostOutbox(unittest.TestCase):
             if "COUNT(*) AS c" in sql:
                 return create_mock_query_job([{"c": 0}])
             return create_mock_query_job([])
+
         mock_bq.query.side_effect = query_side_effect
 
         response = self.client.post(
-            "/ap/outbox",
-            json={"n": 10, "seen_ids": ["id1"]},
-            headers={"Authorization": "Bearer mock-test"}
+            "/ap/outbox", json={"n": 10, "seen_ids": ["id1"]}, headers={"Authorization": "Bearer mock-test"}
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["meta"]["filtered_by"], "token")
@@ -597,13 +588,11 @@ class TestPostOutbox(unittest.TestCase):
             if "COUNT(*) AS c" in sql:
                 return create_mock_query_job([{"c": 0}])
             return create_mock_query_job([])
+
         mock_bq.query.side_effect = query_side_effect
 
         large_list = [f"id-{i}" for i in range(12000)]
-        response = self.client.post(
-            "/ap/outbox",
-            json={"n": 10, "seen_ids": large_list}
-        )
+        response = self.client.post("/ap/outbox", json={"n": 10, "seen_ids": large_list})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["meta"]["seen_ids_applied"], 10000)
         self.assertEqual(response.json()["meta"]["seen_ids_received"], 12000)
@@ -625,17 +614,15 @@ class TestPostOutbox(unittest.TestCase):
             "dislike_count": 0,
             "object_json": '{"id": "https://example.com/art1", "type": "Article", "name": "Test uutinen"}',
         }
+
         def query_side_effect(sql, job_config=None):
             if "COUNT(*) AS c" in sql:
                 return create_mock_query_job([{"c": 1}])
             return create_mock_query_job([mock_row])
+
         mock_bq.query.side_effect = query_side_effect
 
-        response = self.client.post(
-            "/ap/outbox",
-            json={"n": 10},
-            headers={"Authorization": "Bearer mock-test"}
-        )
+        response = self.client.post("/ap/outbox", json={"n": 10}, headers={"Authorization": "Bearer mock-test"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json()["orderedItems"]), 1)
 
@@ -646,13 +633,8 @@ class TestPostOutbox(unittest.TestCase):
             if "COUNT(*) AS c" in sql:
                 return create_mock_query_job([{"c": 0}])
             return create_mock_query_job([])
+
         mock_bq.query.side_effect = query_side_effect
 
-        response = self.client.post(
-            "/ap/outbox",
-            json={"n": 10},
-            headers={"Authorization": "Bearer mock-test"}
-        )
+        response = self.client.post("/ap/outbox", json={"n": 10}, headers={"Authorization": "Bearer mock-test"})
         self.assertEqual(response.status_code, 200)
-
-
