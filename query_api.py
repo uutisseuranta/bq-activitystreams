@@ -8,13 +8,6 @@ import time
 import urllib.parse
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
-
-class OutboxRequest(BaseModel):
-    tag: Optional[List[str]] = None
-    n: int = 50
-    seen_ids: Optional[List[str]] = None
-
 import httpx
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,9 +15,15 @@ from gcp_logging import get_logger
 from google.auth.transport import requests as google_requests
 from google.cloud import bigquery
 from google.oauth2 import id_token
+from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+
+class OutboxRequest(BaseModel):
+    tag: Optional[List[str]] = None
+    n: int = 50
+    seen_ids: Optional[List[str]] = None
 
 logger = get_logger("query-api")
 
@@ -581,9 +580,7 @@ def post_outbox(
 
     total_items = get_total_items_cached(search_tags)
 
-    base_url = "https://activitystreams.uutisseuranta.net/ap/outbox"
-    tag_params = "&".join(f"tag={urllib.parse.quote(t)}" for t in search_tags)
-    self_url = f"{base_url}?{tag_params}&n={n}"
+    self_url = "https://activitystreams.uutisseuranta.net/ap/outbox"
 
     response_json = {
         "@context": "https://www.w3.org/ns/activitystreams",

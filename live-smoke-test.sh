@@ -103,12 +103,11 @@ if [ -n "$QUERY_URL" ]; then
     HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
         -X POST "${QUERY_URL}/ap/outbox" \
         -H "Content-Type: application/json" \
-        -H "Authorization: Bearer mock-test" \
         -d '{"n": 5, "seen_ids": []}')
     
     echo "  HTTP status: ${HTTP_STATUS}"
-    if [ "$HTTP_STATUS" -ne 200 ] && [ "$HTTP_STATUS" -ne 401 ] && [ "$HTTP_STATUS" -ne 403 ]; then
-        echo "VIRHE: POST /ap/outbox palautti virhekoodin ${HTTP_STATUS}"
+    if [ "$HTTP_STATUS" -ne 200 ]; then
+        echo "VIRHE: POST /ap/outbox palautti virhekoodin ${HTTP_STATUS} (odotettiin 200)"
         exit 1
     fi
     echo "  ✓ query-api POST /ap/outbox HTTP-savutesti OK"

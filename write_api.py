@@ -613,6 +613,7 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
             if len(obj_id) > 2048:
                 raise HTTPException(status_code=422, detail="object_id exceeds maximum length of 2048 characters")
 
+        received_at_str = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
         activities_rows = []
         act_ids = []
         for obj_id in object_ids:
@@ -639,7 +640,7 @@ def post_activity(request: Request, activity: Dict[str, Any], authorization: Opt
                 "in_reply_to": None,
                 "thread_root": None,
                 "published": published_str,
-                "received_at": published_str,
+                "received_at": received_at_str,
             }
             activities_rows.append(activities_row)
 

@@ -48,4 +48,3 @@ L-019,2026-08-11,2026-08-11 02:30:00,Seen-state timestamp choice,Use server-assi
 L-020,2026-08-11,2026-08-11 02:30:00,Re-surface timestamp choice,Use objects.updated instead of objects.published for resurfacing modified articles in the feed.,Ensures users see articles again when the content is updated rather than just when first published.,#178
 L-021,2026-08-11,2026-08-11 02:30:00,Read activity deduplication,Use MAX(received_at) at query time with append-only writes for Read activities instead of upserting at write time.,BigQuery streaming inserts are cheap and append-only writes preserve full audit history; deduplication at query time is simple and robust.,#178
 L-022,2026-08-11,2026-08-11 02:30:00,Updated field clock trust,Trust updated field as-is from publisher instead of server-side normalization on ingest.,Server-side normalization adds complexity; known limitation for publishers with misconfigured clocks is accepted.,#178
-
