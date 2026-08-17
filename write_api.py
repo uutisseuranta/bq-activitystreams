@@ -56,7 +56,10 @@ def get_user_id(request: Request) -> str:
     if not auth_header or not auth_header.startswith("Bearer "):
         return get_remote_address(request)
     token = auth_header.split(" ")[1]
-    if not token or token == "mock-test":
+    if not token:
+        return get_remote_address(request)
+    allow_mock = os.getenv("ALLOW_MOCK_AUTH", "false").lower() == "true"
+    if allow_mock and token == "mock-test":
         return "test-user-sub-12345"
     # HUOM: get_user_id purkaa JWT-payloadin manuaalisesti base64-kirjastolla ilman allekirjoituksen
     # verifiointia, koska oikea verify_auth_token()-kutsu tehdään myöhemmin reitin käsittelijässä.

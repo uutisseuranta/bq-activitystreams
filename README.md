@@ -29,10 +29,11 @@ gcloud run deploy <palvelu> \
   --command "<käynnistyskomento>"
 ```
 
-Palvelut ja niiden käynnistyskomennot:
+Cloud Run -palvelut (aina käynnissä, scale-to-zero) ja niiden käynnistyskomennot:
 * `query-api`: `uvicorn query_api:app --host 0.0.0.0 --port 8080` (CORS-tuki käytössä selainhakuja varten)
 * `write-api`: `uvicorn write_api:app --host 0.0.0.0 --port 8080` (CORS-tuki käytössä reaktioiden tallentamista varten)
-* `og-scraper`: `uvicorn og_scraper:app --host 0.0.0.0 --port 8080`
+
+OG-tietojen rikastus (`og_enrichment_job.py`, käyttää `og_parser.py`-kirjastoa) ei ole oma Cloud Run -palvelu, vaan ajastettu Cloud Run Job — ks. Cloud Run Jobs -lista alla.
 
 
 Bootstrap (ensimmäinen deploy tai WIF-secretien uudelleenasetus):
@@ -42,9 +43,9 @@ katso [`terraform-deploy.md`](./terraform-deploy.md).
 
 Arvioitu ~$0.10–2/kk normaalikuormalla:
 - BigQuery: kyselyt ja tallennus (pay-per-query)
-- Cloud Run Jobs: 4 ajastettua jobia (rss-fetch, og-enrichment, voikko, likes-and-updated)
-- Cloud Run Services: query-api, write-api, og-scraper (scale-to-zero)
-- Cloud Scheduler: 4 triggeriä (europe-west1)
+- Cloud Run Jobs: 5 ajastettua jobia (rss-fetch, og-enrichment, voikko, likes-and-updated, lausuntopalvelu-fetch)
+- Cloud Run Services: query-api, write-api (scale-to-zero)
+- Cloud Scheduler: 6 triggeriä (europe-west1), joista 5 ajastaa Cloud Run Jobeja ja yksi (query-api-keep-warm) pitää query-apin lämpimänä
 - Secret Manager: google-client-secret
 
 ## Ristiin-linkit
