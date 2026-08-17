@@ -75,7 +75,8 @@ def get_query_user_or_ip(request: Request) -> str:
     if auth_header and auth_header.startswith("Bearer "):
         try:
             token = auth_header.split(" ")[1]
-            if token == "mock-test":
+            allow_mock = os.getenv("ALLOW_MOCK_AUTH", "false").lower() == "true"
+            if allow_mock and token == "mock-test":
                 return "uid:test-user-sub-12345"
             payload_part = token.split(".")[1]
             payload_part += "=" * ((4 - len(payload_part) % 4) % 4)
